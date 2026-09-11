@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>音准对比演示</title>
+<script src="/static/wavesurfer.min.js"></script>
+<style>
+/* ===== 浅色宣纸主题 · 与 sing_along 配色统一 ===== */
+:root {
+  --bg-primary: #F5EDE4;
+  --bg-secondary: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-wave: #F8F3EC;
+  --bg-input: #FFFFFF;
+  --bg-hover: #F5F0EA;
+  --bg-modal: rgba(245, 237, 228, 0.88);
+  --border-light: #E8DDD0;
+  --border-medium: #D5C8B8;
+  --border-strong: #C0B0A0;
+  --text-primary: #2D1F14;
+  --text-secondary: #5A4A3A;
+  --text-muted: #8A7A6A;
+  --text-light: #B0A090;
+  --primary: #0066B3;
+  --primary-hover: #0055A0;
+  --primary-glow: rgba(0, 102, 179, 0.20);
+  --primary-soft: rgba(0, 102, 179, 0.06);
+  --teacher-color: #0066B3;
+  --teacher-wave: #0066B3;
+  --teacher-progress: #004A80;
+  --student-color: #C0392B;
+  --student-wave: #C0392B;
+  --student-progress: #8A2A1F;
+  --success: #4A8F6B;
+  --success-soft: rgba(74, 143, 107, 0.12);
+  --warning: #C9A84C;
+  --warning-soft: rgba(201, 168, 76, 0.12);
+  --danger: #B83A2F;
+  --danger-soft: rgba(184, 58, 47, 0.12);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+}
+.header {
+    text-align: center;
+    padding: 24px;
+    border-bottom: 2px solid var(--border-light);
+    background: var(--bg-secondary);
+}
+.header h1 { font-size: 24px; color: var(--text-primary); }
+.header p { color: var(--text-muted); margin-top: 6px; font-size: 14px; }
+.row {
+    display: flex;
+    gap: 16px;
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+.panel {
+    flex: 1;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid var(--border-light);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.panel h3 {
+    margin-bottom: 12px;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.teacher h3 { color: var(--teacher-color); }
+.student h3 { color: var(--student-color); }
+input[type="file"] {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-input);
+    border: 2px dashed var(--border-medium);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    margin-bottom: 12px;
+    font-size: 13px;
+}
+input[type="file"]:hover { border-color: var(--primary); background: var(--bg-hover); }
+.status {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    min-height: 18px;
+}
+.status.ok { color: var(--success); }
+.status.err { color: var(--danger); }
+.wave-box {
+    background: var(--bg-wave);
+    border-radius: 8px;
+    padding: 8px;
+    min-height: 140px;
+    border: 1px solid var(--border-light);
+}
+.controls {
+    text-align: center;
+    padding: 0 20px 20px;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+button {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 600;
+}
+button:hover { opacity: 0.88; transform: translateY(-1px); }
+button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-analyze { background: var(--primary); color: #fff; box-shadow: 0 2px 8px var(--primary-glow); }
+.btn-analyze:hover { background: var(--primary-hover); box-shadow: 0 4px 16px var(--primary-glow); }
+.btn-play { background: var(--success); color: #fff; }
+.btn-play:hover { background: #3D7A5C; }
+.btn-pause { background: var(--danger); color: #fff; }
+.btn-pause:hover { background: #9E3126; }
+.score-box {
+    text-align: center;
+    padding: 20px;
+    background: var(--bg-secondary);
+    margin: 0 20px 20px;
+    border-radius: 12px;
+    border: 1px solid var(--border-light);
+    display: none;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.score-box.show { display: block; }
+.score-value { font-size: 48px; font-weight: 800; color: var(--primary); }
+.score-label { color: var(--text-muted); font-size: 14px; margin-top: 6px; }
+.score-label span { font-size: 12px; color: var(--text-light); }
+
+/* ===== 维度评分样式 ===== */
+.dimension-box {
+    margin: 0 20px 20px;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    border: 1px solid var(--border-light);
+    padding: 16px 24px;
+    display: none;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.dimension-box.show { display: block; }
+.dimension-box h4 {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.dimension-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 12px;
+}
+.dimension-item:last-child { margin-bottom: 0; }
+.dim-label {
+    width: 56px;
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+    flex-shrink: 0;
+}
+.dim-bar-wrap {
+    flex: 1;
+    height: 8px;
+    background: var(--bg-wave);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+.dim-bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.8s ease;
+    width: 0%;
+    background: linear-gradient(90deg, var(--danger), var(--warning), var(--success));
+}
+.dim-value {
+    width: 44px;
+    text-align: right;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex-shrink: 0;
+}
+
+.timeline-wrap {
+    margin: 0 20px 40px;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    border: 1px solid var(--border-light);
+    padding: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.timeline-wrap h4 {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+#tlCanvas {
+    width: 100%;
+    height: 320px;
+    background: var(--bg-wave);
+    border-radius: 8px;
+    cursor: crosshair;
+    border: 1px solid var(--border-light);
+}
+.legend {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+}
+.legend span { display: flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 2px; }
+.dot-blue { background: var(--teacher-color); }
+.dot-orange { background: var(--student-color); }
+.dot-green { background: rgba(74, 143, 107, 0.4); }
+.dot-yellow { background: rgba(201, 168, 76, 0.5); }
+.dot-red { background: rgba(184, 58, 47, 0.4); }
+
+.tooltip {
+    position: fixed;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-medium);
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 12px;
+    pointer-events: none;
+    display: none;
+    z-index: 100;
+    white-space: pre-line;
+    line-height: 1.7;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.10);
+    max-width: 280px;
+    color: var(--text-primary);
+}
+
+.progress-modal {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg-modal);
+    backdrop-filter: blur(6px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+}
+.progress-modal.show { display: flex; }
+.progress-box {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-medium);
+    border-radius: 14px;
+    padding: 24px;
+    width: 520px;
+    max-width: 92vw;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.10);
+}
+.progress-box h4 {
+    color: var(--text-primary);
+    font-size: 16px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.progress-subtitle {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-bottom: 14px;
+}
+.progress-logs {
+    max-height: 280px;
+    overflow-y: auto;
+    font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 12px 0;
+    padding: 10px 12px;
+    background: var(--bg-wave);
+    border-radius: 8px;
+    border: 1px solid var(--border-light);
+}
+.progress-logs .log-line {
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(200, 190, 180, 0.25);
+    animation: fadeIn 0.25s ease;
+}
+.progress-logs .log-line:last-child {
+    border-bottom: none;
+    color: var(--text-primary);
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.progress-bar-wrap {
+    height: 6px;
+    background: var(--bg-wave);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 4px;
+}
+.progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--primary), var(--teacher-color));
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+.progress-close {
+    margin-top: 14px;
+    text-align: right;
+}
+.progress-close button {
+    padding: 6px 16px;
+    font-size: 12px;
+    background: var(--border-light);
+    color: var(--text-secondary);
+    border-radius: 6px;
+    font-weight: 500;
+}
+.progress-close button:hover {
+    background: var(--border-medium);
+    transform: none;
+}
+</style>
+<base target="_blank">
+</head>
+<body>
+
+<div class="header">
+    <h1>音准对比演示</h1>
+    <p>上传老师与学生的同段唱词音频，自动对比音准差异</p>
+</div>
+
+<div class="row">
+    <div class="panel teacher">
+        <h3>👩‍🏫 老师</h3>
+        <input type="file" id="tFile" accept="audio/*">
+        <div class="status" id="tStatus">等待上传...</div>
+        <div class="wave-box" id="tWave"></div>
+    </div>
+    <div class="panel student">
+        <h3>🎤 学生</h3>
+        <input type="file" id="sFile" accept="audio/*">
+        <div class="status" id="sStatus">等待上传...</div>
+        <div class="wave-box" id="sWave"></div>
+    </div>
+</div>
+
+<div class="controls">
+    <button class="btn-play" id="playTeacherBtn" onclick="toggleTeacherPlay()">▶ 播放老师音频</button>
+    <button class="btn-analyze" id="btnAnalyze" onclick="doAnalyze()">开始对比分析</button>
+    <button class="btn-play" id="playStudentBtn" onclick="toggleStudentPlay()">▶ 播放学生音频</button>
+</div>
+
+<div class="score-box" id="scoreBox">
+    <div class="score-value" id="scoreVal">--</div>
+    <div class="score-label" id="scoreLabel">音准评分（百分制，老师为参考标准）</div>
+</div>
+
+<!-- ===== 维度评分区域 ===== -->
+<div class="dimension-box" id="dimensionBox">
+    <h4>📊 维度评分</h4>
+    <div id="dimensionList"></div>
+</div>
+
+<div class="timeline-wrap">
+    <h4>音高对比时间线</h4>
+    <canvas id="tlCanvas"></canvas>
+    <div class="legend">
+        <span><i class="dot dot-blue"></i> 老师音高</span>
+        <span><i class="dot dot-orange"></i> 学生音高</span>
+        <span><i class="dot dot-green"></i> 差异 &lt; 20音分</span>
+        <span><i class="dot dot-yellow"></i> 差异 20~50音分</span>
+        <span><i class="dot dot-red"></i> 差异 &gt; 50音分</span>
+    </div>
+    <div class="controls" style="margin: 20px 20px 20px; justify-content: center;">
+        <button class="btn-play" id="syncPlayBtn" onclick="toggleSyncPlay()">▶ 同步播放</button>
+    </div>
+</div>
+
+<div class="progress-modal" id="progressModal">
+    <div class="progress-box">
+        <h4>正在分析音频</h4>
+        <div class="progress-subtitle">请稍候，后台正在处理音高提取与对比...</div>
+        <div class="progress-logs" id="progressLogs"></div>
+        <div class="progress-bar-wrap">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div class="progress-close">
+            <button onclick="closeProgress()">隐藏窗口</button>
+        </div>
+    </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const API = location.protocol + '//' + location.host +"/api";
+console.log('[系统] API 地址:', API);
+
+const waves = {};
+let analysisData = null;
+let maxTime = 0;
+let pollTimer = null;
+
+// 播放状态
+let teacherPlaying = false;
+let studentPlaying = false;
+let syncPlaying = false;
+
+// 同步游标相关
+let syncPlayheadId = null;
+let syncCurrentTime = 0;
+
+// ---------- 工具函数 ----------
+function setStatus(role, text, isError) {
+    const el = document.getElementById(role + 'Status');
+    el.textContent = text;
+    el.className = 'status ' + (isError ? 'err' : 'ok');
+}
+
+// ---------- 维度评分渲染 ----------
+function updateDimensions(dimensions) {
+    const box = document.getElementById('dimensionBox');
+    const list = document.getElementById('dimensionList');
+    if (!dimensions || Object.keys(dimensions).length === 0) {
+        box.classList.remove('show');
+        return;
+    }
+    box.classList.add('show');
+    list.innerHTML = Object.entries(dimensions).map(([name, score]) => {
+        const clamped = Math.max(0, Math.min(100, score));
+        const color = clamped >= 80 ? '#4A8F6B' : clamped >= 60 ? '#C9A84C' : '#B83A2F';
+        return `
+            <div class="dimension-item">
+                <div class="dim-label">${name}</div>
+                <div class="dim-bar-wrap">
+                    <div class="dim-bar" data-score="${clamped}" style="width: 0%;"></div>
+                </div>
+                <div class="dim-value" style="color: ${color}">${clamped.toFixed(0)}</div>
+            </div>
+        `;
+    }).join('');
+    requestAnimationFrame(() => {
+        document.querySelectorAll('.dim-bar').forEach((bar) => {
+            const score = parseFloat(bar.dataset.score);
+            bar.style.width = score + '%';
+        });
+    });
+}
+
+// ---------- 初始化主 WaveSurfer（用于波形显示） ----------
+function initWave(containerId, fileInputId, role) {
+    console.log(`[${role}] 初始化 WaveSurfer...`);
+    if (typeof WaveSurfer === 'undefined') {
+        alert('WaveSurfer 库加载失败，请刷新页面或检查网络');
+        return;
+    }
+    const ws = WaveSurfer.create({
+        container: '#' + containerId,
+        waveColor: role === 't' ? '#0066B3' : '#C0392B',
+        progressColor: role === 't' ? '#004A80' : '#8A2A1F',
+        height: 120,
+        barWidth: 2,
+        barGap: 1,
+        barRadius: 2,
+    });
+
+    ws.on('ready', () => {
+        console.log(`[${role}] 音频加载完成，时长:`, ws.getDuration());
+        setStatus(role, '上传成功，时长 ' + ws.getDuration().toFixed(1) + 's');
+        tryInitSyncPlayers();
+    });
+
+    ws.on('error', (err) => {
+        console.error(`[${role}] WaveSurfer 加载错误:`, err);
+        setStatus(role, '音频加载失败: ' + err, true);
+    });
+
+    ws.on('finish', () => {
+        if (role === 't') {
+            teacherPlaying = false;
+            document.getElementById('playTeacherBtn').textContent = '▶ 播放老师音频';
+        } else if (role === 's') {
+            studentPlaying = false;
+            document.getElementById('playStudentBtn').textContent = '▶ 播放学生音频';
+        }
+    });
+
+    document.getElementById(fileInputId).addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setStatus(role, '上传中...');
+        try {
+            const form = new FormData();
+            form.append('audio', file);
+            const r = await fetch(`${API}/upload`, { method: 'POST', body: form });
+            if (!r.ok) {
+                const errText = await r.text();
+                throw new Error(`服务器 ${r.status}: ${errText}`);
+            }
+            const j = await r.json();
+            if (j.error) throw new Error(j.error);
+            const audioUrl = `${API}${j.url}`;
+            ws.load(audioUrl);
+            waves[role] = { ws, id: j.id, url: audioUrl };
+        } catch (err) {
+            console.error(`[${role}] 上传/加载失败:`, err);
+            setStatus(role, '' + err.message, true);
+            alert(`[${role === 't' ? '老师' : '学生'}] 上传失败: ${err.message}`);
+        }
+    });
+
+    return ws;
+}
+
+// ---------- 隐藏同步播放器 ----------
+let syncPlayersReady = false;
+
+function tryInitSyncPlayers() {
+    if (!waves.t || !waves.s) return;
+    if (syncPlayersReady) return;
+    if (!waves.t.ws.getDuration() || !waves.s.ws.getDuration()) return;
+
+    console.log('[同步] 初始化隐藏播放器...');
+    const syncT = WaveSurfer.create({
+        container: document.createElement('div'),
+        height: 0,
+        waveColor: 'transparent',
+        progressColor: 'transparent',
+    });
+    const syncS = WaveSurfer.create({
+        container: document.createElement('div'),
+        height: 0,
+        waveColor: 'transparent',
+        progressColor: 'transparent',
+    });
+
+    syncT.load(waves.t.url);
+    syncS.load(waves.s.url);
+
+    let syncTReady = false, syncSReady = false;
+    const checkBothReady = () => {
+        if (syncTReady && syncSReady) {
+            syncPlayersReady = true;
+            console.log('[同步] 隐藏播放器就绪');
+        }
+    };
+    syncT.on('ready', () => { syncTReady = true; checkBothReady(); });
+    syncS.on('ready', () => { syncSReady = true; checkBothReady(); });
+
+    syncT.on('finish', () => {
+        if (syncS.isPlaying()) syncS.pause();
+        syncPlaying = false;
+        document.getElementById('syncPlayBtn').textContent = '▶ 同步播放';
+        stopSyncPlayhead();
+    });
+    syncS.on('finish', () => {
+        if (syncT.isPlaying()) syncT.pause();
+        syncPlaying = false;
+        document.getElementById('syncPlayBtn').textContent = '▶ 同步播放';
+        stopSyncPlayhead();
+    });
+
+    waves.syncT = { ws: syncT };
+    waves.syncS = { ws: syncS };
+}
+
+// ---------- 播放控制 ----------
+function toggleSyncPlay() {
+    if (!syncPlayersReady) {
+        tryInitSyncPlayers();
+        if (!syncPlayersReady) {
+            alert('请等待音频加载完成后再试');
+            return;
+        }
+    }
+    const btn = document.getElementById('syncPlayBtn');
+    const syncT = waves.syncT.ws;
+    const syncS = waves.syncS.ws;
+
+    if (syncPlaying) {
+        syncT.pause();
+        syncS.pause();
+        syncPlaying = false;
+        btn.textContent = '▶ 同步播放';
+        if (syncPlayheadId) {
+            cancelAnimationFrame(syncPlayheadId);
+            syncPlayheadId = null;
+        }
+        if (analysisData) drawTimeline(analysisData);
+    } else {
+        if (teacherPlaying) {
+            waves.t.ws.pause();
+            teacherPlaying = false;
+            document.getElementById('playTeacherBtn').textContent = '▶ 播放老师音频';
+        }
+        if (studentPlaying) {
+            waves.s.ws.pause();
+            studentPlaying = false;
+            document.getElementById('playStudentBtn').textContent = '▶ 播放学生音频';
+        }
+
+        const tDur = syncT.getDuration();
+        const sDur = syncS.getDuration();
+        let seekTime = 0;
+        const tOnset = waves.t.onset || 0;
+        if (syncCurrentTime > 0 && syncCurrentTime < tDur - 0.05) {
+            seekTime = syncCurrentTime;
+        } else {
+            seekTime = tOnset;
+        }
+
+        if (tDur > 0) syncT.seekTo(seekTime / tDur);
+        if (sDur > 0) syncS.seekTo(seekTime / sDur);
+
+        syncT.play();
+        syncS.play();
+        syncPlaying = true;
+        btn.textContent = '⏸ 同步暂停';
+        startSyncPlayhead();
+    }
+}
+
+function toggleTeacherPlay() {
+    if (!waves.t || !waves.t.ws) return;
+    const btn = document.getElementById('playTeacherBtn');
+    const ws = waves.t.ws;
+
+    if (teacherPlaying) {
+        ws.pause();
+        teacherPlaying = false;
+        btn.textContent = '▶ 播放老师音频';
+        if (syncPlaying) {
+            waves.syncT.ws.pause();
+            waves.syncS.ws.pause();
+            syncPlaying = false;
+            document.getElementById('syncPlayBtn').textContent = '▶ 同步播放';
+            stopSyncPlayhead();
+            if (analysisData) drawTimeline(analysisData);
+        }
+    } else {
+        if (studentPlaying) {
+            waves.s.ws.pause();
+            studentPlaying = false;
+            document.getElementById('playStudentBtn').textContent = '▶ 播放学生音频';
+        }
+        if (syncPlaying) {
+            waves.syncT.ws.pause();
+            waves.syncS.ws.pause();
+            syncPlaying = false;
+            document.getElementById('syncPlayBtn').textContent = '▶ 同步播放';
+            stopSyncPlayhead();
+            if (analysisData) drawTimeline(analysisData);
+        }
+        ws.play();
+        teacherPlaying = true;
+        btn.textContent = '⏸ 暂停';
+    }
+}
+
+function toggleStudentPlay() {
+    if (!waves.s || !waves.s.ws) return;
+    const btn = document.getElementById('playStudentBtn');
+    const ws = waves.s.ws;
+
+    if (studentPlaying) {
+        ws.pause();
+        studentPlaying = false;
+        btn.textContent = '▶ 播放学生音频';
+        if (syncPlaying) {
+            waves.syncT.ws.pause();
+            waves.syncS.ws.pause();
+            syncPlaying = false;
+            document.getElementById('syncPlayBtn').textContent = '▶ 同步播放';
+            stopSyncPlayhead();
+            if (analysisData) drawTimeline(analysisData);
+        }
+    } else {
+        if (teacherPlaying) {
+            waves.t.ws.pause();
+            teacherPlaying = false;
+            document.getElementById('playTeacherBtn').textContent = '▶ 播放老师音频';
+        }
+        if (syncPlaying) {
+            waves.syncT.ws.pause();
+            waves.syncS.ws.pause();
+            syncPlaying = false;
+            document.getElementById('syncPlayBtn').textContent = '▶ 同步播放';
+            stopSyncPlayhead();
+            if (analysisData) drawTimeline(analysisData);
+        }
+        ws.play();
+        studentPlaying = true;
+        btn.textContent = '⏸ 暂停';
+    }
+}
+
+// ---------- 游标动画 ----------
+function startSyncPlayhead() {
+    if (syncPlayheadId) cancelAnimationFrame(syncPlayheadId);
+    updatePlayhead();
+}
+
+function updatePlayhead() {
+    if (!waves.syncT) return;
+    const ws = waves.syncT.ws;
+    syncCurrentTime = ws.getCurrentTime();
+    if (analysisData) drawTimeline(analysisData);
+    if (syncPlaying) {
+        syncPlayheadId = requestAnimationFrame(updatePlayhead);
+    } else {
+        syncPlayheadId = null;
+    }
+}
+
+function stopSyncPlayhead() {
+    if (syncPlayheadId) {
+        cancelAnimationFrame(syncPlayheadId);
+        syncPlayheadId = null;
+    }
+    syncCurrentTime = 0;
+    if (analysisData) drawTimeline(analysisData);
+}
+
+// ---------- 进度弹窗 ----------
+function closeProgress() {
+    document.getElementById('progressModal').classList.remove('show');
+}
+
+function estimateProgressFromLogs(logs) {
+    const text = logs.map(l => l.msg).join(' ');
+    if (text.includes('分析完成')) return 100;
+    if (text.includes('评分:')) return 95;
+    if (text.includes('DTW 完成')) return 90;
+    if (text.includes('开始精细 DTW')) return 80;
+    if (text.includes('选择最佳八度')) return 75;
+    if (text.includes('八度偏移')) {
+        const matches = text.match(/八度偏移/g);
+        return 55 + (matches ? matches.length * 5 : 0);
+    }
+    if (text.includes('八度归一化')) return 55;
+    if (text.includes('提取完成')) {
+        const matches = text.match(/提取完成/g);
+        return 30 + (matches ? matches.length * 15 : 0);
+    }
+    if (text.includes('提取音高')) return 25;
+    if (text.includes('检测到人声')) return 20;
+    if (text.includes('HPSS')) return 15;
+    if (text.includes('音频时长')) return 10;
+    if (text.includes('正在加载音频')) return 5;
+    return 2;
+}
+
+// ---------- 分析主流程 ----------
+async function doAnalyze() {
+    console.log('[分析] 点击分析, waves:', waves);
+    if (!waves.t || !waves.s) {
+        alert('请先上传老师和学生的音频\n（确保两个文件都显示"上传成功"）');
+        return;
+    }
+    const btn = document.getElementById('btnAnalyze');
+    btn.textContent = '分析中，请等待...';
+    btn.disabled = true;
+
+    const jobKey = waves.t.id + '_' + waves.s.id;
+    const modal = document.getElementById('progressModal');
+    const logsEl = document.getElementById('progressLogs');
+    const barEl = document.getElementById('progressBar');
+
+    modal.classList.add('show');
+    logsEl.innerHTML = '<div class="log-line">正在启动分析...</div>';
+    barEl.style.width = '2%';
+    barEl.style.background = 'linear-gradient(90deg, #0066B3, #4A8AF4)';
+
+    let lastLen = 0;
+    pollTimer = setInterval(async () => {
+        try {
+            const r = await fetch(`${API}/progress?job=${jobKey}`);
+            const data = await r.json();
+            if (data.logs && data.logs.length > 0) {
+                if (data.logs.length !== lastLen) {
+                    logsEl.innerHTML = data.logs.map(l => {
+                        const t = new Date(l.time * 1000).toLocaleTimeString('zh-CN', {hour12:false});
+                        return `<div class="log-line">[${t}] ${l.msg}</div>`;
+                    }).join('');
+                    logsEl.scrollTop = logsEl.scrollHeight;
+                    lastLen = data.logs.length;
+                    const pct = estimateProgressFromLogs(data.logs);
+                    barEl.style.width = pct + '%';
+                }
+            }
+        } catch(e) {}
+    }, 400);
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 300000);
+        const r = await fetch(`${API}/analyze?t=${waves.t.id}&s=${waves.s.id}&job=${jobKey}`, {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!r.ok) {
+            const errText = await r.text();
+            throw new Error(`服务器 ${r.status}: ${errText}`);
+        }
+        const data = await r.json();
+        console.log('[分析] 返回数据:', data);
+        if (data.error) throw new Error(data.error);
+
+        analysisData = data;
+        waves.t.onset = data.teacher_onset || 0;
+        waves.s.onset = data.student_onset || 0;
+
+        drawTimeline(data);
+        document.getElementById('scoreVal').textContent = data.score;
+        document.getElementById('scoreBox').classList.add('show');
+
+        const octaveInfo = data.octave_shift !== 0
+            ? `（💡 系统智能提示：检测到学生演唱整体 ${data.octave_shift > 0 ? '高' : '低'} ${Math.abs(data.octave_shift)} 个八度，已自动对齐进行对比，这不影响评分准确性，请放心观察下方曲线。）`
+            : '';
+        document.getElementById('scoreLabel').innerHTML =
+            `音准评分（百分制）<br><span style="font-size:12px;color:var(--text-light)">${octaveInfo}</span>`;
+
+        if (data.dimensions) {
+            updateDimensions(data.dimensions);
+        } else {
+            const mock = {
+                "音准": data.score,
+                "节奏": Math.max(0, Math.min(100, data.score * (0.9 + 0.1 * Math.random()))),
+                "气息": Math.max(0, Math.min(100, data.score * (0.8 + 0.2 * Math.random()))),
+                "咬字": Math.max(0, Math.min(100, data.score * (0.85 + 0.15 * Math.random()))),
+                "拖腔": Math.max(0, Math.min(100, data.score * (0.7 + 0.3 * Math.random())))
+            };
+            updateDimensions(mock);
+        }
+
+        barEl.style.width = '100%';
+        logsEl.innerHTML += '<div class="log-line" style="color:#4A8F6B">分析完成！</div>';
+        logsEl.scrollTop = logsEl.scrollHeight;
+        setTimeout(() => closeProgress(), 1500);
+
+    } catch (e) {
+        console.error('[分析] 失败:', e);
+        barEl.style.width = '100%';
+        barEl.style.background = '#B83A2F';
+        logsEl.innerHTML += `<div class="log-line" style="color:#B83A2F">分析失败: ${e.message}</div>`;
+        logsEl.scrollTop = logsEl.scrollHeight;
+        alert('分析失败: ' + e.message);
+    } finally {
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+        }
+        btn.textContent = '开始对比分析';
+        btn.disabled = false;
+    }
+}
+
+// ---------- 绘制曲线图 ----------
+function drawTimeline(data) {
+    const canvas = document.getElementById('tlCanvas');
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+    const W = rect.width;
+    const H = rect.height;
+    const al = data.aligned;
+    maxTime = data.teacher.times[data.teacher.times.length - 1];
+    const tx = t => (t / maxTime) * W;
+    const allCents = al.flatMap(a => [a.t_cents, a.s_cents]);
+    const sorted = [...allCents].sort((a, b) => a - b);
+    const minC = sorted[Math.floor(sorted.length * 0.02)] - 80;
+    const maxC = sorted[Math.floor(sorted.length * 0.98)] + 80;
+    const cRange = maxC - minC || 1000;
+    const ty = c => H - 30 - ((c - minC) / cRange) * (H - 60);
+
+    ctx.clearRect(0, 0, W, H);
+
+    // 偏差区间底色
+    const segSize = 25;
+    for (let i = 0; i < al.length - segSize; i += segSize) {
+        const slice = al.slice(i, i + segSize);
+        const avgDiff = slice.reduce((a, b) => a + b.diff, 0) / slice.length;
+        const x = tx(al[i].t_time);
+        const w = tx(al[Math.min(i + segSize, al.length - 1)].t_time) - x;
+        ctx.fillStyle = avgDiff < 20 ? 'rgba(74,143,107,0.12)' :
+                        avgDiff < 50 ? 'rgba(201,168,76,0.15)' : 'rgba(184,58,47,0.12)';
+        ctx.fillRect(x, 0, w, H);
+    }
+
+    // 网格线
+    ctx.strokeStyle = 'rgba(200, 190, 180, 0.3)';
+    ctx.lineWidth = 1;
+    for (let sec = 0; sec <= maxTime; sec += 5) {
+        const x = tx(sec);
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+        ctx.fillStyle = '#8A7A6A';
+        ctx.font = '11px sans-serif';
+        ctx.fillText(sec + 's', x + 2, H - 6);
+    }
+
+    // 老师音高曲线（景泰蓝）
+    ctx.beginPath();
+    ctx.strokeStyle = '#0066B3';
+    ctx.lineWidth = 2.5;
+    al.forEach((p, i) => {
+        const x = tx(p.t_time);
+        const y = ty(p.t_cents);
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.stroke();
+
+    // 学生音高曲线（朱砂红）
+    ctx.beginPath();
+    ctx.strokeStyle = '#C0392B';
+    ctx.lineWidth = 2.5;
+    al.forEach((p, i) => {
+        const x = tx(p.t_time);
+        const y = ty(p.s_cents);
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.stroke();
+
+    // 零参考线
+    const zeroY = ty(0);
+    if (zeroY > 0 && zeroY < H) {
+        ctx.strokeStyle = 'rgba(90, 80, 70, 0.25)';
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath(); ctx.moveTo(0, zeroY); ctx.lineTo(W, zeroY); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(90, 80, 70, 0.6)';
+        ctx.fillText('标准调 (0 cents)', 8, zeroY - 6);
+    }
+
+    // 偏差标记线（> 50 音分）
+    ctx.save();
+    ctx.setLineDash([4, 6]);
+    ctx.lineWidth = 1.8;
+    let lastMarkX = -999;
+    for (let i = 0; i < al.length; i++) {
+        const p = al[i];
+        if (p.diff > 50) {
+            const x = tx(p.t_time);
+            if (x - lastMarkX < 4) continue;
+            lastMarkX = x;
+            ctx.strokeStyle = 'rgba(184, 58, 47, 0.6)';
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, H);
+            ctx.stroke();
+            ctx.fillStyle = '#B83A2F';
+            ctx.beginPath();
+            ctx.moveTo(x - 6, 12);
+            ctx.lineTo(x + 6, 12);
+            ctx.lineTo(x, 4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = 'rgba(184, 58, 47, 0.8)';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚠', x, H - 4);
+        }
+    }
+    ctx.restore();
+
+    // 同步播放游标
+    if (syncPlaying || syncCurrentTime > 0) {
+        const cursorX = tx(syncCurrentTime);
+        if (cursorX >= 0 && cursorX <= W) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(45, 31, 20, 0.6)';
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 6;
+            ctx.shadowColor = 'rgba(0, 102, 179, 0.2)';
+            ctx.beginPath();
+            ctx.moveTo(cursorX, 12);
+            ctx.lineTo(cursorX, H);
+            ctx.stroke();
+            ctx.restore();
+
+            const timeText = syncCurrentTime.toFixed(1) + 's';
+            ctx.save();
+            ctx.font = '11px sans-serif';
+            const metrics = ctx.measureText(timeText);
+            const tw = metrics.width + 12;
+            const th = 22;
+            const txPos = Math.min(Math.max(cursorX - tw / 2, 4), W - tw - 4);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.08)';
+            ctx.beginPath();
+            ctx.rect(txPos, 2, tw, th);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#2D1F14';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(timeText, txPos + tw / 2, 2 + th / 2);
+            ctx.restore();
+        }
+    }
+
+    // 鼠标悬浮 Tooltip
+    canvas.onmousemove = e => {
+        const r = canvas.getBoundingClientRect();
+        const mx = e.clientX - r.left;
+        const hoverTime = (mx / W) * maxTime;
+        let closest = al[0], minDist = Infinity;
+        for (const p of al) {
+            const d = Math.abs(p.t_time - hoverTime);
+            if (d < minDist) { minDist = d; closest = p; }
+        }
+        const tip = document.getElementById('tooltip');
+        tip.style.display = 'block';
+        const status = closest.diff < 20 ? '音准优秀' :
+                       closest.diff < 50 ? '轻微偏差' : '明显走音';
+        const color = closest.diff < 20 ? '#4A8F6B' : closest.diff < 50 ? '#C9A84C' : '#B83A2F';
+
+        const octaveShift = data.octave_shift || 0;
+        let studentDisplay = `${closest.s_f0.toFixed(1)} Hz`;
+        if (octaveShift !== 0) {
+            const rawFreq = closest.s_f0 / Math.pow(2, octaveShift);
+            const shiftText = octaveShift > 0 ? `高 ${Math.abs(octaveShift)} 个八度` : `低 ${Math.abs(octaveShift)} 个八度`;
+            studentDisplay = `${closest.s_f0.toFixed(1)} Hz（原始 ${rawFreq.toFixed(1)} Hz，已自动修正 ${shiftText}）`;
+        }
+        tip.innerHTML = `
+            <div style="color:var(--text-muted);font-size:11px;margin-bottom:4px;">${closest.t_time.toFixed(1)}s</div>
+            <div style="color:#0066B3">👩‍🏫 老师: ${closest.t_f0.toFixed(1)} Hz</div>
+            <div style="color:#C0392B">🎤 学生: ${studentDisplay}</div>
+            <div style="color:var(--text-secondary);margin-top:4px;border-top:1px solid var(--border-light);padding-top:4px;">偏差: ${closest.diff.toFixed(0)} cents</div>
+            <div style="color:${color};font-weight:bold">${status}</div>
+        `;
+        requestAnimationFrame(() => {
+            const tipRect = tip.getBoundingClientRect();
+            let left = e.clientX + 14;
+            let top = e.clientY - tipRect.height - 14;
+            if (top < 10) top = e.clientY + 14;
+            if (left + tipRect.width > window.innerWidth - 10) {
+                left = e.clientX - tipRect.width - 14;
+            }
+            if (left < 10) left = 10;
+            tip.style.left = left + 'px';
+            tip.style.top = top + 'px';
+        });
+    };
+    canvas.onmouseleave = () => {
+        document.getElementById('tooltip').style.display = 'none';
+    };
+}
+
+// ---------- 窗口自适应 ----------
+window.addEventListener('resize', () => {
+    if (analysisData) drawTimeline(analysisData);
+});
+
+// ---------- 初始化 ----------
+initWave('tWave', 'tFile', 't');
+initWave('sWave', 'sFile', 's');
+</script>
+</body>
+</html>

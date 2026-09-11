@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>戏韵AI · AI教练对话</title>
+<style>
+/* ============================================================
+   浅色高对比度配色 · 宣纸背景 + 景泰蓝/朱砂红
+   与 sing_along 保持一致
+   ============================================================ */
+:root {
+  --bg-primary: #F5EDE4;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F0E8DC;
+  --bg-hover: #F5F0EA;
+  --bg-card-header: #F8F3EC;
+  --text-primary: #2D1F14;
+  --text-secondary: #5A4A3A;
+  --text-muted: #8A7A6A;
+  --text-light: #B0A090;
+  --border-light: #E8DDD0;
+  --border-medium: #D5C8B8;
+  --border-strong: #C0B0A0;
+  --primary: #0066B3;
+  --primary-hover: #0055A0;
+  --primary-glow: rgba(0, 102, 179, 0.30);
+  --primary-soft: rgba(0, 102, 179, 0.08);
+  --primary-border: rgba(0, 102, 179, 0.25);
+  --success: #4A8F6B;
+  --success-soft: rgba(74, 143, 107, 0.12);
+  --warning: #C9A84C;
+  --warning-soft: rgba(201, 168, 76, 0.12);
+  --danger: #B83A2F;
+  --danger-soft: rgba(184, 58, 47, 0.12);
+  --nav-gradient: linear-gradient(90deg, #F5EDE4, #E8DDD0 40%, #D5C8B8 50%, #E8DDD0 60%, #F5EDE4);
+  --shadow-sm: 0 1px 4px rgba(0,0,0,0.04);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
+  --font-base: 16px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg-primary);
+  color:var(--text-primary);
+  min-height:100vh;
+  line-height:1.7;
+  font-size:var(--font-base);
+}
+
+/* ===== Navbar ===== */
+.navbar{
+  background:var(--nav-gradient);
+  border-bottom:2px solid var(--border-medium);
+  padding:0 24px;
+  height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  position:sticky;
+  top:0;
+  z-index:50;
+}
+.nav-brand{display:flex;align-items:center;gap:12px}
+.nav-brand .logo{
+  width:34px;height:34px;
+  background:linear-gradient(135deg, var(--primary), #004080);
+  border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:700;color:#fff;
+  box-shadow:0 2px 12px var(--primary-glow);
+}
+.nav-brand h1{font-size:17px;color:var(--text-primary);font-weight:700}
+.nav-brand .badge{
+  background:var(--primary-soft);
+  color:var(--primary);
+  padding:2px 10px;border-radius:12px;
+  font-size:11px;font-weight:600;
+  border:1px solid var(--primary-border);
+}
+.nav-user{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary)}
+.nav-user .avatar{
+  width:30px;height:30px;border-radius:50%;
+  background:linear-gradient(135deg, #B89076, #8B6B4F);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;color:#fff;
+}
+
+/* ===== Layout ===== */
+.layout{display:flex;min-height:calc(100vh - 58px)}
+.sidebar{
+  width:200px;background:var(--bg-secondary);
+  border-right:2px solid var(--border-light);
+  padding:12px 0;position:fixed;height:100%;overflow-y:auto;z-index:40;
+}
+.nav-group{margin-bottom:6px}
+.nav-group-title{
+  padding:6px 16px;font-size:11px;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:0.8px;font-weight:700;
+}
+.nav-item{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 16px;margin:0 8px;
+  color:var(--text-secondary);font-size:13px;
+  cursor:pointer;transition:all 0.2s;text-decoration:none;
+  border-radius:8px;border-left:4px solid transparent;
+}
+.nav-item:hover{color:var(--text-primary);background:var(--bg-hover)}
+.nav-item.active{
+  color:var(--primary);
+  background:var(--primary-soft);
+  border-left-color:var(--primary);
+  font-weight:600;
+}
+.nav-item .icon{font-size:16px;width:22px;text-align:center}
+.nav-badge{
+  margin-left:auto;background:var(--danger);color:#fff;
+  font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600;
+}
+.main-content{margin-left:200px;flex:1;padding:20px;max-width:1600px}
+
+/* ===== 页面头部 ===== */
+.page-header{margin-bottom:16px}
+.page-header h2{font-size:20px;color:var(--text-primary);font-weight:700;margin-bottom:2px}
+.page-header p{font-size:14px;color:var(--text-secondary)}
+
+/* ===== 三栏主布局 ===== */
+.three-col{
+  display:grid;
+  grid-template-columns:280px 1fr 280px;
+  gap:16px;
+  height:calc(100vh - 140px);
+  min-height:600px;
+}
+
+/* ===== 卡片通用 ===== */
+.card{
+  background:var(--bg-secondary);
+  border:1px solid var(--border-light);
+  border-radius:14px;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  box-shadow:var(--shadow-sm);
+  transition:border-color 0.3s, box-shadow 0.3s;
+}
+.card:hover{border-color:var(--border-medium);box-shadow:var(--shadow-md)}
+.card-header{
+  padding:14px 16px;
+  border-bottom:1px solid var(--border-light);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-shrink:0;
+  background:var(--bg-card-header);
+}
+.card-title{
+  font-size:14px;font-weight:700;color:var(--text-primary);
+  display:flex;align-items:center;gap:8px;
+}
+.card-title .icon{
+  width:24px;height:24px;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;
+  background:var(--primary-soft);color:var(--primary);
+}
+.card-body{padding:14px;overflow-y:auto;flex:1}
+.card-footer{
+  padding:10px 16px;
+  border-top:1px solid var(--border-light);
+  font-size:11px;
+  color:var(--text-muted);
+  background:var(--bg-primary);
+}
+
+/* ===== 左侧数据区 ===== */
+.data-section{margin-bottom:14px}
+.data-section-title{
+  font-size:12px;
+  font-weight:700;
+  color:var(--text-muted);
+  margin-bottom:8px;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+}
+.data-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:11px;
+  font-family:"SF Mono",Monaco,monospace;
+}
+.data-table th{
+  text-align:left;
+  padding:5px 4px;
+  color:var(--text-muted);
+  font-weight:600;
+  border-bottom:1px solid var(--border-light);
+}
+.data-table td{
+  padding:5px 4px;
+  border-bottom:1px solid var(--border-light);
+  color:var(--text-secondary);
+}
+.data-table tr:hover td{background:var(--bg-hover)}
+.data-table .diff-pos{color:var(--danger)}
+.data-table .diff-neg{color:var(--success)}
+.data-table .diff-neu{color:var(--text-muted)}
+
+.bkt-bar{height:6px;background:var(--border-light);border-radius:3px;overflow:hidden;margin-top:3px}
+.bkt-fill{height:100%;border-radius:3px}
+.bkt-label{
+  display:flex;
+  justify-content:space-between;
+  font-size:10px;
+  color:var(--text-muted);
+  margin-top:2px;
+}
+
+.cdm-tag{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:3px 10px;
+  border-radius:6px;
+  font-size:11px;
+  font-weight:700;
+  margin-bottom:4px;
+}
+.cdm-tag.high{background:var(--danger-soft);color:var(--danger);border:1px solid rgba(184,58,47,0.2)}
+.cdm-tag.medium{background:var(--warning-soft);color:var(--warning);border:1px solid rgba(201,168,76,0.2)}
+
+.data-lock-banner{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 10px;
+  background:var(--primary-soft);
+  border:1px solid var(--primary-border);
+  border-radius:8px;
+  font-size:11px;
+  color:var(--primary);
+  margin-bottom:12px;
+}
+.data-lock-banner .lock-icon{font-size:14px}
+
+/* ===== 中间对话区 ===== */
+.chat-header{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:14px 18px;
+  border-bottom:1px solid var(--border-light);
+  background:var(--bg-card-header);
+}
+.chat-avatar{
+  width:40px;height:40px;border-radius:50%;
+  background:linear-gradient(135deg, var(--primary), #004080);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:20px;
+  box-shadow:0 0 12px var(--primary-glow);
+  color:#fff;
+}
+.chat-info{flex:1}
+.chat-name{font-size:15px;font-weight:700;color:var(--text-primary)}
+.chat-status{font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px}
+.chat-status .dot{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 6px var(--success)}
+.strategy-tag{
+  font-size:10px;
+  padding:2px 8px;
+  border-radius:10px;
+  font-weight:700;
+  background:rgba(139,92,246,0.10);
+  color:#7C3AED;
+  border:1px solid rgba(139,92,246,0.2);
+}
+
+.chat-body{
+  padding:16px;
+  overflow-y:auto;
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  background:var(--bg-primary);
+}
+
+.message{
+  max-width:90%;
+  display:flex;
+  gap:10px;
+  animation:msgIn 0.3s ease;
+}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.message.ai{flex-direction:row}
+.message.user{flex-direction:row-reverse;align-self:flex-end}
+.message.ai .msg-bubble{
+  background:var(--bg-secondary);
+  border:1px solid var(--border-light);
+  border-radius:12px 12px 12px 4px;
+  padding:12px 14px;
+  color:var(--text-primary);
+  font-size:13px;
+  line-height:1.7;
+  box-shadow:var(--shadow-sm);
+}
+.message.user .msg-bubble{
+  background:var(--primary);
+  border-radius:12px 12px 4px 12px;
+  padding:12px 14px;
+  color:#fff;
+  font-size:13px;
+  line-height:1.7;
+}
+.message.ai .msg-avatar{
+  width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg, var(--primary), #004080);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:14px;
+  flex-shrink:0;
+  color:#fff;
+}
+.message.user .msg-avatar{
+  width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg, #B89076, #8B6B4F);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:14px;
+  flex-shrink:0;
+  color:#fff;
+}
+.msg-time{font-size:10px;color:var(--text-muted);margin-top:4px;text-align:right}
+
+.system-msg{
+  width:100%;
+  text-align:center;
+  padding:8px 0;
+}
+.system-msg span{
+  display:inline-block;
+  padding:4px 12px;
+  background:var(--bg-secondary);
+  border:1px solid var(--border-light);
+  border-radius:10px;
+  font-size:11px;
+  color:var(--text-muted);
+}
+
+.chat-input-wrap{
+  padding:14px 16px;
+  border-top:1px solid var(--border-light);
+  background:var(--bg-card-header);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.quick-replies{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.quick-btn{
+  padding:6px 12px;
+  border:2px solid var(--border-light);
+  border-radius:8px;
+  background:var(--bg-secondary);
+  color:var(--text-secondary);
+  font-size:12px;
+  cursor:pointer;
+  transition:all 0.2s;
+  font-weight:600;
+}
+.quick-btn:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-soft)}
+.input-row{display:flex;gap:10px}
+.chat-input{
+  flex:1;
+  padding:10px 14px;
+  background:var(--bg-primary);
+  border:2px solid var(--border-light);
+  border-radius:10px;
+  color:var(--text-primary);
+  font-size:13px;
+  outline:none;
+  resize:none;
+  font-family:inherit;
+  min-height:42px;
+  max-height:100px;
+}
+.chat-input:focus{border-color:var(--primary)}
+.send-btn{
+  padding:10px 18px;
+  border:none;
+  border-radius:10px;
+  background:var(--primary);
+  color:#fff;
+  font-size:13px;
+  font-weight:700;
+  cursor:pointer;
+  transition:all 0.2s;
+  min-height:42px;
+}
+.send-btn:hover{background:var(--primary-hover);box-shadow:0 2px 12px var(--primary-glow)}
+.send-btn:disabled{opacity:0.4;cursor:not-allowed}
+
+/* ===== 右侧引导区 ===== */
+.guide-card{
+  background:var(--bg-primary);
+  border:1px solid var(--border-light);
+  border-radius:10px;
+  padding:12px;
+  margin-bottom:12px;
+}
+.guide-card-title{
+  font-size:12px;
+  font-weight:700;
+  color:var(--text-muted);
+  margin-bottom:8px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.guide-item{
+  padding:8px 10px;
+  background:var(--bg-secondary);
+  border-radius:6px;
+  border-left:3px solid var(--primary);
+  margin-bottom:6px;
+  font-size:12px;
+  color:var(--text-secondary);
+  line-height:1.6;
+}
+.guide-item.strategy{border-left-color:#7C3AED}
+.guide-item.emotion{border-left-color:var(--warning)}
+.guide-item.context{border-left-color:var(--primary)}
+.guide-item .label{font-size:10px;color:var(--text-muted);display:block;margin-bottom:2px;font-weight:600}
+
+.emotion-meter{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:6px;
+}
+.emotion-bar{
+  flex:1;
+  height:6px;
+  background:var(--border-light);
+  border-radius:3px;
+  overflow:hidden;
+}
+.emotion-fill{height:100%;border-radius:3px;transition:width 0.5s ease}
+.emotion-label{font-size:10px;color:var(--text-muted);min-width:40px;text-align:right;font-weight:600}
+
+.divider-label{
+  text-align:center;
+  padding:8px 0;
+  position:relative;
+}
+.divider-label::before{
+  content:"";
+  position:absolute;
+  top:50%;
+  left:0;
+  right:0;
+  height:1px;
+  background:var(--border-light);
+}
+.divider-label span{
+  position:relative;
+  background:var(--bg-secondary);
+  padding:0 10px;
+  font-size:10px;
+  color:var(--text-muted);
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:1px;
+}
+
+.source-banner{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 10px;
+  background:rgba(139,92,246,0.06);
+  border:1px solid rgba(139,92,246,0.15);
+  border-radius:8px;
+  font-size:11px;
+  color:#7C3AED;
+  margin-bottom:12px;
+}
+
+.context-inject{
+  background:var(--bg-secondary);
+  border-radius:10px;
+  border:1px solid var(--border-light);
+  padding:12px;
+  font-size:11px;
+  color:var(--text-secondary);
+  line-height:1.8;
+  font-family:"SF Mono",Monaco,monospace;
+}
+.context-inject .ctx-line{display:flex;gap:8px}
+.context-inject .ctx-key{color:var(--text-muted);min-width:80px;font-weight:600}
+.context-inject .ctx-val{color:var(--text-primary)}
+
+.frustration-alert{
+  border-left-color:var(--danger)!important;
+  background:var(--danger-soft)!important;
+}
+
+/* ===== 滚动条 ===== */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg-primary)}
+::-webkit-scrollbar-thumb{background:var(--border-medium);border-radius:3px}
+
+/* ===== 响应式 ===== */
+@media (max-width:1200px){.sidebar{display:none}.main-content{margin-left:0}.three-col{grid-template-columns:1fr}}
+@media (max-width:1400px){.three-col{grid-template-columns:240px 1fr 240px}}
+@media (max-width:768px){.three-col{grid-template-columns:1fr;height:auto}}
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand">
+    <div class="logo">戏</div>
+    <h1>戏韵AI · 学生练习端</h1>
+    <span class="badge">AI 教练</span>
+  </div>
+  <div class="nav-user">
+    <div class="avatar">🎭</div>
+    <span>李小燕</span>
+    <span style="color:var(--text-muted);font-size:13px">|</span>
+    <span style="color:var(--text-secondary);font-size:13px">初级班 · 学戏 1.5 年</span>
+  </div>
+</nav>
+
+<div class="layout">
+<aside class="sidebar">
+  <div class="nav-group">
+    <div class="nav-group-title">核心功能</div>
+    <a href="dashboard.html" class="nav-item"><span class="icon">📊</span>班级看板</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">🧑‍🏫 教学工作台</div>
+    <a href="demo_library.html" class="nav-item"><span class="icon">🎵</span>示范库管理</a>
+    <a href="annotation.html" class="nav-item"><span class="icon">🏷️</span>歌词级标注</a>
+    <a href="homework.html" class="nav-item"><span class="icon">📝</span>作业批改</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">🎤 学生练习</div>
+    <a href="sing_along.html" class="nav-item"><span class="icon">🎙️</span>实时跟唱</a>
+    <a href="AI_teacher.html" class="nav-item active"><span class="icon">🤖</span>AI教练对话</a>
+    <a href="cat_test.html" class="nav-item"><span class="icon">🎯</span>摸底测试（CAT）</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">📈 数据分析</div>
+    <a href="tracking.html" class="nav-item"><span class="icon">📈</span>能力追踪（BKT）</a>
+    <a href="recommendation.html" class="nav-item"><span class="icon">🎯</span>渐进式推荐</a>
+    <a href="knowledge_graph.html" class="nav-item"><span class="icon">🧠</span>知识图谱</a>
+    <a href="cdm_report.html" class="nav-item"><span class="icon">🔍</span>归因诊断（CDM）</a>
+    <a href="daily_report.html" class="nav-item"><span class="icon">📰</span>每日学习报告</a>
+  </div>
+</aside>
+
+<main class="main-content">
+
+  <div class="page-header">
+    <h2>🤖 AI 教练 · 对话辅导</h2>
+    <p>数据/生成分离：左侧 🔒 客观数据区（程序计算）· 右侧 🤖 教学引导区（LLM生成）</p>
+  </div>
+
+  <!-- 三栏布局 -->
+  <div class="three-col">
+
+    <!-- ========== 左侧：🔒 客观数据区 ========== -->
+    <div class="card">
+      <div class="card-header" style="background:linear-gradient(90deg,var(--primary-soft),transparent);border-bottom-color:var(--primary-border)">
+        <div class="card-title">
+          <div class="icon" style="background:var(--primary-soft);color:var(--primary)">🔒</div>
+          客观数据区
+        </div>
+        <span style="font-size:10px;color:var(--primary);font-weight:700">程序计算</span>
+      </div>
+      <div class="card-body">
+
+        <div class="data-lock-banner">
+          <span class="lock-icon">🔐</span>
+          <span>以下数据由 模型+算法 引擎直接计算。</span>
+        </div>
+
+        <!-- 本次演唱摘要 -->
+        <div class="data-section">
+          <div class="data-section-title">📋 本次演唱摘要</div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.8">
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">曲目</span><span style="font-weight:600">《穆桂英挂帅》· 辕门外三声炮</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">段落</span><span style="font-weight:600">段落 1（辕门外三声炮）</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">综合评分</span><span style="color:var(--warning);font-weight:700">82.5</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">练习时间</span><span style="font-weight:600">2026-08-05 14:32</span></div>
+          </div>
+        </div>
+
+        <div class="divider-label"><span>歌词级偏差</span></div>
+
+        <!-- 歌词级偏差 -->
+        <div class="data-section">
+          <table class="data-table">
+            <thead><tr><th>字</th><th>老师</th><th>学生</th><th>偏差</th></tr></thead>
+            <tbody id="deviationTable">
+              <tr><td>辕</td><td>E4</td><td>E4</td><td class="diff-neu">-8c</td></tr>
+              <tr><td>门</td><td>F#4</td><td>F#4</td><td class="diff-neu">-12c</td></tr>
+              <tr><td>外</td><td>G4</td><td>G4</td><td class="diff-neu">-15c</td></tr>
+              <tr><td>三</td><td>A4</td><td>A4</td><td class="diff-neu">-5c</td></tr>
+              <tr><td>声</td><td>B4</td><td>B4</td><td class="diff-neu">-18c</td></tr>
+              <tr><td>炮</td><td>C5</td><td>B4+</td><td class="diff-pos">-35c</td></tr>
+              <tr><td>如</td><td>A4</td><td>A4</td><td class="diff-neu">+5c</td></tr>
+              <tr><td>同</td><td>G4</td><td>G4</td><td class="diff-neu">-3c</td></tr>
+              <tr><td>雷</td><td>B4</td><td>B4-</td><td class="diff-pos">-42c</td></tr>
+              <tr><td>震</td><td>A4</td><td>A4</td><td class="diff-neu">-22c</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="divider-label"><span>BKT 能力状态</span></div>
+
+        <!-- BKT 状态 -->
+        <div class="data-section">
+          <div style="margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary)"><span>音准控制</span><span style="color:var(--primary);font-weight:700">72%</span></div>
+            <div class="bkt-bar"><div class="bkt-fill" style="width:72%;background:var(--primary)"></div></div>
+            <div class="bkt-label"><span>P(L) = 0.72 · 置信 0.85</span><span style="color:var(--success)">↗</span></div>
+          </div>
+          <div style="margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary)"><span>气息支撑</span><span style="color:var(--warning);font-weight:700">51%</span></div>
+            <div class="bkt-bar"><div class="bkt-fill" style="width:51%;background:var(--warning)"></div></div>
+            <div class="bkt-label"><span>P(L) = 0.51 · 置信 0.73</span><span style="color:var(--text-muted)">→</span></div>
+          </div>
+          <div style="margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary)"><span>拖腔</span><span style="color:var(--danger);font-weight:700">28%</span></div>
+            <div class="bkt-bar"><div class="bkt-fill" style="width:28%;background:var(--danger)"></div></div>
+            <div class="bkt-label"><span>P(L) = 0.28 · 置信 0.55</span><span style="color:var(--text-muted)">→</span></div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary)"><span>滑音</span><span style="color:var(--primary);font-weight:700">63%</span></div>
+            <div class="bkt-bar"><div class="bkt-fill" style="width:63%;background:var(--primary)"></div></div>
+            <div class="bkt-label"><span>P(L) = 0.63 · 置信 0.68</span><span style="color:var(--success)">↗</span></div>
+          </div>
+        </div>
+
+        <div class="divider-label"><span>CDM 归因诊断</span></div>
+
+        <!-- CDM 标签 -->
+        <div class="data-section">
+          <div class="cdm-tag high">✓ 气息支撑不足 · 置信 82%</div>
+          <div class="cdm-tag high">✓ 拖腔时值偏短 · 置信 78%</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">以上标签由 CDM 引擎基于特征矩阵输出</div>
+        </div>
+
+      </div>
+      <div class="card-footer" style="border-top-color:var(--primary-border);color:var(--text-muted)">
+        🔒 数据来源：模型 → 程序计算 → 结构化存储（不经过 LLM）
+      </div>
+    </div>
+
+    <!-- ========== 中间：💬 对话区 ========== -->
+    <div class="card" style="border-left:2px solid var(--border-light);border-right:2px solid var(--border-light)">
+      <div class="chat-header">
+        <div class="chat-avatar">🎓</div>
+        <div class="chat-info">
+          <div class="chat-name">AI 教练 · 王老师</div>
+          <div class="chat-status"><span class="dot"></span>在线</div>
+        </div>
+        <span class="strategy-tag" id="currentStrategyTag">🧠 苏格拉底式</span>
+      </div>
+
+      <div class="chat-body" id="chatBody">
+        <div class="system-msg"><span>📝 上下文已注入：学生画像 + 本次演唱数据 + RAG 检索结果</span></div>
+
+        <div class="message ai">
+          <div class="msg-avatar">🎓</div>
+          <div>
+            <div class="msg-bubble">
+              小燕你好！刚才你唱了"辕门外三声炮"这一段。我们先不急着看分数，我想先请你听一听自己和老师的演唱，感受一下——在"炮"和"雷"这两个字上，你的声音和老师的有什么不一样的地方？🎵
+            </div>
+            <div class="msg-time">14:33:05</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-input-wrap">
+        <div class="quick-replies" id="quickReplies">
+          <button class="quick-btn" onclick="sendQuick('我感觉"炮"字好像低了一点？')">我感觉"炮"字好像低了一点？</button>
+          <button class="quick-btn" onclick="sendQuick('听不出来…')">听不出来…</button>
+          <button class="quick-btn" onclick="sendQuick('是不是拖腔不够长？')">是不是拖腔不够长？</button>
+          <button class="quick-btn" onclick="sendQuick('太难了，算了')">太难了，算了</button>
+        </div>
+        <div class="input-row">
+          <textarea class="chat-input" id="chatInput" placeholder="输入你的回复，或点击上方快捷按钮…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()">发送</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 右侧：🤖 教学引导区 ========== -->
+    <div class="card">
+      <div class="card-header" style="background:linear-gradient(90deg,rgba(139,92,246,0.06),transparent);border-bottom-color:rgba(139,92,246,0.15)">
+        <div class="card-title">
+          <div class="icon" style="background:rgba(139,92,246,0.10);color:#7C3AED">🤖</div>
+          教学引导区
+        </div>
+        <span style="font-size:10px;color:#7C3AED;font-weight:700">LLM 生成</span>
+      </div>
+      <div class="card-body">
+
+        <div class="source-banner">
+          <span>🤖</span>
+          <span>以下内容由大模型基于左侧客观数据生成，<b>数值数据以左侧为准</b>。</span>
+        </div>
+
+        <div class="guide-card">
+          <div class="guide-card-title">🎯 当前教学策略</div>
+          <div class="guide-item strategy">
+            <span class="label">策略名称</span>
+            <div id="strategyName">苏格拉底式引导</div>
+          </div>
+          <div class="guide-item strategy">
+            <span class="label">策略说明</span>
+            <div id="strategyDesc">不直接指出错误，通过提问引导学生自主发现偏差。连续 3 次无法找到问题才给出明确提示。</div>
+          </div>
+        </div>
+
+        <div class="guide-card">
+          <div class="guide-card-title">😊 情绪状态监测</div>
+          <div class="guide-item emotion">
+            <span class="label">当前情绪指数</span>
+            <div id="emotionText">平稳 · 积极参与</div>
+            <div class="emotion-meter">
+              <div class="emotion-bar"><div class="emotion-fill" id="emotionBar" style="width:72%;background:var(--primary)"></div></div>
+              <span class="emotion-label" id="emotionScore">72%</span>
+            </div>
+          </div>
+          <div class="guide-item emotion">
+            <span class="label">连续大偏差计数</span>
+            <div id="deviationCount">0 字 &gt; 50cents（未触发鼓励模式）</div>
+          </div>
+          <div class="guide-item emotion frustration-alert" id="frustrationAlert" style="display:none;">
+            <span class="label">⚠️ 挫败感预警</span>
+            <div>检测到关键词"太难/算了"，已切换至<strong>鼓励模式 + 降难度建议</strong></div>
+          </div>
+        </div>
+
+        <div class="guide-card">
+          <div class="guide-card-title">📐 水平适配语言风格</div>
+          <div class="guide-item context">
+            <span class="label">学生水平</span>
+            <div>初学者（学戏 &lt; 1.5 年）</div>
+          </div>
+          <div class="guide-item context">
+            <span class="label">语言风格</span>
+            <div id="langStyle">生活化类比为主，避免过多专业术语</div>
+          </div>
+          <div class="guide-item context">
+            <span class="label">示例话术</span>
+            <div id="examplePhrase">"你的声音像在走独木桥，需要稳一点"</div>
+          </div>
+        </div>
+
+        <div class="guide-card">
+          <div class="guide-card-title">📥 上下文注入（Prompt 组装）</div>
+          <div class="context-inject">
+            <div class="ctx-line"><span class="ctx-key">学生画像</span><span class="ctx-val">李小燕 · 初级 · 1.5年 · 畏难倾向 0.32</span></div>
+            <div class="ctx-line"><span class="ctx-key">薄弱技法</span><span class="ctx-val">气息支撑(0.51) · 拖腔(0.28)</span></div>
+            <div class="ctx-line"><span class="ctx-key">本次偏差</span><span class="ctx-val">"炮"-35c · "雷"-42c · 拖腔偏短</span></div>
+            <div class="ctx-line"><span class="ctx-key">RAG 检索</span><span class="ctx-val">拖腔练习技巧 · 气息支撑训练</span></div>
+            <div class="ctx-line"><span class="ctx-key">约束条件</span><span class="ctx-val">禁止编造数值 · 苏格拉底式 · 水平适配</span></div>
+          </div>
+        </div>
+
+        <div class="guide-card">
+          <div class="guide-card-title">💬 当前引导语（LLM 输出）</div>
+          <div class="guide-item" id="currentGuideText" style="border-left-color:#7C3AED;font-style:italic;color:var(--text-primary);background:var(--bg-secondary)">
+            "我们先不急着看分数，我想先请你听一听自己和老师的演唱，感受一下——在'炮'和'雷'这两个字上，你的声音和老师的有什么不一样的地方？"
+          </div>
+        </div>
+
+      </div>
+      <div class="card-footer" style="border-top-color:rgba(139,92,246,0.15);color:var(--text-muted)">
+        🤖 数据来源：LLM 生成（Claude API / Qwen API）· 已注入左侧结构化数据作为上下文事实
+      </div>
+    </div>
+
+  </div>
+</main>
+</div>
+
+<script>
+/* ============================================================
+   模拟数据与状态
+   ============================================================ */
+const STUDENT_PROFILE = {
+  name: "李小燕",
+  level: "初级",
+  years: 1.5,
+  frustration: 0.32,
+  bkt: { "音准控制": 0.72, "气息支撑": 0.51, "拖腔": 0.28, "滑音": 0.63 }
+};
+
+const SESSION_DATA = {
+  piece: "《穆桂英挂帅》· 辕门外三声炮",
+  segment: "段落 1",
+  score: 82.5,
+  deviations: [
+    {char:"辕", diff:-8}, {char:"门", diff:-12}, {char:"外", diff:-15},
+    {char:"三", diff:-5}, {char:"声", diff:-18}, {char:"炮", diff:-35},
+    {char:"如", diff:5}, {char:"同", diff:-3}, {char:"雷", diff:-42}, {char:"震", diff:-22}
+  ],
+  cdm: ["气息支撑不足(0.82)", "拖腔时值偏短(0.78)"]
+};
+
+let chatHistory = [];
+let socraticFailCount = 0;
+let bigDeviationCount = 0;
+let isEncourageMode = false;
+let isFrustrationMode = false;
+let currentStrategy = "socratic";
+
+/* ============================================================
+   对话引擎（模拟 LLM 回复逻辑）
+   ============================================================ */
+const RESPONSES = {
+  found_issue: {
+    text: "很好！你能听出来已经很棒了。那我们再仔细听一次——'炮'字拖腔的时候，除了音高，气息是不是也有点'晃'？就像走独木桥的时候，脚底下在抖一样。你觉得气息稳不稳？🌉",
+    strategy: "苏格拉底式",
+    strategyDesc: "肯定学生发现 → 引导深入第二层问题（气息）",
+    guide: "先肯定学生的发现，建立信心；再用生活化类比引导关注气息稳定性",
+    emotion: "积极发现 · 信心提升",
+    emotionScore: 85,
+    bigDevReset: true
+  },
+  cannot_hear: {
+    text: "没关系，这很正常！我们再来听一遍——这次你特别留意'炮'字，听听老师的声音是不是更'稳'、更'沉'一些？把你的手放在胸口，感受一下振动。准备好了吗？▶️",
+    strategy: "苏格拉底式（提示层+1）",
+    strategyDesc: "给予情感支持 → 提供具体听辨方法（体感辅助）",
+    guide: "降低挫败感，提供多感官辅助策略（听觉+触觉），帮助学生建立感知",
+    emotion: "需要支持 · 给予方法",
+    emotionScore: 65,
+    bigDevReset: true
+  },
+  give_hint: {
+    text: "好的，我来给你一个明确的提示：'炮'字你的音高比老师低了大约 35 音分（约 1/3 个半音），而且拖腔的时长也稍微短了一点。建议先做一个'慢吸慢呼'的气息练习，然后再唱一次这个字。要试试吗？💪",
+    strategy: "明确提示 + 练习建议",
+    strategyDesc: "连续 3 次引导失败，切换为直接提示 + 给出可执行的改进方案",
+    guide: "直接给出量化偏差（引用左侧客观数据），并提供具体练习动作",
+    emotion: "明确指导 · 行动导向",
+    emotionScore: 70,
+    bigDevReset: true
+  },
+  found_rhythm: {
+    text: "对！你的耳朵很准。'炮'字的拖腔确实比标准短了一些。拖腔需要气息像一根线一样牵住，不能断。我们现在来练一个'吹蜡烛'的小游戏：深吸一口气，然后均匀地吹 4 秒钟。准备好了告诉我！🕯️",
+    strategy: "苏格拉底式 + 游戏化",
+    strategyDesc: "肯定发现 → 用生活化类比解释原理 → 给出趣味练习",
+    guide: "初学者适合游戏化类比（吹蜡烛=气息控制），避免抽象术语",
+    emotion: "积极发现 · 趣味引导",
+    emotionScore: 88,
+    bigDevReset: true
+  },
+  frustration: {
+    text: "别急别急，我们先不练这一句了。你知道吗？上周你唱'三声炮'的时候，'三'字还偏差了 20 多音分，今天已经能控制在 5 音分以内了！进步很明显。要不我们先换一句简单一点的，比如'天波府'这三个字？这个没有拖腔，适合你现在的状态。🌟",
+    strategy: "鼓励模式 + 降难度",
+    strategyDesc: "检测到挫败关键词 → 播放历史成功片段建立信心 → 推荐低难度曲目",
+    guide: "引用历史进步数据（BKT 历史曲线）建立信心；主动降级推荐，保护学习动机",
+    emotion: "挫败安抚 · 信心重建",
+    emotionScore: 55,
+    bigDevReset: true,
+    isFrustration: true
+  },
+  encourage: {
+    text: "我们先停一下。我放一段你上周唱得最好的'辕'字给你听——听，这个音多稳！你是有这个能力的。今天的状态可能只是有点累了，我们先做两个深呼吸，然后再试一次，好吗？🌸",
+    strategy: "鼓励模式",
+    strategyDesc: "连续多字大偏差 → 播放历史最佳片段 → 归因于状态而非能力",
+    guide: "用历史成功证据对抗挫败感；将失败归因于临时状态（疲劳），保护自我效能感",
+    emotion: "鼓励安抚 · 状态调整",
+    emotionScore: 60,
+    bigDevReset: true
+  },
+  default: {
+    text: "嗯，我明白了。那我们回到刚才的演唱数据——'炮'字偏差 35 音分，'雷'字偏差 42 音分，这两个都是拖腔字。拖腔需要两个前置技能：气息支撑和音准稳定性。你现在的气息支撑掌握度是 51%，刚好在临界点上。你觉得是气息先松了，还是音高先跑了？🤔",
+    strategy: "苏格拉底式 + 数据关联",
+    strategyDesc: "引用左侧客观数据 → 关联 BKT 前置技能 → 引导学生自我归因",
+    guide: "将演唱数据与能力模型关联，帮助学生理解'为什么'，而非只记住'是什么'",
+    emotion: "深度思考 · 元认知引导",
+    emotionScore: 75,
+    bigDevReset: false
+  }
+};
+
+/* ============================================================
+   消息发送与渲染
+   ============================================================ */
+function appendMessage(role, text, timeStr) {
+  const container = document.getElementById("chatBody");
+  const div = document.createElement("div");
+  div.className = `message ${role}`;
+  const avatar = role === "ai" ? "🎓" : "🎭";
+  const time = timeStr || new Date().toLocaleTimeString("zh-CN", {hour12:false});
+  div.innerHTML = `
+    <div class="msg-avatar">${avatar}</div>
+    <div>
+      <div class="msg-bubble">${escapeHtml(text)}</div>
+      <div class="msg-time">${time}</div>
+    </div>
+  `;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function appendSystem(text) {
+  const container = document.getElementById("chatBody");
+  const div = document.createElement("div");
+  div.className = "system-msg";
+  div.innerHTML = `<span>${escapeHtml(text)}</span>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+/* ============================================================
+   策略与引导区更新
+   ============================================================ */
+function updateGuidePanel(data) {
+  document.getElementById("currentStrategyTag").textContent = data.strategy.includes("鼓励") ? "🌟 鼓励模式" : (data.strategy.includes("挫败") ? "💚 安抚模式" : "🧠 苏格拉底式");
+  document.getElementById("strategyName").textContent = data.strategy;
+  document.getElementById("strategyDesc").textContent = data.strategyDesc;
+  document.getElementById("currentGuideText").textContent = data.guide;
+  document.getElementById("emotionText").textContent = data.emotion;
+  document.getElementById("emotionScore").textContent = data.emotionScore + "%";
+  document.getElementById("emotionBar").style.width = data.emotionScore + "%";
+  document.getElementById("emotionBar").style.background = data.emotionScore >= 80 ? "var(--success)" : (data.emotionScore >= 60 ? "var(--primary)" : "var(--warning)");
+
+  const alertBox = document.getElementById("frustrationAlert");
+  if (data.isFrustration) { alertBox.style.display = "block"; }
+  else { alertBox.style.display = "none"; }
+
+  document.getElementById("deviationCount").textContent = bigDeviationCount + " 字 > 50cents" + (bigDeviationCount >= 2 ? "（已触发鼓励模式阈值）" : "（未触发鼓励模式）");
+}
+
+/* ============================================================
+   核心对话逻辑
+   ============================================================ */
+function processUserInput(text) {
+  const frustrationKeywords = ["不会", "太难", "算了", "放弃", "不想练", "没劲"];
+  const hasFrustration = frustrationKeywords.some(k => text.includes(k));
+
+  const foundKeywords = ["低", "高", "短", "长", "抖", "晃", "不稳", "气息", "拖腔"];
+  const foundIssue = foundKeywords.some(k => text.includes(k));
+
+  let responseKey = "default";
+
+  if (hasFrustration) {
+    responseKey = "frustration";
+    isFrustrationMode = true;
+    isEncourageMode = true;
+    socraticFailCount = 0;
+    bigDeviationCount = 0;
+  } else if (isEncourageMode && !foundIssue) {
+    responseKey = "encourage";
+  } else if (bigDeviationCount >= 2 && !foundIssue) {
+    responseKey = "encourage";
+    isEncourageMode = true;
+  } else if (!foundIssue) {
+    socraticFailCount++;
+    if (socraticFailCount >= 3) {
+      responseKey = "give_hint";
+      socraticFailCount = 0;
+    } else {
+      responseKey = "cannot_hear";
+    }
+    const bigDevs = SESSION_DATA.deviations.filter(d => Math.abs(d.diff) > 50).length;
+    if (bigDevs >= 2) bigDeviationCount = bigDevs;
+  } else {
+    if (text.includes("拖腔") || text.includes("短") || text.includes("长")) {
+      responseKey = "found_rhythm";
+    } else {
+      responseKey = "found_issue";
+    }
+    socraticFailCount = 0;
+    bigDeviationCount = 0;
+    isEncourageMode = false;
+  }
+
+  return RESPONSES[responseKey];
+}
+
+function sendMessage() {
+  const input = document.getElementById("chatInput");
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = "";
+  input.disabled = true;
+  document.getElementById("sendBtn").disabled = true;
+
+  appendMessage("user", text);
+  chatHistory.push({role:"user", text});
+
+  setTimeout(() => {
+    const reply = processUserInput(text);
+    appendMessage("ai", reply.text);
+    chatHistory.push({role:"ai", text: reply.text});
+    updateGuidePanel(reply);
+
+    input.disabled = false;
+    document.getElementById("sendBtn").disabled = false;
+    input.focus();
+  }, 800 + Math.random() * 600);
+}
+
+function sendQuick(text) {
+  document.getElementById("chatInput").value = text;
+  sendMessage();
+}
+
+/* ============================================================
+   初始化
+   ============================================================ */
+function init() {
+  updateGuidePanel({
+    strategy: "苏格拉底式引导",
+    strategyDesc: "不直接指出错误，通过提问引导学生自主发现偏差。连续 3 次无法找到问题才给出明确提示。",
+    guide: "先肯定学生的发现，建立信心；再用生活化类比引导关注气息稳定性",
+    emotion: "平稳 · 积极参与",
+    emotionScore: 72,
+    isFrustration: false
+  });
+
+  const textarea = document.getElementById("chatInput");
+  textarea.addEventListener("input", function() {
+    this.style.height = "auto";
+    this.style.height = Math.min(100, this.scrollHeight) + "px";
+  });
+}
+
+init();
+</script>
+</body>
+</html>

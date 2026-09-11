@@ -1,0 +1,1527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>戏韵AI · CDM 归因诊断报告</title>
+<script src="static/echarts.min.js">
+</script>
+<style>
+    /* ============================================================
+       浅色高对比度配色 · 宣纸背景 + 景泰蓝/朱砂红
+       与 sing_along 保持一致
+       ============================================================ */
+    :root {
+        --bg-primary: #F5EDE4;
+        --bg-secondary: #FFFFFF;
+        --bg-tertiary: #F0E8DC;
+        --bg-hover: #F5F0EA;
+        --bg-card-header: #F8F3EC;
+        --text-primary: #2D1F14;
+        --text-secondary: #5A4A3A;
+        --text-muted: #8A7A6A;
+        --text-light: #B0A090;
+        --border-light: #E8DDD0;
+        --border-medium: #D5C8B8;
+        --border-strong: #C0B0A0;
+        --primary: #0066B3;
+        --primary-hover: #0055A0;
+        --primary-glow: rgba(0, 102, 179, 0.30);
+        --primary-soft: rgba(0, 102, 179, 0.08);
+        --primary-border: rgba(0, 102, 179, 0.25);
+        --success: #4A8F6B;
+        --success-soft: rgba(74, 143, 107, 0.12);
+        --warning: #C9A84C;
+        --warning-soft: rgba(201, 168, 76, 0.12);
+        --danger: #B83A2F;
+        --danger-soft: rgba(184, 58, 47, 0.12);
+        --nav-gradient: linear-gradient(90deg, #F5EDE4, #E8DDD0 40%, #D5C8B8 50%, #E8DDD0 60%, #F5EDE4);
+        --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.04);
+        --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        min-height: 100vh;
+        line-height: 1.7;
+        font-size: 16px;
+    }
+
+    /* ===== Navbar ===== */
+    .navbar {
+        background: var(--nav-gradient);
+        border-bottom: 2px solid var(--border-medium);
+        padding: 0 24px;
+        height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: sticky;
+        top: 0;
+        z-index: 50;
+    }
+    .nav-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .nav-brand .logo {
+        width: 34px;
+        height: 34px;
+        background: linear-gradient(135deg, var(--primary), #004080);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        font-weight: 700;
+        color: #fff;
+        box-shadow: 0 2px 12px var(--primary-glow);
+    }
+    .nav-brand h1 {
+        font-size: 17px;
+        color: var(--text-primary);
+        font-weight: 700;
+    }
+    .nav-brand .badge {
+        background: var(--primary-soft);
+        color: var(--primary);
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        border: 1px solid var(--primary-border);
+    }
+    .nav-user {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+    .nav-user .avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #B89076, #8B6B4F);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        color: #fff;
+    }
+
+    /* ===== Layout ===== */
+    .layout {
+        display: flex;
+        min-height: calc(100vh - 58px);
+    }
+    .sidebar {
+        width: 200px;
+        background: var(--bg-secondary);
+        border-right: 2px solid var(--border-light);
+        padding: 12px 0;
+        position: fixed;
+        height: 100%;
+        overflow-y: auto;
+        z-index: 40;
+    }
+    .nav-group {
+        margin-bottom: 6px;
+    }
+    .nav-group-title {
+        padding: 6px 16px;
+        font-size: 11px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        font-weight: 700;
+    }
+    .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        margin: 0 8px;
+        color: var(--text-secondary);
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-decoration: none;
+        border-radius: 8px;
+        border-left: 4px solid transparent;
+    }
+    .nav-item:hover {
+        color: var(--text-primary);
+        background: var(--bg-hover);
+    }
+    .nav-item.active {
+        color: var(--primary);
+        background: var(--primary-soft);
+        border-left-color: var(--primary);
+        font-weight: 600;
+    }
+    .nav-item .icon {
+        font-size: 16px;
+        width: 22px;
+        text-align: center;
+    }
+    .nav-badge {
+        margin-left: auto;
+        background: var(--danger);
+        color: #fff;
+        font-size: 10px;
+        padding: 1px 6px;
+        border-radius: 8px;
+        font-weight: 600;
+    }
+    .main-content {
+        margin-left: 200px;
+        flex: 1;
+        padding: 20px;
+        max-width: 1400px;
+    }
+
+    /* ===== 页面头部 ===== */
+    .page-header {
+        margin-bottom: 16px;
+    }
+    .page-header h2 {
+        font-size: 20px;
+        color: var(--text-primary);
+        font-weight: 700;
+        margin-bottom: 2px;
+    }
+    .page-header p {
+        font-size: 14px;
+        color: var(--text-secondary);
+    }
+
+    /* ===== 提交选择器 ===== */
+    .submission-selector {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+    }
+    .sub-chip {
+        padding: 10px 16px;
+        border: 2px solid var(--border-light);
+        border-radius: 10px;
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 200px;
+        font-weight: 600;
+        box-shadow: var(--shadow-sm);
+    }
+    .sub-chip:hover {
+        border-color: var(--border-medium);
+        color: var(--text-primary);
+        box-shadow: var(--shadow-md);
+    }
+    .sub-chip.active {
+        border-color: var(--primary);
+        background: var(--primary-soft);
+        color: var(--primary);
+    }
+    .sub-chip .sub-avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border-light);
+    }
+    .sub-chip .sub-info {
+        flex: 1;
+    }
+    .sub-chip .sub-name {
+        font-weight: 700;
+        color: var(--text-primary);
+        font-size: 13px;
+    }
+    .sub-chip.active .sub-name {
+        color: var(--primary);
+    }
+    .sub-chip .sub-meta {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 1px;
+    }
+    .sub-chip .sub-score {
+        font-size: 18px;
+        font-weight: 700;
+    }
+    .sub-score.high {
+        color: var(--success);
+    }
+    .sub-score.mid {
+        color: var(--warning);
+    }
+    .sub-score.low {
+        color: var(--danger);
+    }
+
+    /* ===== 卡片通用 ===== */
+    .card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-light);
+        border-radius: 14px;
+        padding: 18px 20px;
+        margin-bottom: 16px;
+        box-shadow: var(--shadow-sm);
+        transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .card:hover {
+        border-color: var(--border-medium);
+        box-shadow: var(--shadow-md);
+    }
+    .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .card-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .card-title .icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        background: var(--primary-soft);
+        color: var(--primary);
+    }
+    .card-action {
+        font-size: 12px;
+        color: var(--primary);
+        cursor: pointer;
+        font-weight: 600;
+    }
+    .card-action:hover {
+        text-decoration: underline;
+    }
+
+    /* ===== 统计卡片 ===== */
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .summary-item {
+        text-align: center;
+        padding: 14px 12px;
+        background: var(--bg-primary);
+        border-radius: 10px;
+        border: 1px solid var(--border-light);
+    }
+    .summary-val {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1;
+    }
+    .summary-label {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 4px;
+    }
+
+    /* ===== 缺陷标签 ===== */
+    .defect-section {
+        margin-bottom: 14px;
+    }
+    .defect-section:last-child {
+        margin-bottom: 0;
+    }
+    .section-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+    .section-header .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .section-count {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--text-muted);
+        font-weight: 400;
+    }
+
+    .defect-card {
+        background: var(--bg-primary);
+        border-radius: 10px;
+        border: 1px solid var(--border-light);
+        padding: 16px;
+        margin-bottom: 10px;
+        transition: all 0.2s;
+    }
+    .defect-card:hover {
+        border-color: var(--border-medium);
+    }
+    .defect-card.high {
+        border-color: rgba(184, 58, 47, 0.30);
+        background: var(--danger-soft);
+    }
+    .defect-card.medium {
+        border-color: rgba(201, 168, 76, 0.30);
+        background: var(--warning-soft);
+    }
+    .defect-card.low {
+        border-color: rgba(138, 122, 106, 0.20);
+        background: var(--bg-primary);
+    }
+    .defect-card.confirmed {
+        border-color: rgba(74, 143, 107, 0.35);
+        background: var(--success-soft);
+    }
+    .defect-card.corrected {
+        border-color: rgba(201, 168, 76, 0.35);
+        background: var(--warning-soft);
+    }
+    .defect-card.ignored {
+        opacity: 0.65;
+    }
+
+    .defect-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .defect-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        flex-shrink: 0;
+    }
+    .defect-icon.high {
+        background: var(--danger-soft);
+    }
+    .defect-icon.medium {
+        background: var(--warning-soft);
+    }
+    .defect-icon.low {
+        background: rgba(138, 122, 106, 0.10);
+    }
+    .defect-icon.confirmed {
+        background: var(--success-soft);
+    }
+    .defect-icon.corrected {
+        background: var(--warning-soft);
+    }
+    .defect-title {
+        flex: 1;
+        min-width: 0;
+    }
+    .defect-name {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    .defect-category {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 1px;
+    }
+    .defect-confidence {
+        padding: 3px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+    .conf-high {
+        background: var(--danger-soft);
+        color: var(--danger);
+    }
+    .conf-medium {
+        background: var(--warning-soft);
+        color: var(--warning);
+    }
+    .conf-low {
+        background: rgba(138, 122, 106, 0.10);
+        color: var(--text-muted);
+    }
+    .conf-confirmed {
+        background: var(--success-soft);
+        color: var(--success);
+    }
+    .conf-corrected {
+        background: var(--warning-soft);
+        color: var(--warning);
+    }
+
+    .defect-evidence {
+        font-size: 12px;
+        color: var(--text-secondary);
+        line-height: 1.7;
+        margin-bottom: 10px;
+        padding: 10px 12px;
+        background: var(--bg-secondary);
+        border-radius: 6px;
+        border: 1px solid var(--border-light);
+    }
+    .defect-evidence strong {
+        color: var(--text-primary);
+    }
+
+    .defect-features {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+    .feature-tag {
+        padding: 3px 10px;
+        border-radius: 4px;
+        font-size: 11px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-light);
+        color: var(--text-secondary);
+    }
+    .feature-tag .val {
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .defect-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .defect-actions button {
+        padding: 6px 14px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: 2px solid var(--border-light);
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .defect-actions button:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+        background: var(--primary-soft);
+    }
+    .defect-actions .btn-confirm:hover {
+        border-color: var(--success);
+        color: var(--success);
+        background: var(--success-soft);
+    }
+    .defect-actions .btn-correct:hover {
+        border-color: var(--warning);
+        color: var(--warning);
+        background: var(--warning-soft);
+    }
+    .defect-actions .btn-ignore:hover {
+        border-color: var(--text-muted);
+        color: var(--text-muted);
+        background: var(--bg-hover);
+    }
+    .defect-actions button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .defect-status {
+        margin-top: 10px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        display: none;
+        align-items: center;
+        gap: 8px;
+    }
+    .defect-status.show {
+        display: flex;
+    }
+    .defect-status.confirmed {
+        background: var(--success-soft);
+        color: var(--success);
+        border: 1px solid rgba(74, 143, 107, 0.2);
+    }
+    .defect-status.corrected {
+        background: var(--warning-soft);
+        color: var(--warning);
+        border: 1px solid rgba(201, 168, 76, 0.2);
+    }
+    .defect-status.ignored {
+        background: rgba(138, 122, 106, 0.08);
+        color: var(--text-muted);
+        border: 1px solid rgba(138, 122, 106, 0.15);
+    }
+
+    /* ===== 图表 ===== */
+    #featureChart {
+        width: 100%;
+        height: 280px;
+    }
+
+    /* ===== 音高偏差分析 ===== */
+    .pattern-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 6px;
+    }
+    .pattern-label {
+        font-size: 12px;
+        color: var(--text-secondary);
+        min-width: 90px;
+        font-weight: 600;
+    }
+    .pattern-track {
+        flex: 1;
+        height: 8px;
+        background: var(--border-light);
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+    }
+    .pattern-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.4s;
+    }
+    .pattern-center {
+        position: absolute;
+        left: 50%;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: var(--text-muted);
+    }
+    .pattern-val {
+        font-size: 11px;
+        color: var(--text-secondary);
+        min-width: 60px;
+        text-align: right;
+        font-weight: 700;
+    }
+
+    /* ===== 修正记录 ===== */
+    .correction-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .correction-item {
+        padding: 10px 12px;
+        background: var(--bg-primary);
+        border-radius: 8px;
+        border: 1px solid var(--border-light);
+        font-size: 12px;
+    }
+    .correction-item .corr-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 3px;
+    }
+    .correction-item .corr-time {
+        color: var(--text-muted);
+        font-size: 11px;
+    }
+    .correction-item .corr-type {
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 10px;
+        font-weight: 700;
+    }
+    .corr-type.confirm {
+        background: var(--success-soft);
+        color: var(--success);
+    }
+    .corr-type.correct {
+        background: var(--warning-soft);
+        color: var(--warning);
+    }
+    .corr-type.ignore {
+        background: rgba(138, 122, 106, 0.10);
+        color: var(--text-muted);
+    }
+    .correction-item .corr-detail {
+        color: var(--text-secondary);
+        line-height: 1.5;
+    }
+
+    /* ===== 数据回流 ===== */
+    .feedback-panel {
+        background: var(--bg-primary);
+        border-radius: 10px;
+        border: 1px solid var(--border-light);
+        padding: 14px 16px;
+    }
+    .feedback-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--success);
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .feedback-stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    .feedback-stat {
+        text-align: center;
+        padding: 10px;
+        background: var(--bg-secondary);
+        border-radius: 6px;
+        border: 1px solid var(--border-light);
+    }
+    .feedback-stat .val {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    .feedback-stat .lab {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+    .feedback-note {
+        font-size: 12px;
+        color: var(--text-secondary);
+        line-height: 1.7;
+    }
+    .feedback-note strong {
+        color: var(--text-primary);
+    }
+
+    /* ===== 空状态 ===== */
+    .empty-state {
+        text-align: center;
+        padding: 24px 16px;
+        color: var(--text-muted);
+        font-size: 13px;
+    }
+    .empty-state .empty-icon {
+        font-size: 32px;
+        margin-bottom: 6px;
+        opacity: 0.7;
+    }
+
+    /* ===== 模态框 ===== */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(245, 237, 228, 0.88);
+        backdrop-filter: blur(5px);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+    }
+    .modal.show {
+        display: flex;
+    }
+    .modal-box {
+        background: var(--bg-secondary);
+        border: 2px solid var(--border-medium);
+        border-radius: 14px;
+        padding: 24px;
+        width: 420px;
+        max-width: 90vw;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.06);
+    }
+    .modal-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+    }
+    .modal-options {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 12px;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    .modal-option {
+        padding: 8px 12px;
+        background: var(--bg-primary);
+        border: 2px solid var(--border-light);
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+    .modal-option:hover {
+        border-color: var(--border-medium);
+        color: var(--text-primary);
+    }
+    .modal-option.selected {
+        border-color: #7C3AED;
+        background: rgba(139, 92, 246, 0.08);
+        color: #7C3AED;
+    }
+    .modal-custom {
+        margin-bottom: 14px;
+    }
+    .modal-custom label {
+        display: block;
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-bottom: 4px;
+        font-weight: 600;
+    }
+    .modal-custom input {
+        width: 100%;
+        padding: 8px 12px;
+        background: var(--bg-primary);
+        border: 2px solid var(--border-light);
+        border-radius: 6px;
+        color: var(--text-primary);
+        font-size: 13px;
+        font-family: inherit;
+    }
+    .modal-custom input:focus {
+        outline: none;
+        border-color: var(--primary);
+    }
+    .modal-btns {
+        display: flex;
+        gap: 10px;
+    }
+    .modal-btns button {
+        flex: 1;
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+    .modal-btns .btn-confirm {
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        box-shadow: 0 2px 8px var(--primary-glow);
+    }
+    .modal-btns .btn-confirm:hover {
+        background: var(--primary-hover);
+    }
+    .modal-btns .btn-cancel {
+        background: var(--bg-primary);
+        color: var(--text-secondary);
+        border: 2px solid var(--border-light);
+    }
+    .modal-btns .btn-cancel:hover {
+        border-color: var(--border-medium);
+    }
+
+    /* ===== Toast ===== */
+    .toast-container {
+        position: fixed;
+        top: 72px;
+        right: 20px;
+        z-index: 200;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .toast {
+        background: var(--bg-secondary);
+        border: 2px solid var(--border-light);
+        border-radius: 12px;
+        padding: 14px 18px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        min-width: 300px;
+        max-width: 400px;
+        animation: toastIn 0.3s ease;
+    }
+    .toast.success {
+        border-color: rgba(74, 143, 107, 0.4);
+    }
+    .toast.warn {
+        border-color: rgba(201, 168, 76, 0.4);
+    }
+    .toast-icon {
+        font-size: 20px;
+    }
+    .toast-content {
+        flex: 1;
+    }
+    .toast-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 2px;
+    }
+    .toast-msg {
+        font-size: 12px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+    }
+    @keyframes toastIn {
+        from {
+            opacity: 0;
+            transform: translateX(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    /* ===== 滚动条 ===== */
+    ::-webkit-scrollbar {
+        width: 5px;
+        height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+        background: var(--bg-primary);
+    }
+    ::-webkit-scrollbar-thumb {
+        background: var(--border-medium);
+        border-radius: 3px;
+    }
+
+    /* ===== 响应式 ===== */
+    @media (max-width: 1200px) {
+        .sidebar {
+            display: none;
+        }
+        .main-content {
+            margin-left: 0;
+        }
+        .summary-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+    @media (max-width: 768px) {
+        .summary-grid {
+            grid-template-columns: 1fr;
+        }
+        .sub-chip {
+            min-width: 140px;
+            font-size: 12px;
+            padding: 8px 12px;
+        }
+        .sub-chip .sub-score {
+            font-size: 15px;
+        }
+        .defect-card {
+            padding: 12px 14px;
+        }
+        .modal-box {
+            width: 95vw;
+            padding: 18px;
+        }
+        .feedback-stats {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+    }
+</style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="logo">戏</div>
+            <h1>戏韵AI · 老师工作台</h1>
+            <span class="badge">归因诊断</span>
+        </div>
+        <div class="nav-user">
+            <div class="avatar">👩‍🏫</div>
+            <span>王慧芳</span>
+            <span style="color:var(--text-muted);font-size:13px">|</span>
+            <span style="color:var(--text-secondary);font-size:13px">中国戏曲学院</span>
+        </div>
+    </nav>
+
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="nav-group">
+                <div class="nav-group-title">核心功能</div>
+                <a href="dashboard.html" class="nav-item"><span class="icon">📊</span>班级看板</a>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-group-title">🧑‍🏫 教学工作台</div>
+                <a href="demo_library.html" class="nav-item"><span class="icon">🎵</span>示范库管理</a>
+                <a href="annotation.html" class="nav-item"><span class="icon">🏷️</span>歌词级标注</a>
+                <a href="homework.html" class="nav-item"><span class="icon">📝</span>作业批改</a>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-group-title">🎤 学生练习</div>
+                <a href="sing_along.html" class="nav-item"><span class="icon">🎙️</span>实时跟唱</a>
+                <a href="AI_teacher.html" class="nav-item"><span class="icon">🤖</span>AI教练对话</a>
+                <a href="cat_test.html" class="nav-item"><span class="icon">🎯</span>摸底测试（CAT）</a>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-group-title">📈 数据分析</div>
+                <a href="tracking.html" class="nav-item"><span class="icon">📈</span>能力追踪（BKT）</a>
+                <a href="recommendation.html" class="nav-item"><span class="icon">🎯</span>渐进式推荐</a>
+                <a href="knowledge_graph.html" class="nav-item"><span class="icon">🧠</span>知识图谱</a>
+                <a href="cdm_report.html" class="nav-item active"><span class="icon">🔍</span>归因诊断（CDM）</a>
+                <a href="daily_report.html" class="nav-item"><span class="icon">📰</span>每日学习报告</a>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h2>🔍 CDM 归因诊断报告</h2>
+                <p>AI 缺陷标签 + 老师修正 → 数据回流优化 CDM 模型 · BKT 回答"掌握了没有"，CDM 回答"为什么没掌握"</p>
+            </div>
+
+            <div class="submission-selector" id="submissionSelector"></div>
+            <div class="summary-grid" id="summaryGrid"></div>
+
+            <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px">
+                <div>
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <div class="icon" style="background:rgba(184,58,47,0.10);color:var(--danger)">🎯</div>
+                                CDM 缺陷标签诊断
+                            </div>
+                            <span style="font-size:12px;color:var(--text-muted)">置信度 &gt; 0.7 直接展示 · 0.5~0.7 需关注 · &lt; 0.5 标"待确认"</span>
+                        </div>
+                        <div id="defectsContainer"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <div class="icon" style="background:rgba(139,92,246,0.10);color:#7C3AED">🧬</div>
+                                CDM 输入特征矩阵
+                            </div>
+                        </div>
+                        <div id="featureChart"></div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center">
+                            以上特征由 VocalParse 输出经程序计算得出，<strong style="color:var(--text-secondary)">不经过大模型</strong>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <div class="icon" style="background:rgba(0,102,179,0.10);color:var(--primary)">📊</div>
+                                音高偏差模式分析
+                            </div>
+                        </div>
+                        <div id="pitchPatternAnalysis"></div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <div class="icon" style="background:rgba(201,168,76,0.10);color:var(--warning)">✏️</div>
+                                老师修正记录
+                            </div>
+                            <span class="card-action" onclick="clearCorrections()">清空记录</span>
+                        </div>
+                        <div class="correction-list" id="correctionList"></div>
+                    </div>
+
+                    <div class="card" style="border-color:rgba(74,143,107,0.2)">
+                        <div class="feedback-panel">
+                            <div class="feedback-title">🔄 数据回流状态</div>
+                            <div class="feedback-stats" id="feedbackStats"></div>
+                            <div class="feedback-note" id="feedbackNote"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal" id="correctModal">
+        <div class="modal-box">
+            <div class="modal-title">✏️ 修正缺陷标签</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
+                AI 判定：<strong id="modalOriginalLabel" style="color:var(--text-primary)">—</strong> · 置信度 <span id="modalOriginalConf">—</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;font-weight:600">请选择正确的缺陷标签：</div>
+            <div class="modal-options" id="modalOptions"></div>
+            <div class="modal-custom">
+                <label>或输入自定义标签：</label>
+                <input type="text" id="modalCustomInput" placeholder="例如：声带闭合不足">
+            </div>
+            <div class="modal-btns">
+                <button class="btn-confirm" onclick="submitCorrection()">确认修正</button>
+                <button class="btn-cancel" onclick="closeModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        const SUBMISSIONS = [{
+            id: "sub01",
+            student: { id: "s01", name: "李小燕", avatar: "🎭", level: "初级" },
+            piece: "《穆桂英挂帅》· 辕门外三声炮",
+            date: "2026-08-02",
+            aiScore: 82.5,
+            cdm: {
+                overallConfidence: 0.72,
+                defects: [
+                    { id: "d1", label: "气息支撑不足", confidence: 0.82, status: "high", category: "气息",
+                        evidence: "长音能量波动大，拖腔'炮'字出现明显抖动。能量标准差 0.34，超过阈值 0.25。",
+                        features: { "能量标准差": "0.34", "阈值": "0.25", "关联字": "炮" } },
+                    { id: "d2", label: "拖腔时值偏短", confidence: 0.78, status: "high", category: "节奏",
+                        evidence: "'雷'字拖腔时长 0.55s，低于标准 0.70s，差值 -0.15s（-21%）。",
+                        features: { "实际时长": "0.55s", "标准时长": "0.70s", "差值": "-0.15s" } },
+                    { id: "d3", label: "归韵口型保持不足", confidence: 0.45, status: "low", category: "咬字",
+                        evidence: "'侯'字口型保持 0.3s < 标准 0.5s，归韵不完整，收音偏急。",
+                        features: { "口型保持": "0.3s", "标准": "0.5s" } }
+                ],
+                featureMatrix: { pitchMean: -12, pitchStd: 28, pitchTrend: "random", energyStd: 0.34, vibratoDepth: 15,
+                    rhythmAccuracy: 0.72, durationMeanDiff: -0.08, highPitchBias: -8, lowPitchBias: -15 }
+            },
+            corrections: []
+        }, {
+            id: "sub02",
+            student: { id: "s03", name: "刘思琪", avatar: "🎵", level: "初级" },
+            piece: "《穆桂英挂帅》· 辕门外三声炮",
+            date: "2026-08-01",
+            aiScore: 75.2,
+            cdm: {
+                overallConfidence: 0.68,
+                defects: [
+                    { id: "d1", label: "音准偏差随机", confidence: 0.85, status: "high", category: "音准",
+                        evidence: "整句音高偏差无系统性倾向，-30~+20 cents 随机波动，标准差 28cents。",
+                        features: { "偏差均值": "-5c", "标准差": "28c", "趋势": "随机波动" } },
+                    { id: "d2", label: "听辨能力弱", confidence: 0.76, status: "high", category: "音准",
+                        evidence: "音高偏差随机分布，无明显偏高/偏低趋势，提示听辨感知能力不足。",
+                        features: { "偏高比例": "35%", "偏低比例": "42%", "准确比例": "23%" } },
+                    { id: "d3", label: "拖腔不足", confidence: 0.71, status: "medium", category: "节奏",
+                        evidence: "'帅'字拖腔仅 0.4s < 标准 0.7s，气息不足以支撑完整拖腔。",
+                        features: { "实际": "0.4s", "标准": "0.7s" } },
+                    { id: "d4", label: "气息支撑不足", confidence: 0.52, status: "medium", category: "气息",
+                        evidence: "长音段能量衰减明显，'炮'字后半段能量下降 18%。",
+                        features: { "能量衰减": "18%", "阈值": "10%" } }
+                ],
+                featureMatrix: { pitchMean: -5, pitchStd: 32, pitchTrend: "random", energyStd: 0.38, vibratoDepth: 8,
+                    rhythmAccuracy: 0.65, durationMeanDiff: -0.12, highPitchBias: 2, lowPitchBias: -18 }
+            },
+            corrections: []
+        }, {
+            id: "sub03",
+            student: { id: "s06", name: "周明轩", avatar: "🎹", level: "初级" },
+            piece: "《穆桂英挂帅》· 辕门外三声炮",
+            date: "2026-08-02",
+            aiScore: 78.9,
+            cdm: {
+                overallConfidence: 0.75,
+                defects: [
+                    { id: "d1", label: "节奏感知弱", confidence: 0.80, status: "high", category: "节奏",
+                        evidence: "快速段落（如'三声炮如同'）时值偏差明显，多处抢拍，节奏准确度 0.65。",
+                        features: { "节奏准确度": "0.65", "阈值": "0.75", "抢拍次数": "4次" } },
+                    { id: "d2", label: "气息不稳定", confidence: 0.74, status: "high", category: "气息",
+                        evidence: "'想'字拖腔气息不够，音高下滑 15cents，能量包络呈下降趋势。",
+                        features: { "音高下滑": "15c", "能量趋势": "下降" } }
+                ],
+                featureMatrix: { pitchMean: -10, pitchStd: 22, pitchTrend: "systematic_low", energyStd: 0.29,
+                    vibratoDepth: 12, rhythmAccuracy: 0.65, durationMeanDiff: -0.05, highPitchBias: -5,
+                    lowPitchBias: -12 }
+            },
+            corrections: []
+        }, {
+            id: "sub04",
+            student: { id: "s08", name: "孙志远", avatar: "🥁", level: "初级" },
+            piece: "《穆桂英挂帅》· 辕门外三声炮",
+            date: "2026-08-01",
+            aiScore: 71.3,
+            cdm: {
+                overallConfidence: 0.81,
+                defects: [
+                    { id: "d1", label: "整体音准偏低", confidence: 0.88, status: "high", category: "音准",
+                        evidence: "多字系统性偏低 -30cents 以下，整句音高中心偏移约 -25cents。",
+                        features: { "偏差均值": "-28c", "系统性": "95%", "偏移量": "-25c" } },
+                    { id: "d2", label: "调门不准", confidence: 0.82, status: "high", category: "音准",
+                        evidence: "整段音高中心偏移约 -25cents，提示调门选择偏低或听辨基准偏移。",
+                        features: { "音高中心": "-25c", "标准": "0c" } },
+                    { id: "d3", label: "声带紧张", confidence: 0.65, status: "medium", category: "发声",
+                        evidence: "高音区（> MIDI 72）系统性偏高趋势，提示声带过度紧张。",
+                        features: { "高音区偏差": "+12c", "低音区偏差": "-35c" } }
+                ],
+                featureMatrix: { pitchMean: -28, pitchStd: 18, pitchTrend: "systematic_low", energyStd: 0.22,
+                    vibratoDepth: 6, rhythmAccuracy: 0.70, durationMeanDiff: -0.03, highPitchBias: 12,
+                    lowPitchBias: -35 }
+            },
+            corrections: []
+        }, {
+            id: "sub05",
+            student: { id: "s05", name: "赵雨桐", avatar: "🎼", level: "中级" },
+            piece: "《穆桂英挂帅》· 辕门外三声炮",
+            date: "2026-08-01",
+            aiScore: 85.7,
+            cdm: {
+                overallConfidence: 0.55,
+                defects: [
+                    { id: "d1", label: "收尾偏急", confidence: 0.72, status: "medium", category: "节奏",
+                        evidence: "'军'字收尾时长 1.65s < 标准 1.88s，收束偏急，影响韵味表达。",
+                        features: { "实际": "1.65s", "标准": "1.88s", "差值": "-0.23s" } }
+                ],
+                featureMatrix: { pitchMean: -3, pitchStd: 12, pitchTrend: "stable", energyStd: 0.18, vibratoDepth: 22,
+                    rhythmAccuracy: 0.88, durationMeanDiff: -0.02, highPitchBias: -2, lowPitchBias: -4 }
+            },
+            corrections: []
+        }];
+
+        const ALL_DEFECT_LABELS = ["气息支撑不足", "拖腔时值偏短", "归韵口型保持不足", "音准偏差随机", "听辨能力弱", "拖腔不足", "节奏感知弱", "气息不稳定",
+            "整体音准偏低", "调门不准", "声带紧张", "收尾偏急", "滑音幅度不足", "颤音不稳定", "咬字不清", "高音区发声困难"
+        ];
+        let currentSubId = "sub01";
+        let correctingDefectId = null;
+        let featureChart = null;
+
+        function getScoreClass(s) { return s >= 85 ? "high" : s >= 70 ? "mid" : "low"; }
+
+        function getConfBadge(c) {
+            return c >= 0.70 ? { cls: "conf-high", text: `高置信度 ${(c*100).toFixed(0)}%` } :
+                c >= 0.50 ? { cls: "conf-medium", text: `中置信度 ${(c*100).toFixed(0)}%` } :
+                { cls: "conf-low", text: `低置信度 ${(c*100).toFixed(0)}% · 待确认` };
+        }
+
+        function getCatIcon(cat) { const m = { "气息": "💨", "节奏": "⏱️", "音准": "🎵", "咬字": "🗣️", "发声": "🎤",
+                "装饰": "✨" }; return m[cat] || "🔍"; }
+
+        function renderSubmissionSelector() {
+            document.getElementById("submissionSelector").innerHTML = SUBMISSIONS.map(sub => {
+                const isActive = sub.id === currentSubId,
+                    sc = getScoreClass(sub.aiScore);
+                return `<div class="sub-chip ${isActive?'active':''}" onclick="selectSubmission('${sub.id}')">
+              <span class="sub-avatar">${sub.student.avatar}</span>
+              <div class="sub-info"><div class="sub-name">${sub.student.name} · ${sub.student.level}</div><div class="sub-meta">${sub.piece} · ${sub.date}</div></div>
+              <span class="sub-score ${sc}">${sub.aiScore}</span></div>`;
+            }).join("");
+        }
+
+        function renderSummary() {
+            const sub = SUBMISSIONS.find(s => s.id === currentSubId);
+            const d = sub.cdm.defects,
+                co = sub.corrections;
+            const confirmed = co.filter(c => c.action === "confirmed").length;
+            const corrected = co.filter(c => c.action === "corrected").length;
+            const high = d.filter(x => x.confidence >= 0.70).length;
+            const pending = d.length - confirmed - corrected;
+            document.getElementById("summaryGrid").innerHTML = `
+            <div class="summary-item"><div class="summary-val" style="color:${getScoreClass(sub.aiScore)==='high'?'var(--success)':(getScoreClass(sub.aiScore)==='mid'?'var(--warning)':'var(--danger)')}">${sub.aiScore}</div><div class="summary-label">AI 初评分</div></div>
+            <div class="summary-item"><div class="summary-val" style="color:var(--danger)">${high}</div><div class="summary-label">高置信度缺陷</div></div>
+            <div class="summary-item"><div class="summary-val" style="color:var(--primary)">${sub.cdm.overallConfidence.toFixed(2)}</div><div class="summary-label">综合置信度</div></div>
+            <div class="summary-item"><div class="summary-val" style="color:${pending===0?'var(--success)':'var(--warning)'}">${confirmed+corrected}/${d.length}</div><div class="summary-label">已处理 / 总标签</div></div>`;
+        }
+
+        function renderDefects() {
+            const sub = SUBMISSIONS.find(s => s.id === currentSubId),
+                d = sub.cdm.defects;
+            const high = d.filter(x => x.confidence >= 0.70),
+                med = d.filter(x => x.confidence >= 0.50 && x.confidence < 0.70),
+                low = d.filter(x => x.confidence < 0.50);
+            let html = "";
+            if (high.length) html += `<div class="defect-section"><div class="section-header"><span class="dot" style="background:var(--danger)"></span><span style="color:var(--danger)">高置信度缺陷（建议优先处理）</span><span class="section-count">${high.length} 项</span></div>${high.map(x=>renderDefectCard(sub,x)).join("")}</div>`;
+            if (med.length) html += `<div class="defect-section"><div class="section-header"><span class="dot" style="background:var(--warning)"></span><span style="color:var(--warning)">中置信度缺陷（需关注）</span><span class="section-count">${med.length} 项</span></div>${med.map(x=>renderDefectCard(sub,x)).join("")}</div>`;
+            if (low.length) html += `<div class="defect-section"><div class="section-header"><span class="dot" style="background:var(--text-muted)"></span><span style="color:var(--text-muted)">低置信度 / 待确认</span><span class="section-count">${low.length} 项</span></div>${low.map(x=>renderDefectCard(sub,x)).join("")}</div>`;
+            if (!d.length) html =
+                `<div class="empty-state"><div class="empty-icon">✅</div>本次练习未发现明显缺陷，表现良好！</div>`;
+            document.getElementById("defectsContainer").innerHTML = html;
+        }
+
+        function renderDefectCard(sub, defect) {
+            const corr = sub.corrections.find(c => c.defectId === defect.id);
+            let cardCls = defect.status,
+                iconCls = defect.status,
+                conf = getConfBadge(defect.confidence);
+            if (corr) { cardCls = corr.action;
+                iconCls = corr.action;
+                conf = { cls: `conf-${corr.action}`, text: corr.action === "confirmed" ? "✓ 老师已确认" :
+                        (corr.action === "corrected" ? "✏️ 老师已修正" : "⏸️ 已忽略") }; }
+            const feats = Object.entries(defect.features).map(([k, v]) =>
+                `<span class="feature-tag">${k}: <span class="val">${v}</span></span>`).join("");
+            const status = corr ?
+                `<div class="defect-status show ${corr.action}"><span>${corr.action==="confirmed"?"✅":(corr.action==="corrected"?"✏️":"⏸️")}</span><span>${corr.action==="confirmed"?`老师确认该标签准确`:(corr.action==="corrected"?`老师修正为「${corr.newLabel}」`:`老师选择忽略该标签`)} · ${corr.time}</span></div>` :
+                "";
+            const dis = corr ? "disabled" : "";
+            return `<div class="defect-card ${cardCls}" id="defect-${defect.id}">
+            <div class="defect-header"><div class="defect-icon ${iconCls}">${getCatIcon(defect.category)}</div><div class="defect-title"><div class="defect-name">${defect.label}</div><div class="defect-category">${defect.category} · ${defect.id.toUpperCase()}</div></div><span class="defect-confidence ${conf.cls}">${conf.text}</span></div>
+            <div class="defect-evidence">${defect.evidence}</div>
+            <div class="defect-features">${feats}</div>
+            <div class="defect-actions">
+              <button class="btn-confirm" onclick="confirmDefect('${defect.id}')" ${dis}>✓ 确认准确</button>
+              <button class="btn-correct" onclick="openCorrectModal('${defect.id}')" ${dis}>✗ 修正标签</button>
+              <button class="btn-ignore" onclick="ignoreDefect('${defect.id}')" ${dis}>⏸️ 暂不处理</button>
+            </div>${status}</div>`;
+        }
+
+        function initFeatureChart() {
+            const fm = SUBMISSIONS.find(s => s.id === currentSubId).cdm.featureMatrix;
+            const dom = document.getElementById("featureChart");
+            if (featureChart) featureChart.dispose();
+            featureChart = echarts.init(dom);
+            const n = (v, mx) => Math.min(1, Math.max(0, Math.abs(v) / mx));
+            const data = [{ value: [n(fm.pitchStd, 50), n(fm.energyStd, 0.5), n(fm.vibratoDepth, 50), 1 - fm
+                    .rhythmAccuracy, n(fm.durationMeanDiff, 0.3), n(fm.highPitchBias, 50), n(fm.lowPitchBias,
+                    50), n(fm.pitchMean, 50)
+                ], name: "当前练习", areaStyle: { color: "rgba(0,102,179,0.12)" }, lineStyle: { color: "#0066B3",
+                    width: 2 }, itemStyle: { color: "#0066B3" } }];
+            featureChart.setOption({
+                backgroundColor: "transparent",
+                tooltip: {
+                    backgroundColor: "rgba(255,255,255,0.96)",
+                    borderColor: "#E8DDD0",
+                    textStyle: { color: "#2D1F14", fontSize: 12 },
+                    formatter: function(p) {
+                        const lbls = ["音高波动", "能量波动", "颤音深度", "节奏偏差", "时值偏差", "高音区偏差", "低音区偏差",
+                            "音准偏移"
+                        ];
+                        const raw = [fm.pitchStd + "c", fm.energyStd, fm.vibratoDepth + "c", (1 - fm
+                            .rhythmAccuracy
+                        ).toFixed(2), fm.durationMeanDiff + "s", fm.highPitchBias + "c", fm
+                            .lowPitchBias + "c", fm.pitchMean + "c"
+                        ];
+                        let h = `<div style="font-weight:700;margin-bottom:4px">${p.name}</div>`;
+                        p.value.forEach((v, i) => {
+                            h +=
+                                `<div style="display:flex;justify-content:space-between;gap:16px;margin:2px 0"><span style="color:var(--text-secondary)">${lbls[i]}</span><span style="color:var(--text-primary);font-weight:700">${raw[i]}</span></div>`;
+                        });
+                        return h;
+                    }
+                },
+                radar: {
+                    indicator: [{ name: "音高波动", max: 1 }, { name: "能量波动", max: 1 }, { name: "颤音深度",
+                        max: 1 }, { name: "节奏偏差", max: 1 }, { name: "时值偏差", max: 1 },
+                    { name: "高音区偏差", max: 1 }, { name: "低音区偏差", max: 1 }, { name: "音准偏移",
+                        max: 1 }
+                    ],
+                    shape: "polygon",
+                    splitNumber: 4,
+                    axisName: { color: "#5A4A3A", fontSize: 11 },
+                    splitLine: { lineStyle: { color: "#E8DDD0" } },
+                    splitArea: { show: true, areaStyle: { color: ["rgba(245,237,228,0.4)",
+                            "rgba(245,237,228,0.2)"
+                        ] } },
+                    axisLine: { lineStyle: { color: "#E8DDD0" } }
+                },
+                series: [{ type: "radar", data: data, symbolSize: 6 }]
+            });
+            window.addEventListener("resize", () => featureChart.resize());
+        }
+
+        function renderPitchPattern() {
+            const fm = SUBMISSIONS.find(s => s.id === currentSubId).cdm.featureMatrix;
+            let tt, tc;
+            if (fm.pitchTrend === "systematic_low") { tt = "系统性偏低";
+                tc = "var(--danger)"; } else if (fm.pitchTrend === "systematic_high") { tt = "系统性偏高";
+                tc = "var(--danger)"; } else if (fm.pitchTrend === "random") { tt = "随机波动";
+                tc = "var(--warning)"; } else { tt = "相对稳定";
+                tc = "var(--success)"; }
+            const bar = (l, v, mx, c, u = "") => { const p = Math.min(100, Math.abs(v) / mx * 100),
+                    n = v < 0; return `<div class="pattern-bar"><span class="pattern-label">${l}</span><div class="pattern-track"><div class="pattern-center"></div><div class="pattern-fill" style="width:${p}%;background:${c};margin-${n?'right':'left'}:50%;${n?'margin-left:auto;':''}"></div></div><span class="pattern-val" style="color:${c}">${v>0?'+':''}${v}${u}</span></div>`; };
+            document.getElementById("pitchPatternAnalysis").innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:10px 12px;background:var(--bg-primary);border-radius:6px;border:1px solid var(--border-light)">
+              <span style="font-size:13px;color:var(--text-secondary)">音高偏差模式：</span><span style="font-size:14px;font-weight:700;color:${tc}">${tt}</span>
+              <span style="font-size:11px;color:var(--text-muted);margin-left:auto">偏差均值: ${fm.pitchMean}cents · 标准差: ${fm.pitchStd}cents</span>
+            </div>
+            ${bar("高音区偏差",fm.highPitchBias,50,"#0066B3","c")}
+            ${bar("低音区偏差",fm.lowPitchBias,50,"#4A8F6B","c")}
+            ${bar("音准偏移",fm.pitchMean,50,"#C9A84C","c")}
+            <div style="margin-top:10px;font-size:11px;color:var(--text-secondary);line-height:1.7">
+              ${fm.pitchTrend==="systematic_low"?"🔴 系统性偏低：建议先进行调门找音练习，建立正确的音高基准。":fm.pitchTrend==="random"?"🟡 随机波动：听辨能力可能不足，建议加强单音模唱训练。":"🟢 音准相对稳定，继续保持。"}
+            </div>`;
+        }
+
+        function renderCorrections() {
+            const co = SUBMISSIONS.find(s => s.id === currentSubId).corrections;
+            const el = document.getElementById("correctionList");
+            if (!co.length) { el.innerHTML =
+                    `<div class="empty-state"><div class="empty-icon">📝</div>暂无修正记录，请对 AI 标签进行确认或修正</div>`; return; }
+            el.innerHTML = co.map(c => { const tc = c.action,
+                    tt = c.action === "confirmed" ? "确认" : (c.action === "corrected" ? "修正" : "忽略");
+                const det = c.action === "corrected" ? `将「${c.originalLabel}」修正为「${c.newLabel}」` : c
+                    .action === "confirmed" ? `确认「${c.originalLabel}」标签准确` : `忽略「${c.originalLabel}」标签`;
+                return `<div class="correction-item"><div class="corr-header"><span class="corr-type ${tc}">${tt}</span><span class="corr-time">${c.time}</span></div><div class="corr-detail">${det}</div></div>`;
+            }).join("");
+        }
+
+        function renderFeedback() {
+            const sub = SUBMISSIONS.find(s => s.id === currentSubId),
+                co = sub.corrections;
+            const confirmed = co.filter(c => c.action === "confirmed").length,
+                corrected = co.filter(c => c.action === "corrected").length,
+                ignored = co.filter(c => c.action === "ignored").length,
+                total = sub.cdm.defects.length;
+            document.getElementById("feedbackStats").innerHTML = `
+            <div class="feedback-stat"><div class="val" style="color:var(--success)">${confirmed}</div><div class="lab">已确认</div></div>
+            <div class="feedback-stat"><div class="val" style="color:var(--warning)">${corrected}</div><div class="lab">已修正</div></div>
+            <div class="feedback-stat"><div class="val" style="color:var(--text-muted)">${ignored}</div><div class="lab">已忽略</div></div>`;
+            const processed = confirmed + corrected + ignored;
+            const el = document.getElementById("feedbackNote");
+            if (!processed) el.innerHTML =
+                `本提交共 <strong>${total}</strong> 个缺陷标签，等待老师审核。您的修正将直接回流到 CDM 训练数据，帮助模型提升准确率。`;
+            else if (processed < total) el
+                .innerHTML =
+                `已处理 <strong>${processed}/${total}</strong> 个标签。剩余 ${total-processed} 个标签待审核。修正数据已缓存，将在每日凌晨批量回流至模型训练管道。`;
+            else el
+                .innerHTML =
+                `✅ 全部 <strong>${total}</strong> 个标签已处理完毕！本次共产生 ${confirmed} 条确认、${corrected} 条修正、${ignored} 条忽略记录，已纳入 CDM 模型优化队列。`;
+        }
+
+        function selectSubmission(id) { currentSubId = id;
+            correctingDefectId = null;
+            renderAll(); }
+
+        function renderAll() { renderSubmissionSelector();
+            renderSummary();
+            renderDefects();
+            initFeatureChart();
+            renderPitchPattern();
+            renderCorrections();
+            renderFeedback(); }
+
+        function confirmDefect(id) {
+            const sub = SUBMISSIONS.find(s => s.id === currentSubId),
+                d = sub.cdm.defects.find(x => x.id === id);
+            sub.corrections.push({ defectId: id, action: "confirmed", originalLabel: d.label, newLabel: d.label,
+                time: new Date().toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit",
+                    minute: "2-digit" }) });
+            renderDefects();
+            renderCorrections();
+            renderFeedback();
+            renderSummary();
+            showToast("success", "✅ 已确认标签", `「${d.label}」标签已被确认准确，数据将回流至 CDM 模型。`);
+        }
+
+        function ignoreDefect(id) {
+            const sub = SUBMISSIONS.find(s => s.id === currentSubId),
+                d = sub.cdm.defects.find(x => x.id === id);
+            sub.corrections.push({ defectId: id, action: "ignored", originalLabel: d.label, newLabel: null,
+                time: new Date().toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit",
+                    minute: "2-digit" }) });
+            renderDefects();
+            renderCorrections();
+            renderFeedback();
+            renderSummary();
+            showToast("warn", "⏸️ 已忽略标签", `「${d.label}」标签已被忽略，系统将不再将其纳入该次诊断。`);
+        }
+
+        function openCorrectModal(id) {
+            correctingDefectId = id;
+            const sub = SUBMISSIONS.find(s => s.id === currentSubId),
+                d = sub.cdm.defects.find(x => x.id === id);
+            document.getElementById("modalOriginalLabel").textContent = d.label;
+            document.getElementById("modalOriginalConf").textContent = (d.confidence * 100).toFixed(0) + "%";
+            document.getElementById("modalCustomInput").value = "";
+            const opts = document.getElementById("modalOptions");
+            opts.innerHTML = ALL_DEFECT_LABELS.filter(l => l !== d.label).map(l =>
+                `<div class="modal-option" onclick="selectModalOption(this,'${l}')">${l}</div>`).join("");
+            document.getElementById("correctModal").classList.add("show");
+        }
+
+        function selectModalOption(el, label) { document.querySelectorAll(".modal-option").forEach(o => o.classList.remove(
+                "selected"));
+            el.classList.add("selected");
+            document.getElementById("modalCustomInput").value = label; }
+
+        function closeModal() { document.getElementById("correctModal").classList.remove("show");
+            correctingDefectId = null; }
+
+        function submitCorrection() {
+            if (!correctingDefectId) return;
+            const newLabel = document.getElementById("modalCustomInput").value.trim();
+            if (!newLabel) { alert("请选择或输入正确的缺陷标签"); return; }
+            const sub = SUBMISSIONS.find(s => s.id === currentSubId),
+                d = sub.cdm.defects.find(x => x.id === correctingDefectId);
+            sub.corrections.push({ defectId: correctingDefectId, action: "corrected", originalLabel: d.label,
+                newLabel: newLabel, time: new Date().toLocaleString("zh-CN", { month: "2-digit", day: "2-digit",
+                    hour: "2-digit", minute: "2-digit" }) });
+            closeModal();
+            renderDefects();
+            renderCorrections();
+            renderFeedback();
+            renderSummary();
+            showToast("success", "✏️ 已修正标签", `「${d.label}」已修正为「${newLabel}」，修正数据将回流优化 CDM 模型。`);
+        }
+
+        function clearCorrections() {
+            const sub = SUBMISSIONS.find(s => s.id === currentSubId);
+            if (!sub.corrections.length) return;
+            if (!confirm("确定清空本提交的所有修正记录吗？")) return;
+            sub.corrections = [];
+            renderDefects();
+            renderCorrections();
+            renderFeedback();
+            renderSummary();
+            showToast("warn", "🗑️ 已清空记录", "所有修正记录已重置，可重新进行标注。");
+        }
+
+        function showToast(type, title, msg) {
+            const c = document.getElementById("toastContainer");
+            const t = document.createElement("div");
+            t.className = `toast ${type}`;
+            t.innerHTML =
+                `<div class="toast-icon">${type==="success"?"✅":"⚠️"}</div><div class="toast-content"><div class="toast-title">${title}</div><div class="toast-msg">${msg}</div></div>`;
+            c.appendChild(t);
+            setTimeout(() => { if (t.parentElement) t.remove(); }, 4000);
+        }
+
+        renderAll();
+    </script>
+
+</body>
+</html>

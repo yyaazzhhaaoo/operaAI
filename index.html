@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>戏韵AI · 原型导航</title>
+<style>
+/* ============================================================
+   浅色高对比度配色 · 宣纸背景 + 景泰蓝/朱砂红
+   与 dashboard 等页保持一致
+   ============================================================ */
+:root {
+  --bg-primary: #F5EDE4;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F0E8DC;
+  --bg-hover: #F5F0EA;
+  --bg-card-header: #F8F3EC;
+  --text-primary: #2D1F14;
+  --text-secondary: #5A4A3A;
+  --text-muted: #8A7A6A;
+  --text-light: #B0A090;
+  --border-light: #E8DDD0;
+  --border-medium: #D5C8B8;
+  --border-strong: #C0B0A0;
+  --primary: #0066B3;
+  --primary-hover: #0055A0;
+  --primary-glow: rgba(0, 102, 179, 0.30);
+  --primary-soft: rgba(0, 102, 179, 0.08);
+  --primary-border: rgba(0, 102, 179, 0.25);
+  --success: #4A8F6B;
+  --success-soft: rgba(74, 143, 107, 0.12);
+  --warning: #C9A84C;
+  --warning-soft: rgba(201, 168, 76, 0.12);
+  --danger: #B83A2F;
+  --danger-soft: rgba(184, 58, 47, 0.12);
+  --nav-gradient: linear-gradient(90deg, #F5EDE4, #E8DDD0 40%, #D5C8B8 50%, #E8DDD0 60%, #F5EDE4);
+  --progress-gradient: linear-gradient(90deg, #0066B3, #4A8AF4);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ---- 顶部 ---- */
+.hero {
+  background: var(--nav-gradient);
+  border-bottom: 1px solid var(--border-medium);
+  padding: 48px 32px 40px;
+  text-align: center;
+}
+.hero h1 {
+  font-family: Georgia, "Songti SC", "STSong", serif;
+  font-size: 38px;
+  letter-spacing: 4px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.hero .seal {
+  display: inline-block;
+  background: var(--danger);
+  color: #FFF;
+  font-size: 13px;
+  letter-spacing: 2px;
+  padding: 2px 10px;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-left: 12px;
+  font-family: inherit;
+}
+.hero p {
+  margin-top: 12px;
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+
+/* ---- 主体 ---- */
+.wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 40px 32px 64px;
+}
+
+.section { margin-bottom: 44px; }
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.section-head h2 {
+  font-family: Georgia, "Songti SC", "STSong", serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 1px;
+}
+.section-head .rule {
+  flex: 1;
+  height: 1px;
+  background: var(--border-medium);
+}
+.section-head .count {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---- 卡片网格 ---- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  display: block;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 18px 20px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color .18s, box-shadow .18s, transform .18s;
+}
+.card:hover {
+  border-color: var(--primary-border);
+  box-shadow: 0 6px 20px var(--primary-soft);
+  transform: translateY(-2px);
+}
+.card .name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--primary);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.card .file {
+  font-size: 12px;
+  color: var(--text-light);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 400;
+}
+.card .desc {
+  margin-top: 8px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+/* 规划中页面：不可点，视觉上压暗 */
+.card.soon {
+  cursor: default;
+  background: var(--bg-tertiary);
+  border-style: dashed;
+}
+.card.soon:hover { transform: none; box-shadow: none; border-color: var(--border-medium); }
+.card.soon .name { color: var(--text-muted); }
+.tag-soon {
+  font-size: 11px;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border: 1px solid rgba(201, 168, 76, .35);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.tag-live {
+  font-size: 11px;
+  color: var(--success);
+  background: var(--success-soft);
+  border: 1px solid rgba(74, 143, 107, .35);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+/* ---- 页脚 ---- */
+.foot {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 0 32px 48px;
+}
+.foot code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .hero { padding: 32px 20px 28px; }
+  .hero h1 { font-size: 28px; }
+  .wrap { padding: 28px 20px 48px; }
+}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>戏韵AI<span class="seal">原型</span></h1>
+  <p>戏曲演唱教学 AI 辅助系统 · 前端静态原型演示</p>
+</div>
+
+<div class="wrap">
+
+  <div class="section">
+    <div class="section-head">
+      <h2>教师端</h2>
+      <div class="rule"></div>
+      <span class="count">8 个页面</span>
+    </div>
+    <div class="grid">
+      <a class="card" href="dashboard.html">
+        <div class="name">班级看板 <span class="file">dashboard.html</span></div>
+        <div class="desc">班级整体学情、技法达标率与学生排行总览。</div>
+      </a>
+      <a class="card" href="demo_library.html">
+        <div class="name">示范库 <span class="file">demo_library.html</span></div>
+        <div class="desc">名家唱段示范音频的检索、分类与管理。</div>
+      </a>
+      <a class="card" href="annotation.html">
+        <div class="name">唱词标注 <span class="file">annotation.html</span></div>
+        <div class="desc">逐字标注技法维度与演唱要点，沉淀教学标注。</div>
+      </a>
+      <a class="card" href="homework.html">
+        <div class="name">作业管理 <span class="file">homework.html</span></div>
+        <div class="desc">布置作业、查看提交、批改与截止时间管理。</div>
+      </a>
+      <a class="card" href="tracking.html">
+        <div class="name">技法追踪 <span class="file">tracking.html</span></div>
+        <div class="desc">音准、气息、滑音、拖腔等维度的掌握曲线。</div>
+      </a>
+      <a class="card" href="knowledge_graph.html">
+        <div class="name">知识图谱 <span class="file">knowledge_graph.html</span></div>
+        <div class="desc">唱段、技法与剧目之间的关联网络可视化。</div>
+      </a>
+      <a class="card" href="cdm_report.html">
+        <div class="name">CDM 报告 <span class="file">cdm_report.html</span></div>
+        <div class="desc">认知诊断模型输出的能力诊断与归因分析。</div>
+      </a>
+      <a class="card" href="recommendation.html">
+        <div class="name">个性化推荐 <span class="file">recommendation.html</span></div>
+        <div class="desc">按薄弱技法维度生成针对性练习推荐。</div>
+      </a>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <h2>学生端</h2>
+      <div class="rule"></div>
+      <span class="count">2 个页面</span>
+    </div>
+    <div class="grid">
+      <a class="card" href="sing_along.html">
+        <div class="name">实时跟唱 <span class="file">sing_along.html</span></div>
+        <div class="desc">调用麦克风真实录音，跟唱过程中给出即时技法反馈。</div>
+      </a>
+      <a class="card" href="AI_teacher.html">
+        <div class="name">AI 教练 <span class="file">AI_teacher.html</span></div>
+        <div class="desc">对话式演唱指导，按问题给出练习建议。</div>
+      </a>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <h2>独立演示</h2>
+      <div class="rule"></div>
+      <span class="count">1 个页面</span>
+    </div>
+    <div class="grid">
+      <a class="card" href="pitch_comparison.html">
+        <div class="name">音准对比 <span class="file">pitch_comparison.html</span>
+          <span class="tag-live">需后端</span></div>
+        <div class="desc">上传教师与学生两段音频，用 librosa + DTW 做真实音准比对与评分。</div>
+      </a>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <h2>规划中</h2>
+      <div class="rule"></div>
+      <span class="count">2 个页面</span>
+    </div>
+    <div class="grid">
+      <div class="card soon">
+        <div class="name">摸底测试 <span class="file">cat_test.html</span>
+          <span class="tag-soon">规划中</span></div>
+        <div class="desc">入学摸底测评，建立学生技法基线。导航里已有入口，页面尚未实现。</div>
+      </div>
+      <div class="card soon">
+        <div class="name">学习报告 <span class="file">daily_report.html</span>
+          <span class="tag-soon">规划中</span></div>
+        <div class="desc">按日/周汇总练习数据的学习报告。导航里已有入口，页面尚未实现。</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="foot">
+  音准对比页依赖宿主机 <code>app-d.py</code> 后端（8877），由 nginx 反代转发。
+</div>
+
+</body>
+</html>

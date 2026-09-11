@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>戏韵AI · 作业布置与批改</title>
+<script src="static/echarts.min.js"></script>
+<style>
+/* ============================================================
+   浅色高对比度配色 · 宣纸背景 + 景泰蓝/朱砂红
+   与 sing_along 保持一致
+   ============================================================ */
+:root {
+  --bg-primary: #F5EDE4;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F0E8DC;
+  --bg-hover: #F5F0EA;
+  --text-primary: #2D1F14;
+  --text-secondary: #5A4A3A;
+  --text-muted: #8A7A6A;
+  --text-light: #B0A090;
+  --border-light: #E8DDD0;
+  --border-medium: #D5C8B8;
+  --border-strong: #C0B0A0;
+  --primary: #0066B3;
+  --primary-hover: #0055A0;
+  --primary-glow: rgba(0, 102, 179, 0.30);
+  --primary-soft: rgba(0, 102, 179, 0.08);
+  --primary-border: rgba(0, 102, 179, 0.25);
+  --success: #4A8F6B;
+  --success-soft: rgba(74, 143, 107, 0.12);
+  --warning: #C9A84C;
+  --warning-soft: rgba(201, 168, 76, 0.12);
+  --danger: #B83A2F;
+  --danger-soft: rgba(184, 58, 47, 0.12);
+  --nav-gradient: linear-gradient(90deg, #F5EDE4, #E8DDD0 40%, #D5C8B8 50%, #E8DDD0 60%, #F5EDE4);
+  --progress-gradient: linear-gradient(90deg, #0066B3, #4A8AF4);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg-primary);
+  color:var(--text-primary);
+  min-height:100vh;
+  line-height:1.7;
+  font-size:16px;
+}
+
+/* ===== Navbar ===== */
+.navbar{
+  background:var(--nav-gradient);
+  border-bottom:2px solid var(--border-medium);
+  padding:0 24px;
+  height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  position:sticky;
+  top:0;
+  z-index:50;
+}
+.nav-brand{display:flex;align-items:center;gap:12px}
+.nav-brand .logo{
+  width:34px;height:34px;
+  background:linear-gradient(135deg, var(--primary), #004080);
+  border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:700;color:#fff;
+  box-shadow:0 2px 12px var(--primary-glow);
+}
+.nav-brand h1{font-size:17px;color:var(--text-primary);font-weight:700}
+.nav-brand .badge{
+  background:var(--primary-soft);
+  color:var(--primary);
+  padding:2px 10px;border-radius:12px;
+  font-size:11px;font-weight:600;
+  border:1px solid var(--primary-border);
+}
+.nav-user{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary)}
+.nav-user .avatar{
+  width:30px;height:30px;border-radius:50%;
+  background:linear-gradient(135deg, #B89076, #8B6B4F);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;color:#fff;
+}
+
+/* ===== Layout ===== */
+.layout{display:flex;min-height:calc(100vh - 58px)}
+.sidebar{
+  width:200px;background:var(--bg-secondary);
+  border-right:2px solid var(--border-light);
+  padding:12px 0;position:fixed;height:100%;overflow-y:auto;z-index:40;
+}
+.nav-group{margin-bottom:6px}
+.nav-group-title{
+  padding:6px 16px;font-size:11px;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:0.8px;font-weight:700;
+}
+.nav-item{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 16px;margin:0 8px;
+  color:var(--text-secondary);font-size:13px;
+  cursor:pointer;transition:all 0.2s;text-decoration:none;
+  border-radius:8px;border-left:4px solid transparent;
+}
+.nav-item:hover{color:var(--text-primary);background:var(--bg-hover)}
+.nav-item.active{
+  color:var(--primary);
+  background:var(--primary-soft);
+  border-left-color:var(--primary);
+  font-weight:600;
+}
+.nav-item .icon{font-size:16px;width:22px;text-align:center}
+.nav-badge{
+  margin-left:auto;background:var(--danger);color:#fff;
+  font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600;
+}
+.main-content{margin-left:200px;flex:1;padding:20px;max-width:1600px}
+
+/* ===== 页面头部 ===== */
+.page-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;flex-wrap:wrap;gap:10px;
+}
+.page-header h2{font-size:20px;color:var(--text-primary);font-weight:700;margin-bottom:2px}
+.page-header p{font-size:14px;color:var(--text-secondary)}
+.page-header .actions{display:flex;gap:10px}
+
+/* ===== 按钮 ===== */
+.btn-primary{
+  padding:10px 22px;border:none;border-radius:10px;
+  background:var(--primary);
+  color:#fff;font-size:14px;font-weight:700;
+  cursor:pointer;transition:all 0.3s;
+  display:inline-flex;align-items:center;gap:6px;
+  box-shadow:0 2px 12px var(--primary-glow);
+  min-height:44px;
+}
+.btn-primary:hover{
+  background:var(--primary-hover);
+  box-shadow:0 4px 20px var(--primary-glow);
+  transform:translateY(-1px);
+}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed;transform:none;box-shadow:none}
+
+.btn-secondary{
+  padding:10px 22px;border:2px solid var(--border-medium);
+  border-radius:10px;background:var(--bg-secondary);
+  color:var(--text-secondary);font-size:14px;font-weight:600;
+  cursor:pointer;transition:all 0.3s;
+  display:inline-flex;align-items:center;gap:6px;
+  min-height:44px;
+}
+.btn-secondary:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-soft)}
+
+.btn-success{
+  padding:10px 22px;border:none;border-radius:10px;
+  background:var(--success);color:#fff;font-size:14px;font-weight:700;
+  cursor:pointer;transition:all 0.3s;
+  display:inline-flex;align-items:center;gap:6px;
+  min-height:44px;
+}
+.btn-success:hover{opacity:0.9;transform:translateY(-1px)}
+
+/* ===== 卡片 ===== */
+.card{
+  background:var(--bg-secondary);
+  border:1px solid var(--border-light);
+  border-radius:14px;
+  padding:16px 18px;
+  margin-bottom:14px;
+  box-shadow:0 1px 4px rgba(0,0,0,0.04);
+  transition:border-color 0.3s, box-shadow 0.3s;
+}
+.card:hover{border-color:var(--border-medium);box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+.card-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:10px;flex-wrap:wrap;gap:6px;
+}
+.card-title{
+  font-size:14px;font-weight:700;color:var(--text-primary);
+  display:flex;align-items:center;gap:6px;
+}
+.card-title .icon{
+  width:26px;height:26px;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:13px;
+  background:var(--primary-soft);color:var(--primary);
+}
+.card-badge{
+  font-size:11px;padding:2px 10px;border-radius:6px;font-weight:600;
+}
+
+/* ===== 布局：左侧 + 右侧 ===== */
+.two-col{
+  display:grid;
+  grid-template-columns:340px 1fr;
+  gap:16px;
+  align-items:start;
+}
+
+/* ===== 左侧 ===== */
+.left-col{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  height:fit-content;
+}
+.left-col .card{
+  margin-bottom:0;
+  flex:1;
+  display:flex;
+  flex-direction:column;
+}
+.left-col .card-body{
+  flex:1;
+  overflow-y:auto;
+  max-height:320px;
+}
+.left-col .card-body::-webkit-scrollbar{width:4px}
+.left-col .card-body::-webkit-scrollbar-track{background:var(--bg-primary);border-radius:2px}
+.left-col .card-body::-webkit-scrollbar-thumb{background:var(--border-medium);border-radius:2px}
+
+/* ===== 作业列表 ===== */
+.hw-list{display:flex;flex-direction:column;gap:8px}
+.hw-item{
+  padding:10px 12px;background:var(--bg-primary);
+  border-radius:10px;border:1px solid var(--border-light);
+  cursor:pointer;transition:all 0.2s;
+}
+.hw-item:hover{border-color:var(--border-medium);background:var(--bg-hover)}
+.hw-item.active{border-color:var(--primary);background:var(--primary-soft)}
+.hw-item .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.hw-item .title{font-size:13px;font-weight:600;color:var(--text-primary)}
+.hw-item .status{
+  font-size:10px;padding:1px 8px;border-radius:4px;font-weight:600;
+}
+.hw-item .status.grading{background:rgba(201,168,76,0.12);color:var(--warning)}
+.hw-item .status.ongoing{background:rgba(0,102,179,0.12);color:var(--primary)}
+.hw-item .status.closed{background:rgba(74,143,107,0.12);color:var(--success)}
+.hw-item .meta{font-size:11px;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap}
+.hw-item .progress-row{display:flex;align-items:center;gap:8px;margin-top:6px}
+.hw-item .bar{flex:1;height:4px;background:var(--border-light);border-radius:2px;overflow:hidden}
+.hw-item .bar-fill{height:100%;border-radius:2px;background:var(--progress-gradient)}
+.hw-item .pct{font-size:10px;color:var(--text-muted);min-width:32px;text-align:right}
+
+/* ===== 提交列表 ===== */
+.submit-list{display:flex;flex-direction:column;gap:6px}
+.submit-item{
+  padding:8px 10px;background:var(--bg-primary);
+  border-radius:8px;border:1px solid var(--border-light);
+  cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:10px;
+}
+.submit-item:hover{border-color:var(--border-medium);background:var(--bg-hover)}
+.submit-item.active{border-color:var(--primary);background:var(--primary-soft)}
+.submit-item .avatar{
+  width:28px;height:28px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;background:var(--bg-secondary);border:1px solid var(--border-light);
+  flex-shrink:0;
+}
+.submit-item .info{flex:1;min-width:0}
+.submit-item .name{font-size:13px;font-weight:600;color:var(--text-primary)}
+.submit-item .sub{font-size:10px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.submit-item .score{font-size:16px;font-weight:700;color:var(--primary);flex-shrink:0}
+.submit-item .tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
+.submit-item .tags .tag{
+  font-size:9px;padding:0 6px;border-radius:3px;font-weight:600;
+}
+.submit-item .tags .tag.danger{background:rgba(184,58,47,0.10);color:var(--danger)}
+.submit-item .tags .tag.warn{background:rgba(201,168,76,0.10);color:var(--warning)}
+.submit-item .tags .tag.info{background:rgba(0,102,179,0.10);color:var(--primary)}
+
+/* ===== 右侧 - 批改详情 ===== */
+.review-panel .empty-state{
+  text-align:center;padding:60px 20px;color:var(--text-muted);
+}
+.review-panel .empty-state .icon{font-size:48px;margin-bottom:12px}
+.review-panel .empty-state .title{font-size:16px;font-weight:600;color:var(--text-primary);margin-bottom:4px}
+.review-panel .empty-state .desc{font-size:13px}
+
+.review-content{display:block}
+
+/* 学生信息 */
+.detail-student{
+  display:flex;align-items:center;gap:14px;margin-bottom:16px;
+  padding:12px 16px;background:var(--bg-primary);border-radius:10px;border:1px solid var(--border-light);
+}
+.detail-student .avatar{
+  width:44px;height:44px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;background:var(--bg-secondary);border:1px solid var(--border-light);
+}
+.detail-student .info{flex:1}
+.detail-student .info .name{font-size:16px;font-weight:700;color:var(--text-primary)}
+.detail-student .info .meta{font-size:12px;color:var(--text-muted)}
+.detail-student .score-box{text-align:right}
+.detail-student .score-box .val{font-size:32px;font-weight:800;color:var(--text-primary)}
+.detail-student .score-box .label{font-size:11px;color:var(--text-muted)}
+
+/* 歌词对比 */
+.lyrics-compare{
+  display:flex;flex-wrap:wrap;gap:3px;
+  padding:10px;background:var(--bg-primary);border-radius:8px;
+  border:1px solid var(--border-light);margin-bottom:12px;
+  max-height:110px;overflow-y:auto;
+}
+.lyric-cell{
+  display:flex;flex-direction:column;align-items:center;
+  min-width:32px;padding:4px 2px;border-radius:4px;
+  background:var(--bg-secondary);border:1px solid var(--border-light);
+  font-size:11px;
+}
+.lyric-cell.punct{background:transparent;border:none;min-width:14px}
+.lyric-cell .char{font-size:14px;font-weight:600;color:var(--text-primary)}
+.lyric-cell.punct .char{font-size:12px;color:var(--text-muted)}
+.lyric-cell .diff{font-size:9px;font-weight:600}
+.lyric-cell .diff.excellent{color:var(--success)}
+.lyric-cell .diff.good{color:var(--primary)}
+.lyric-cell .diff.fair{color:var(--warning)}
+.lyric-cell .diff.poor{color:var(--danger)}
+
+/* 加权融合 */
+.fusion-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;
+}
+.fusion-item{
+  text-align:center;padding:10px;background:var(--bg-primary);border-radius:8px;border:1px solid var(--border-light);
+}
+.fusion-item .dim{font-size:11px;color:var(--text-muted);margin-bottom:2px}
+.fusion-item .score{font-size:20px;font-weight:700;color:var(--text-primary)}
+.fusion-item .weight{font-size:10px;color:var(--text-muted)}
+.fusion-result{
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  padding:10px;background:var(--bg-primary);border-radius:8px;border:1px solid var(--border-light);
+}
+.fusion-result .label{font-size:12px;color:var(--text-muted)}
+.fusion-result .value{font-size:16px;font-weight:700}
+.fusion-result .pass{background:rgba(74,143,107,0.12);color:var(--success);padding:2px 10px;border-radius:4px;font-size:12px;font-weight:600}
+.fusion-result .fail{background:rgba(184,58,47,0.12);color:var(--danger);padding:2px 10px;border-radius:4px;font-size:12px;font-weight:600}
+.fusion-formula{font-size:11px;color:var(--text-muted);margin-top:6px;text-align:center}
+
+/* CDM */
+.cdm-list{display:flex;flex-direction:column;gap:6px}
+.cdm-item{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 12px;background:var(--bg-primary);border-radius:8px;border:1px solid var(--border-light);
+}
+.cdm-item.high{border-color:rgba(74,143,107,0.3)}
+.cdm-item.medium{border-color:rgba(201,168,76,0.3)}
+.cdm-item .label{font-size:12px;font-weight:600;color:var(--text-primary);min-width:80px}
+.cdm-item .conf{
+  font-size:10px;padding:1px 8px;border-radius:4px;font-weight:600;
+}
+.cdm-item .conf.high{background:rgba(74,143,107,0.12);color:var(--success)}
+.cdm-item .conf.medium{background:rgba(201,168,76,0.12);color:var(--warning)}
+.cdm-item .conf.low{background:rgba(0,102,179,0.12);color:var(--primary)}
+.cdm-item .evidence{font-size:11px;color:var(--text-muted);flex:1}
+.cdm-item .actions{display:flex;gap:4px}
+.cdm-item .actions button{
+  padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer;border:1px solid var(--border-light);
+  background:var(--bg-secondary);color:var(--text-secondary);
+}
+.cdm-item .actions button:hover{border-color:var(--primary);color:var(--primary)}
+.cdm-item .actions button.confirm{border-color:var(--success);color:var(--success)}
+
+/* BKT */
+.bkt-list{display:flex;flex-direction:column;gap:6px}
+.bkt-item{
+  display:flex;align-items:center;gap:10px;
+  padding:6px 10px;background:var(--bg-primary);border-radius:6px;border:1px solid var(--border-light);
+}
+.bkt-item .skill{font-size:12px;font-weight:600;color:var(--text-primary);min-width:70px}
+.bkt-item .bar-wrap{flex:1;height:6px;background:var(--border-light);border-radius:3px;overflow:hidden;position:relative}
+.bkt-item .bar-wrap .before{
+  position:absolute;top:0;left:0;height:100%;background:var(--border-medium);border-radius:3px;
+}
+.bkt-item .bar-wrap .after{
+  position:absolute;top:0;left:0;height:100%;border-radius:3px;
+}
+.bkt-item .vals{display:flex;align-items:center;gap:6px;font-size:11px;min-width:100px;justify-content:flex-end}
+.bkt-item .vals .before{color:var(--text-muted)}
+.bkt-item .vals .arrow{color:var(--text-light)}
+.bkt-item .vals .after{font-weight:700}
+.bkt-item .vals .after.up{color:var(--success)}
+.bkt-item .vals .after.down{color:var(--danger)}
+.bkt-item .vals .after.flat{color:var(--text-muted)}
+
+/* 校准 */
+.calib-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.calib-item{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 10px;background:var(--bg-primary);border-radius:6px;border:1px solid var(--border-light);
+  font-size:12px;color:var(--text-secondary);
+}
+.calib-item input[type="checkbox"]{width:16px;height:16px;accent-color:var(--primary)}
+
+/* 终审 */
+.teacher-review textarea{
+  width:100%;padding:10px;background:var(--bg-primary);border:1px solid var(--border-light);
+  border-radius:8px;color:var(--text-primary);font-size:13px;resize:vertical;min-height:70px;
+  font-family:inherit;transition:border-color 0.3s;
+}
+.teacher-review textarea:focus{outline:none;border-color:var(--primary)}
+.score-adjust{
+  display:flex;align-items:center;gap:12px;margin-top:10px;
+}
+.score-adjust label{font-size:12px;color:var(--text-muted);font-weight:600}
+.score-adjust input{
+  width:80px;padding:6px 10px;background:var(--bg-primary);border:1px solid var(--border-light);
+  border-radius:6px;color:var(--text-primary);font-size:16px;font-weight:700;text-align:center;
+}
+.score-adjust input:focus{outline:none;border-color:var(--primary)}
+.score-adjust .hint{font-size:11px;color:var(--text-muted)}
+.action-btns{display:flex;gap:10px;margin-top:12px}
+.action-btns button{flex:1}
+
+/* ===== 滚动条 ===== */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg-primary)}
+::-webkit-scrollbar-thumb{background:var(--border-medium);border-radius:3px}
+
+/* ===== 响应式 ===== */
+@media (max-width:1200px){.sidebar{display:none}.main-content{margin-left:0}.two-col{grid-template-columns:1fr}}
+@media (max-width:768px){.fusion-grid{grid-template-columns:1fr 1fr}.calib-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand">
+    <div class="logo">戏</div>
+    <h1>戏韵AI · 老师工作台</h1>
+    <span class="badge">作业批改</span>
+  </div>
+  <div class="nav-user">
+    <div class="avatar">👩‍🏫</div>
+    <span>王慧芳</span>
+    <span style="color:var(--text-muted);font-size:13px">|</span>
+    <span style="color:var(--text-secondary);font-size:13px">中国戏曲学院</span>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="nav-group">
+      <div class="nav-group-title">核心功能</div>
+      <a href="dashboard.html" class="nav-item"><span class="icon">📊</span>班级看板</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">🧑‍🏫 教学工作台</div>
+      <a href="demo_library.html" class="nav-item"><span class="icon">🎵</span>示范库管理</a>
+      <a href="annotation.html" class="nav-item"><span class="icon">🏷️</span>歌词级标注</a>
+      <a href="homework.html" class="nav-item active"><span class="icon">📝</span>作业批改</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">🎤 学生练习</div>
+      <a href="sing_along.html" class="nav-item"><span class="icon">🎙️</span>实时跟唱</a>
+      <a href="AI_teacher.html" class="nav-item"><span class="icon">🤖</span>AI教练对话</a>
+      <a href="cat_test.html" class="nav-item"><span class="icon">🎯</span>摸底测试</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">📈 数据分析</div>
+      <a href="tracking.html" class="nav-item"><span class="icon">📈</span>能力追踪</a>
+      <a href="recommendation.html" class="nav-item"><span class="icon">🎯</span>渐进式推荐</a>
+      <a href="knowledge_graph.html" class="nav-item"><span class="icon">🧠</span>知识图谱</a>
+      <a href="cdm_report.html" class="nav-item"><span class="icon">🔍</span>归因诊断</a>
+      <a href="daily_report.html" class="nav-item"><span class="icon">📰</span>学习报告</a>
+    </div>
+  </aside>
+
+  <main class="main-content">
+
+    <div class="page-header">
+      <div>
+        <h2>📝 作业布置与批改</h2>
+        <p>AI初评 + CDM归因 + 老师终审 + BKT状态更新</p>
+      </div>
+      <div class="actions">
+        <button class="btn-primary" onclick="showAssignModal()">➕ 布置新作业</button>
+      </div>
+    </div>
+
+    <!-- ===== 左右两栏 ===== -->
+    <div class="two-col">
+
+      <!-- ===== 左侧 ===== -->
+      <div class="left-col">
+
+        <!-- 作业列表 -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <div class="icon">📚</div>
+              作业列表
+            </div>
+            <span style="font-size:11px;color:var(--text-muted)">3项进行中</span>
+          </div>
+          <div class="card-body">
+            <div class="hw-list" id="hwList"></div>
+          </div>
+        </div>
+
+        <!-- 待批改提交 -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <div class="icon" style="background:rgba(0,102,179,0.10);color:var(--primary)">📋</div>
+              待批改提交
+            </div>
+            <span style="font-size:11px;color:var(--text-muted)">AI已初评</span>
+          </div>
+          <div class="card-body">
+            <div class="submit-list" id="submitList"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ===== 右侧：批改详情 ===== -->
+      <div class="review-panel">
+        <div class="card" id="reviewPanel">
+
+          <!-- 空状态 -->
+          <div class="empty-state" id="emptyState">
+            <div class="icon">📝</div>
+            <div class="title">选择左侧提交进行批改</div>
+            <div class="desc">点击学生提交查看 CDM 归因、BKT 更新与评分校准</div>
+          </div>
+
+          <!-- 详情内容 -->
+          <div class="review-content" id="reviewContent" style="display:none">
+
+            <!-- 学生信息 -->
+            <div class="detail-student">
+              <div class="avatar" id="detailAvatar">🎭</div>
+              <div class="info">
+                <div class="name" id="detailName">—</div>
+                <div class="meta" id="detailMeta">—</div>
+              </div>
+              <div class="score-box">
+                <div class="val" id="detailScore">—</div>
+                <div class="label">AI初评分</div>
+              </div>
+            </div>
+
+            <!-- 歌词对比 -->
+            <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px">🎵 歌词级偏差对比</div>
+            <div class="lyrics-compare" id="lyricsCompare"></div>
+
+            <!-- 加权融合 -->
+            <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px">⚖️ 多维加权融合（BKT输入）</div>
+            <div class="fusion-grid" id="fusionGrid"></div>
+            <div class="fusion-result">
+              <span class="label">加权总分:</span>
+              <span class="value" id="fusionTotal" style="color:var(--primary)">—</span>
+              <span class="label">二元判定:</span>
+              <span id="fusionPass">—</span>
+            </div>
+            <div class="fusion-formula">公式: Σ(wᵢ × dimᵢ_score) ≥ 0.6 ? "通过" : "未通过" · 当前权重: 音准40% 节奏30% 气息20% 咬字10%</div>
+
+            <!-- CDM -->
+            <div style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px">🔍 CDM 归因诊断（缺陷标签）</div>
+            <div class="cdm-list" id="cdmList"></div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:4px">只展示置信度 &gt; 0.7 的标签 · 老师可修正，数据回流优化模型</div>
+
+            <!-- BKT -->
+            <div style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px">📈 本次练习后 BKT 状态更新</div>
+            <div class="bkt-list" id="bktList"></div>
+
+            <!-- 校准 -->
+            <div style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px">🎯 AI 评分校准（修正数据回流）</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">勾选 AI 评分偏差模式，帮助系统学习您的评分偏好：</div>
+            <div class="calib-grid" id="calibGrid"></div>
+
+            <!-- 终审 -->
+            <div style="margin-top:14px;border-top:1px solid var(--border-light);padding-top:14px">
+              <div class="teacher-review">
+                <label style="font-size:12px;font-weight:600;color:var(--text-primary);display:block;margin-bottom:4px">✏️ 老师终审点评</label>
+                <textarea id="teacherComment" placeholder="在此输入您的终审点评...可修改AI评分，添加个性化指导建议"></textarea>
+              </div>
+              <div class="score-adjust">
+                <label>终审评分</label>
+                <input type="number" id="finalScore" value="82.5" min="0" max="100" step="0.1">
+                <span class="hint">AI建议: <span id="aiSuggestedScore">82.5</span>分（可修改）</span>
+              </div>
+              <div class="action-btns">
+                <button class="btn-success" onclick="submitReview()">✅ 通过并发布</button>
+                <button class="btn-secondary" onclick="saveDraft()">💾 保存草稿</button>
+                <button class="btn-secondary" style="flex:0.6" onclick="playVoiceComment()">🎙️ 语音</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+// ============================================
+// 模拟数据
+// ============================================
+const HOMEWORKS = [
+  { id: "h01", title: "《穆桂英挂帅》· 辕门外三声炮", deadline: "2026-08-02", demo: "王老师标准版", submitted: 18, total: 24, status: "grading" },
+  { id: "h02", title: "《贵妃醉酒》· 海岛冰轮初转腾", deadline: "2026-08-05", demo: "王老师标准版", submitted: 12, total: 24, status: "ongoing" },
+  { id: "h03", title: "《霸王别姬》· 看大王在帐中", deadline: "2026-07-28", demo: "王老师标准版", submitted: 24, total: 24, status: "closed" }
+];
+
+const SUBMISSIONS = [
+  {
+    id: "sub01", student: { name: "李小燕", avatar: "🎭", level: "初级" },
+    ai_score: 82.5,
+    dimensions: { pitch: 84, rhythm: 84, breath: 86, articulation: 80 },
+    fusion: { total: 0.72, passed: true },
+    cdm: [
+      { label: "气息支撑不足", confidence: 0.82, status: "high", evidence: "长音能量波动大，拖腔'炮'字抖动" },
+      { label: "拖腔时值偏短", confidence: 0.78, status: "high", evidence: "'雷'字时长 0.55s < 标准 0.70s" }
+    ],
+    bkt: [
+      { skill: "音准控制", before: 0.72, after: 0.74, delta: 0.02 },
+      { skill: "气息支撑", before: 0.51, after: 0.53, delta: 0.02 },
+      { skill: "拖腔", before: 0.28, after: 0.28, delta: 0.00 }
+    ],
+    lyrics: [
+      {char:"辕", diff:-8, st:"excellent"},{char:"门", diff:-12, st:"good"},
+      {char:"外", diff:-15, st:"excellent"},{char:"三", diff:-5, st:"excellent"},
+      {char:"声", diff:-18, st:"good"},{char:"炮", diff:-35, st:"fair"},
+      {char:"如", diff:5, st:"excellent"},{char:"同", diff:-3, st:"excellent"},
+      {char:"雷", diff:-42, st:"fair"},{char:"震", diff:-22, st:"good"},
+      {char:",", diff:null, st:"punct"},{char:"天", diff:-8, st:"excellent"},
+      {char:"波", diff:-10, st:"good"},{char:"府", diff:-15, st:"good"},
+      {char:"走", diff:-5, st:"excellent"},{char:"出", diff:-8, st:"excellent"},
+      {char:"来", diff:12, st:"excellent"},{char:"保", diff:-58, st:"fair"},
+      {char:"国", diff:-3, st:"excellent"},{char:"臣", diff:-18, st:"good"}
+    ],
+    calib: [
+      { id: "cal1", label: "AI 音准评分偏高", checked: false },
+      { id: "cal2", label: "AI 气息评分偏高", checked: false },
+      { id: "cal3", label: "AI 咬字评分偏低", checked: false }
+    ],
+    comment: "音准整体良好，拖腔处理有进步。建议在'雷'字拖腔时加强气息支撑，保持音高稳定。继续练习！",
+    time: "2026-07-29 06:30",
+    tags: [{text:"拖腔偏低", cls:"warn"}, {text:"时值偏短", cls:"warn"}]
+  },
+  {
+    id: "sub02", student: { name: "刘思琪", avatar: "🎵", level: "初级" },
+    ai_score: 75.2,
+    dimensions: { pitch: 68, rhythm: 72, breath: 70, articulation: 78 },
+    fusion: { total: 0.58, passed: false },
+    cdm: [
+      { label: "音准偏差随机", confidence: 0.85, status: "high", evidence: "多字偏差无系统性倾向" },
+      { label: "听辨能力弱", confidence: 0.76, status: "high", evidence: "音高偏差随机" }
+    ],
+    bkt: [
+      { skill: "音准控制", before: 0.48, after: 0.46, delta: -0.02 },
+      { skill: "气息支撑", before: 0.42, after: 0.40, delta: -0.02 }
+    ],
+    lyrics: [
+      {char:"辕", diff:-25, st:"fair"},{char:"门", diff:-30, st:"fair"},{char:"外", diff:-18, st:"good"}
+    ],
+    calib: [
+      { id: "cal1", label: "AI 音准评分偏高", checked: true },
+      { id: "cal2", label: "AI 气息评分偏高", checked: false },
+      { id: "cal3", label: "AI 咬字评分偏低", checked: false }
+    ],
+    comment: "音准偏差较大，建议先进行单音模唱训练。",
+    time: "2026-07-29 05:15",
+    tags: [{text:"音准偏差", cls:"danger"}, {text:"听辨弱", cls:"danger"}]
+  }
+];
+
+let currentSubId = null;
+
+// ============================================
+// 渲染函数
+// ============================================
+
+function renderHwList() {
+  const container = document.getElementById("hwList");
+  container.innerHTML = HOMEWORKS.map(hw => {
+    const pct = Math.round(hw.submitted / hw.total * 100);
+    const statusText = hw.status === "grading" ? "批改中" : (hw.status === "ongoing" ? "进行中" : "已截止");
+    return `
+      <div class="hw-item">
+        <div class="top">
+          <div class="title">${hw.title}</div>
+          <span class="status ${hw.status}">${statusText}</span>
+        </div>
+        <div class="meta">
+          <span>📅 ${hw.deadline}</span>
+          <span>🎵 ${hw.demo}</span>
+          <span>👥 ${hw.submitted}/${hw.total}</span>
+        </div>
+        <div class="progress-row">
+          <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <span class="pct">${pct}%</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderSubmitList() {
+  const container = document.getElementById("submitList");
+  container.innerHTML = SUBMISSIONS.map((sub, idx) => {
+    const tagsHtml = sub.tags.map(t => `<span class="tag ${t.cls}">${t.text}</span>`).join("");
+    return `
+      <div class="submit-item ${sub.id === currentSubId ? 'active' : ''}" onclick="selectSubmission('${sub.id}')">
+        <div class="avatar">${sub.student.avatar}</div>
+        <div class="info">
+          <div class="name">${sub.student.name}</div>
+          <div class="sub">${sub.time}</div>
+          <div class="tags">${tagsHtml}</div>
+        </div>
+        <div class="score">${sub.ai_score}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function selectSubmission(id) {
+  currentSubId = id;
+  renderSubmitList();
+
+  const sub = SUBMISSIONS.find(s => s.id === id);
+  if (!sub) return;
+
+  document.getElementById("emptyState").style.display = "none";
+  document.getElementById("reviewContent").style.display = "block";
+
+  // 学生信息
+  document.getElementById("detailAvatar").textContent = sub.student.avatar;
+  document.getElementById("detailName").textContent = sub.student.name;
+  document.getElementById("detailMeta").textContent = `${HOMEWORKS[0].title} · 提交于 ${sub.time}`;
+  document.getElementById("detailScore").textContent = sub.ai_score;
+  document.getElementById("aiSuggestedScore").textContent = sub.ai_score;
+  document.getElementById("finalScore").value = sub.ai_score;
+  document.getElementById("teacherComment").value = sub.comment;
+
+  // 歌词
+  const lyricsHtml = sub.lyrics.map(l => {
+    if (l.st === "punct") return `<div class="lyric-cell punct"><span class="char">${l.char}</span></div>`;
+    const diffText = (l.diff > 0 ? "+" : "") + l.diff + "c";
+    return `<div class="lyric-cell"><span class="char">${l.char}</span><span class="diff ${l.st}">${diffText}</span></div>`;
+  }).join("");
+  document.getElementById("lyricsCompare").innerHTML = lyricsHtml;
+
+  // 融合
+  const dims = sub.dimensions;
+  const names = { pitch: "音准", rhythm: "节奏", breath: "气息", articulation: "咬字" };
+  const weights = { pitch: 0.40, rhythm: 0.30, breath: 0.20, articulation: 0.10 };
+  document.getElementById("fusionGrid").innerHTML = Object.keys(dims).map(k => `
+    <div class="fusion-item">
+      <div class="dim">${names[k]}</div>
+      <div class="score">${dims[k]}</div>
+      <div class="weight">权重 ${(weights[k]*100).toFixed(0)}%</div>
+    </div>
+  `).join("");
+
+  const total = sub.fusion.total;
+  document.getElementById("fusionTotal").textContent = (total * 100).toFixed(1) + "%";
+  document.getElementById("fusionTotal").style.color = total >= 0.6 ? "#4A8F6B" : "#B83A2F";
+  document.getElementById("fusionPass").innerHTML = total >= 0.6
+    ? '<span class="pass">通过 ✓</span>'
+    : '<span class="fail">未通过 ✗</span>';
+
+  // CDM
+  document.getElementById("cdmList").innerHTML = sub.cdm.map(c => `
+    <div class="cdm-item ${c.status}">
+      <div class="label">${c.label}</div>
+      <span class="conf ${c.status}">${(c.confidence*100).toFixed(0)}%</span>
+      <span class="evidence">${c.evidence}</span>
+      <div class="actions">
+        <button class="confirm" onclick="confirmCDM(this)">✓</button>
+        <button onclick="rejectCDM(this)">✗</button>
+      </div>
+    </div>
+  `).join("");
+
+  // BKT
+  document.getElementById("bktList").innerHTML = sub.bkt.map(b => {
+    const cls = b.delta > 0 ? "up" : (b.delta < 0 ? "down" : "flat");
+    const arrow = b.delta > 0 ? "↗" : (b.delta < 0 ? "↘" : "→");
+    const color = b.after >= 0.85 ? "#4A8F6B" : (b.after >= 0.60 ? "#0066B3" : (b.after >= 0.40 ? "#C9A84C" : "#B83A2F"));
+    return `
+      <div class="bkt-item">
+        <span class="skill">${b.skill}</span>
+        <div class="bar-wrap">
+          <div class="before" style="width:${b.before*100}%"></div>
+          <div class="after" style="width:${b.after*100}%;background:${color}"></div>
+        </div>
+        <div class="vals">
+          <span class="before">${(b.before*100).toFixed(0)}%</span>
+          <span class="arrow">→</span>
+          <span class="after ${cls}">${(b.after*100).toFixed(0)}% ${arrow}</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  // 校准
+  document.getElementById("calibGrid").innerHTML = sub.calib.map(c => `
+    <label class="calib-item">
+      <input type="checkbox" ${c.checked ? 'checked' : ''}>
+      ${c.label}
+    </label>
+  `).join("");
+}
+
+// ============================================
+// 交互操作
+// ============================================
+
+function confirmCDM(btn) {
+  btn.style.borderColor = "#4A8F6B";
+  btn.style.color = "#4A8F6B";
+  alert("✅ 已确认标签");
+}
+
+function rejectCDM(btn) {
+  const label = prompt("请修正为正确的缺陷标签：", "");
+  if (label) {
+    btn.textContent = "✏️";
+    btn.style.borderColor = "#C9A84C";
+    btn.style.color = "#C9A84C";
+    alert(`已修正为: ${label}`);
+  }
+}
+
+function submitReview() {
+  const score = document.getElementById("finalScore").value;
+  alert(`✅ 终审已发布\n终审评分: ${score}分\n点评已保存，BKT 状态已更新`);
+}
+
+function saveDraft() {
+  alert("💾 草稿已保存");
+}
+
+function playVoiceComment() {
+  alert("🎙️ 语音点评录制中...（需接入音频录制 API）");
+}
+
+function showAssignModal() {
+  alert("📚 布置新作业功能（需对接后端 API）");
+}
+
+// ============================================
+// 初始化
+// ============================================
+renderHwList();
+renderSubmitList();
+// 默认选中第一个提交
+selectSubmission("sub01");
+</script>
+</body>
+</html>

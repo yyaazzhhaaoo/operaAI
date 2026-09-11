@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>戏韵AI · 知识图谱</title>
+    <script src="static/echarts.min.js">
+    </script>
+    <style>
+        /* ============================================================
+           浅色高对比度配色 · 宣纸背景 + 景泰蓝/朱砂红
+           与 sing_along 保持一致
+           ============================================================ */
+        :root {
+            --bg-primary: #F5EDE4;
+            --bg-secondary: #FFFFFF;
+            --bg-tertiary: #F0E8DC;
+            --bg-hover: #F5F0EA;
+            --bg-card-header: #F8F3EC;
+            --text-primary: #2D1F14;
+            --text-secondary: #5A4A3A;
+            --text-muted: #8A7A6A;
+            --text-light: #B0A090;
+            --border-light: #E8DDD0;
+            --border-medium: #D5C8B8;
+            --border-strong: #C0B0A0;
+            --primary: #0066B3;
+            --primary-hover: #0055A0;
+            --primary-glow: rgba(0, 102, 179, 0.30);
+            --primary-soft: rgba(0, 102, 179, 0.08);
+            --primary-border: rgba(0, 102, 179, 0.25);
+            --success: #4A8F6B;
+            --success-soft: rgba(74, 143, 107, 0.12);
+            --warning: #C9A84C;
+            --warning-soft: rgba(201, 168, 76, 0.12);
+            --danger: #B83A2F;
+            --danger-soft: rgba(184, 58, 47, 0.12);
+            --nav-gradient: linear-gradient(90deg, #F5EDE4, #E8DDD0 40%, #D5C8B8 50%, #E8DDD0 60%, #F5EDE4);
+            --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.04);
+            --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.7;
+            font-size: 16px;
+        }
+
+        /* ===== Navbar ===== */
+        .navbar {
+            background: var(--nav-gradient);
+            border-bottom: 2px solid var(--border-medium);
+            padding: 0 24px;
+            height: 58px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .nav-brand .logo {
+            width: 34px;
+            height: 34px;
+            background: linear-gradient(135deg, var(--primary), #004080);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+            box-shadow: 0 2px 12px var(--primary-glow);
+        }
+        .nav-brand h1 {
+            font-size: 17px;
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+        .nav-brand .badge {
+            background: var(--primary-soft);
+            color: var(--primary);
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            border: 1px solid var(--primary-border);
+        }
+        .nav-user {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .nav-user .avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #B89076, #8B6B4F);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: #fff;
+        }
+
+        /* ===== Layout ===== */
+        .layout {
+            display: flex;
+            min-height: calc(100vh - 58px);
+        }
+        .sidebar {
+            width: 200px;
+            background: var(--bg-secondary);
+            border-right: 2px solid var(--border-light);
+            padding: 12px 0;
+            position: fixed;
+            height: 100%;
+            overflow-y: auto;
+            z-index: 40;
+        }
+        .nav-group {
+            margin-bottom: 6px;
+        }
+        .nav-group-title {
+            padding: 6px 16px;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            font-weight: 700;
+        }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            margin: 0 8px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            border-radius: 8px;
+            border-left: 4px solid transparent;
+        }
+        .nav-item:hover {
+            color: var(--text-primary);
+            background: var(--bg-hover);
+        }
+        .nav-item.active {
+            color: var(--primary);
+            background: var(--primary-soft);
+            border-left-color: var(--primary);
+            font-weight: 600;
+        }
+        .nav-item .icon {
+            font-size: 16px;
+            width: 22px;
+            text-align: center;
+        }
+        .nav-badge {
+            margin-left: auto;
+            background: var(--danger);
+            color: #fff;
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        .main-content {
+            margin-left: 200px;
+            flex: 1;
+            padding: 20px;
+            max-width: 1400px;
+            position: relative;
+        }
+
+        /* ===== 页面头部 ===== */
+        .page-header {
+            margin-bottom: 16px;
+        }
+        .page-header h2 {
+            font-size: 20px;
+            color: var(--text-primary);
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+        .page-header p {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        /* ===== 工具栏 ===== */
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .filter-btn {
+            padding: 6px 14px;
+            border: 2px solid var(--border-light);
+            border-radius: 6px;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 600;
+        }
+        .filter-btn:hover {
+            border-color: var(--border-medium);
+            color: var(--text-primary);
+        }
+        .filter-btn.active {
+            border-color: var(--primary);
+            background: var(--primary-soft);
+            color: var(--primary);
+        }
+        .action-btn {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 6px;
+            background: linear-gradient(90deg, #6366f1, #a855f7);
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            min-height: 34px;
+        }
+        .action-btn:hover {
+            opacity: 0.9;
+        }
+        .action-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .action-btn.green {
+            background: linear-gradient(90deg, var(--success), #3D6B5A);
+        }
+        .action-btn.red {
+            background: linear-gradient(90deg, var(--danger), #9E3126);
+        }
+
+        /* ===== 图谱容器 ===== */
+        .graph-wrap {
+            position: relative;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-light);
+            border-radius: 14px;
+            overflow: hidden;
+            height: calc(100vh - 200px);
+            min-height: 520px;
+            box-shadow: var(--shadow-sm);
+        }
+        #graphChart {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ===== 右侧详情面板 ===== */
+        .side-panel {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 320px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-medium);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.06);
+            display: none;
+            z-index: 10;
+            max-height: calc(100% - 32px);
+            overflow-y: auto;
+        }
+        .side-panel.show {
+            display: block;
+        }
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .panel-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .panel-close {
+            cursor: pointer;
+            color: var(--text-muted);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 16px;
+            line-height: 1;
+        }
+        .panel-close:hover {
+            background: var(--danger-soft);
+            color: var(--danger);
+        }
+
+        /* ===== 节点类型标签 ===== */
+        .node-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .node-badge.technique {
+            background: rgba(99, 102, 241, 0.10);
+            color: #6366f1;
+        }
+        .node-badge.phrase {
+            background: rgba(201, 168, 76, 0.10);
+            color: var(--warning);
+        }
+        .node-badge.piece {
+            background: rgba(139, 92, 246, 0.10);
+            color: #7C3AED;
+        }
+
+        /* ===== 掌握度/难度条 ===== */
+        .meter {
+            margin-bottom: 12px;
+        }
+        .meter-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+        .meter-label .name {
+            color: var(--text-secondary);
+        }
+        .meter-label .val {
+            font-weight: 700;
+        }
+        .meter-bar {
+            height: 6px;
+            background: var(--border-light);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .meter-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.4s;
+        }
+
+        /* ===== 依赖链 ===== */
+        .chain-section {
+            margin-bottom: 14px;
+        }
+        .chain-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .chain-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .chain-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            background: var(--bg-primary);
+            border-radius: 6px;
+            border: 1px solid var(--border-light);
+            font-size: 12px;
+        }
+        .chain-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .chain-name {
+            color: var(--text-primary);
+            flex: 1;
+        }
+        .chain-status {
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+
+        /* ===== 暂缓推送提示 ===== */
+        .block-alert {
+            background: var(--danger-soft);
+            border: 1px solid rgba(184, 58, 47, 0.25);
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-top: 10px;
+        }
+        .block-alert-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--danger);
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .block-alert-text {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* ===== 图例 ===== */
+        .legend-bar {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            padding: 10px 14px;
+            box-shadow: var(--shadow-sm);
+            backdrop-filter: blur(4px);
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        /* ===== 编辑模式提示 ===== */
+        .edit-hint {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(139, 92, 246, 0.10);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            color: #7C3AED;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            display: none;
+            z-index: 10;
+            font-weight: 600;
+        }
+        .edit-hint.show {
+            display: block;
+        }
+
+        /* ===== Toast ===== */
+        .toast-container {
+            position: fixed;
+            top: 72px;
+            right: 20px;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            background: var(--bg-secondary);
+            border: 2px solid var(--border-light);
+            border-radius: 12px;
+            padding: 14px 18px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            min-width: 300px;
+            max-width: 400px;
+            animation: toastIn 0.3s ease;
+        }
+        .toast.success {
+            border-color: rgba(74, 143, 107, 0.4);
+        }
+        .toast-icon {
+            font-size: 20px;
+        }
+        .toast-content {
+            flex: 1;
+        }
+        .toast-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+        .toast-msg {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+        .toast-close {
+            cursor: pointer;
+            color: var(--text-muted);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 16px;
+            line-height: 1;
+        }
+        .toast-close:hover {
+            background: var(--danger-soft);
+            color: var(--danger);
+        }
+        @keyframes toastIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* ===== 滚动条 ===== */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-medium);
+            border-radius: 3px;
+        }
+
+        /* ===== 响应式 ===== */
+        @media (max-width: 1024px) {
+            .sidebar {
+                display: none;
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .side-panel {
+                width: 280px;
+            }
+        }
+        @media (max-width: 640px) {
+            .side-panel {
+                width: calc(100% - 32px);
+                top: 12px;
+                right: 12px;
+            }
+            .legend-bar {
+                flex-wrap: wrap;
+                gap: 6px 12px;
+                padding: 8px 12px;
+                font-size: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="logo">戏</div>
+            <h1>戏韵AI · 老师工作台</h1>
+            <span class="badge">知识图谱</span>
+        </div>
+        <div class="nav-user">
+            <div class="avatar">👩‍🏫</div>
+            <span>王慧芳</span>
+            <span style="color:var(--text-muted);font-size:13px">|</span>
+            <span style="color:var(--text-secondary);font-size:13px">中国戏曲学院</span>
+        </div>
+    </nav>
+
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="nav-group">
+                <div class="nav-group-title">核心功能</div>
+                <a href="dashboard.html" class="nav-item"><span class="icon">📊</span>班级看板</a>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-group-title">🧑‍🏫 教学工作台</div>
+                <a href="demo_library.html" class="nav-item"><span class="icon">🎵</span>示范库管理</a>
+                <a href="annotation.html" class="nav-item"><span class="icon">🏷️</span>歌词级标注</a>
+                <a href="homework.html" class="nav-item"><span class="icon">📝</span>作业批改</a>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-group-title">🎤 学生练习</div>
+                <a href="sing_along.html" class="nav-item"><span class="icon">🎙️</span>实时跟唱</a>
+                <a href="AI_teacher.html" class="nav-item"><span class="icon">🤖</span>AI教练对话</a>
+                <a href="cat_test.html" class="nav-item"><span class="icon">🎯</span>摸底测试（CAT）</a>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-group-title">📈 数据分析</div>
+                <a href="tracking.html" class="nav-item"><span class="icon">📈</span>能力追踪（BKT）</a>
+                <a href="recommendation.html" class="nav-item"><span class="icon">🎯</span>渐进式推荐</a>
+                <a href="knowledge_graph.html" class="nav-item active"><span class="icon">🧠</span>知识图谱</a>
+                <a href="cdm_report.html" class="nav-item"><span class="icon">🔍</span>归因诊断（CDM）</a>
+                <a href="daily_report.html" class="nav-item"><span class="icon">📰</span>每日学习报告</a>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h2>🧠 知识图谱可视化</h2>
+                <p>技法依赖关系与唱句前置要求 · 点击节点查看依赖链 · 拖拽调整布局</p>
+            </div>
+
+            <div class="toolbar">
+                <button class="filter-btn active" data-filter="all" onclick="filterGraph('all')">全部</button>
+                <button class="filter-btn" data-filter="technique" onclick="filterGraph('technique')">仅技法</button>
+                <button class="filter-btn" data-filter="phrase" onclick="filterGraph('phrase')">仅唱句</button>
+                <button class="filter-btn" data-filter="piece" onclick="filterGraph('piece')">仅剧目</button>
+                <div style="flex:1"></div>
+                <button class="action-btn" id="highlightBtn" onclick="highlightPrereqChain()" disabled>🔦 高亮前置依赖链</button>
+                <button class="action-btn green" onclick="toggleEditMode()">✏️ 编辑模式</button>
+                <button class="action-btn red" onclick="resetLayout()">↺ 重置布局</button>
+            </div>
+
+            <div class="graph-wrap">
+                <div class="edit-hint" id="editHint">✏️ 编辑模式已开启：可拖拽节点调整位置，点击空白处取消选中</div>
+                <div id="graphChart"></div>
+
+                <!-- 图例 -->
+                <div class="legend-bar">
+                    <div class="legend-item"><span class="legend-dot" style="background:#6366f1"></span>技法节点</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#C9A84C"></span>唱句节点</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#a855f7"></span>剧目节点</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#4A8F6B"></span>已掌握 ≥0.85</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#0066B3"></span>学习中 0.60~0.85</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#C9A84C"></span>薄弱 0.40~0.60</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#B83A2F"></span>未掌握 &lt;0.40</div>
+                </div>
+            </div>
+
+            <!-- 右侧详情面板 -->
+            <div class="side-panel" id="sidePanel">
+                <div class="panel-header">
+                    <div class="panel-title" id="panelTitle">节点详情</div>
+                    <div class="panel-close" onclick="closePanel()">✕</div>
+                </div>
+                <div id="panelContent"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast 容器 -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        // ================================================================
+        // 模拟数据（后端 API 预留接口）
+        // ================================================================
+
+        /* TODO: API GET /api/v1/graph/nodes-and-edges
+           返回：Neo4j 导出的节点与边数据
+           { "nodes": [...], "edges": [...] }
+        */
+
+        const GRAPH_DATA = {
+            nodes: [
+                // 技法节点
+                { id: "t01", name: "音准感知", type: "technique", mastery: 0.68, category: "基础" },
+                { id: "t02", name: "声带控制", type: "technique", mastery: 0.55, category: "基础" },
+                { id: "t03", name: "气息支撑", type: "technique", mastery: 0.62, category: "基础" },
+                { id: "t04", name: "音准稳定性", type: "technique", mastery: 0.71, category: "基础" },
+                { id: "t05", name: "滑音", type: "technique", mastery: 0.63, category: "装饰" },
+                { id: "t06", name: "拖腔", type: "technique", mastery: 0.58, category: "装饰" },
+                { id: "t07", name: "归韵咬字", type: "technique", mastery: 0.65, category: "基础" },
+                { id: "t08", name: "装饰音技巧", type: "technique", mastery: 0.48, category: "装饰" },
+                { id: "t09", name: "润腔", type: "technique", mastery: 0.35, category: "高阶" },
+                { id: "t10", name: "颤音", type: "technique", mastery: 0.45, category: "装饰" },
+                { id: "t11", name: "节奏感知", type: "technique", mastery: 0.68, category: "基础" },
+                { id: "t12", name: "咬字基础", type: "technique", mastery: 0.74, category: "基础" },
+                { id: "t13", name: "装饰音基础", type: "technique", mastery: 0.48, category: "基础" },
+                { id: "t14", name: "听辨能力", type: "technique", mastery: 0.52, category: "基础" },
+                // 唱句节点
+                { id: "p01", name: "辕门外三声炮", type: "phrase", difficulty: 0.81, piece: "穆桂英挂帅" },
+                { id: "p02", name: "海岛冰轮初转腾", type: "phrase", difficulty: 0.85, piece: "贵妃醉酒" },
+                { id: "p03", name: "看大王在帐中", type: "phrase", difficulty: 0.78, piece: "霸王别姬" },
+                { id: "p04", name: "叫张生隐藏在棋盘之下", type: "phrase", difficulty: 0.72, piece: "红娘" },
+                { id: "p05", name: "我正在城楼观山景", type: "phrase", difficulty: 0.88, piece: "空城计" },
+                // 剧目节点
+                { id: "d01", name: "穆桂英挂帅", type: "piece", style: "京剧·梅派" },
+                { id: "d02", name: "贵妃醉酒", type: "piece", style: "京剧·梅派" },
+                { id: "d03", name: "霸王别姬", type: "piece", style: "京剧·梅派" },
+                { id: "d04", name: "红娘", type: "piece", style: "京剧·荀派" },
+                { id: "d05", name: "空城计", type: "piece", style: "京剧·老生" },
+            ],
+            edges: [
+                // 技法依赖 DEPENDS_ON
+                { source: "t05", target: "t01", type: "DEPENDS_ON", label: "依赖" },
+                { source: "t05", target: "t02", type: "DEPENDS_ON", label: "依赖" },
+                { source: "t06", target: "t03", type: "DEPENDS_ON", label: "依赖" },
+                { source: "t06", target: "t04", type: "DEPENDS_ON", label: "依赖" },
+                { source: "t09", target: "t05", type: "DEPENDS_ON", label: "依赖" },
+                { source: "t09", target: "t08", type: "DEPENDS_ON", label: "依赖" },
+                { source: "t07", target: "t12", type: "DEPENDS_ON", label: "依赖" },
+                { source: "t10", target: "t04", type: "DEPENDS_ON", label: "依赖" },
+                { source: "t08", target: "t05", type: "DEPENDS_ON", label: "依赖" },
+                { source: "t14", target: "t01", type: "DEPENDS_ON", label: "依赖" },
+                // 唱句→技法 REQUIRES
+                { source: "p01", target: "t06", type: "REQUIRES", label: "需要" },
+                { source: "p01", target: "t04", type: "REQUIRES", label: "需要" },
+                { source: "p01", target: "t07", type: "REQUIRES", label: "需要" },
+                { source: "p02", target: "t06", type: "REQUIRES", label: "需要" },
+                { source: "p02", target: "t05", type: "REQUIRES", label: "需要" },
+                { source: "p02", target: "t03", type: "REQUIRES", label: "需要" },
+                { source: "p02", target: "t07", type: "REQUIRES", label: "需要" },
+                { source: "p03", target: "t06", type: "REQUIRES", label: "需要" },
+                { source: "p03", target: "t04", type: "REQUIRES", label: "需要" },
+                { source: "p03", target: "t10", type: "REQUIRES", label: "需要" },
+                { source: "p04", target: "t05", type: "REQUIRES", label: "需要" },
+                { source: "p04", target: "t08", type: "REQUIRES", label: "需要" },
+                { source: "p04", target: "t11", type: "REQUIRES", label: "需要" },
+                { source: "p05", target: "t06", type: "REQUIRES", label: "需要" },
+                { source: "p05", target: "t03", type: "REQUIRES", label: "需要" },
+                { source: "p05", target: "t04", type: "REQUIRES", label: "需要" },
+                { source: "p05", target: "t07", type: "REQUIRES", label: "需要" },
+                // 唱句→剧目 BELONGS_TO
+                { source: "p01", target: "d01", type: "BELONGS_TO", label: "属于" },
+                { source: "p02", target: "d02", type: "BELONGS_TO", label: "属于" },
+                { source: "p03", target: "d03", type: "BELONGS_TO", label: "属于" },
+                { source: "p04", target: "d04", type: "BELONGS_TO", label: "属于" },
+                { source: "p05", target: "d05", type: "BELONGS_TO", label: "属于" },
+            ]
+        };
+
+        /* TODO: API GET /api/v1/graph/prereq-chain?node_id={id}
+           返回：指定节点的前置依赖链（递归）
+        */
+
+        const PREREQ_CHAINS = {
+            "t06": {
+                chain: [
+                    { id: "t03", name: "气息支撑", mastery: 0.62, status: "薄弱" },
+                    { id: "t04", name: "音准稳定性", mastery: 0.71, status: "学习中" },
+                    { id: "t06", name: "拖腔", mastery: 0.58, status: "薄弱" }
+                ],
+                blockedFor: ["李小燕", "刘思琪", "孙志远"],
+                reason: "前置技法「气息支撑」班级平均掌握度 62%，未达到解锁阈值 85%"
+            },
+            "t05": {
+                chain: [
+                    { id: "t01", name: "音准感知", mastery: 0.68, status: "学习中" },
+                    { id: "t02", name: "声带控制", mastery: 0.55, status: "薄弱" },
+                    { id: "t05", name: "滑音", mastery: 0.63, status: "学习中" }
+                ],
+                blockedFor: ["李小燕", "周明轩"],
+                reason: "前置技法「声带控制」班级平均掌握度 55%，未达到解锁阈值 85%"
+            },
+            "t09": {
+                chain: [
+                    { id: "t01", name: "音准感知", mastery: 0.68, status: "学习中" },
+                    { id: "t02", name: "声带控制", mastery: 0.55, status: "薄弱" },
+                    { id: "t05", name: "滑音", mastery: 0.63, status: "学习中" },
+                    { id: "t08", name: "装饰音技巧", mastery: 0.48, status: "薄弱" },
+                    { id: "t09", name: "润腔", mastery: 0.35, status: "未掌握" }
+                ],
+                blockedFor: ["李小燕", "刘思琪", "周明轩", "孙志远"],
+                reason: "前置技法「装饰音技巧」班级平均掌握度 48%，未达到解锁阈值 85%"
+            },
+            "p01": {
+                chain: [
+                    { id: "t03", name: "气息支撑", mastery: 0.62, status: "薄弱" },
+                    { id: "t04", name: "音准稳定性", mastery: 0.71, status: "学习中" },
+                    { id: "t06", name: "拖腔", mastery: 0.58, status: "薄弱" },
+                    { id: "p01", name: "辕门外三声炮", difficulty: 0.81, status: "高难度" }
+                ],
+                blockedFor: ["李小燕", "刘思琪", "孙志远"],
+                reason: "所需技法「拖腔」班级平均掌握度 58%，未达到推荐阈值 70%"
+            }
+        };
+
+        // ================================================================
+        // ECharts 状态
+        // ================================================================
+
+        let chart = null;
+        let selectedNodeId = null;
+        let editMode = false;
+        let currentFilter = 'all';
+        let chartDataCache = null;
+
+        // ================================================================
+        // 工具函数
+        // ================================================================
+
+        function getNodeColor(node) {
+            if (node.type === 'piece') return '#a855f7';
+            if (node.type === 'phrase') {
+                const d = node.difficulty || 0.5;
+                if (d >= 0.85) return '#B83A2F';
+                if (d >= 0.70) return '#C9A84C';
+                return '#4A8F6B';
+            }
+            // technique
+            const m = node.mastery || 0.5;
+            if (m >= 0.85) return '#4A8F6B';
+            if (m >= 0.60) return '#0066B3';
+            if (m >= 0.40) return '#C9A84C';
+            return '#B83A2F';
+        }
+
+        function getNodeSize(node) {
+            if (node.type === 'piece') return 45;
+            if (node.type === 'phrase') return 38;
+            return 32;
+        }
+
+        function getFilteredData(filter) {
+            let nodes = GRAPH_DATA.nodes;
+            let edges = GRAPH_DATA.edges;
+
+            if (filter === 'technique') {
+                const ids = new Set(nodes.filter(n => n.type === 'technique').map(n => n.id));
+                nodes = nodes.filter(n => ids.has(n.id));
+                edges = edges.filter(e => ids.has(e.source) && ids.has(e.target));
+            } else if (filter === 'phrase') {
+                const ids = new Set(nodes.filter(n => n.type === 'phrase').map(n => n.id));
+                nodes = nodes.filter(n => ids.has(n.id));
+                edges = edges.filter(e => ids.has(e.source) && ids.has(e.target));
+            } else if (filter === 'piece') {
+                const ids = new Set(nodes.filter(n => n.type === 'piece').map(n => n.id));
+                nodes = nodes.filter(n => ids.has(n.id));
+                edges = edges.filter(e => ids.has(e.source) && ids.has(e.target));
+            }
+
+            return { nodes, edges };
+        }
+
+        // ================================================================
+        // ECharts 初始化
+        // ================================================================
+
+        function initChart() {
+            const dom = document.getElementById('graphChart');
+            if (!dom) {
+                console.error('图表容器 #graphChart 未找到');
+                return;
+            }
+
+            if (chart) {
+                chart.dispose();
+                chart = null;
+            }
+
+            try {
+                chart = echarts.init(dom);
+            } catch (e) {
+                console.error('ECharts 初始化失败:', e);
+                dom.innerHTML =
+                    '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#B83A2F;font-size:14px;">⚠️ 图表加载失败，请刷新页面重试</div>';
+                return;
+            }
+
+            renderGraph(currentFilter);
+
+            chart.on('click', function(params) {
+                if (params.dataType === 'node') {
+                    const raw = params.data._raw;
+                    if (raw) {
+                        selectedNodeId = raw.id;
+                        document.getElementById('highlightBtn').disabled = false;
+                        showNodeDetail(raw);
+                    }
+                } else {
+                    selectedNodeId = null;
+                    document.getElementById('highlightBtn').disabled = true;
+                    closePanel();
+                }
+            });
+
+            const resizeHandler = function() {
+                if (chart) chart.resize();
+            };
+            window.addEventListener('resize', resizeHandler);
+            dom._resizeHandler = resizeHandler;
+
+            requestAnimationFrame(() => {
+                if (chart) chart.resize();
+            });
+        }
+
+        function renderGraph(filter) {
+            if (!chart) return;
+
+            const { nodes, edges } = getFilteredData(filter);
+
+            const chartNodes = nodes.map(n => ({
+                id: n.id,
+                name: n.name,
+                value: n.type === 'technique' ? (n.mastery || 0) : (n.difficulty || 0),
+                symbolSize: getNodeSize(n),
+                itemStyle: { color: getNodeColor(n) },
+                label: {
+                    show: true,
+                    color: '#2D1F14',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    formatter: function() {
+                        return n.name.length > 5 ? n.name.slice(0, 4) + '…' : n.name;
+                    }
+                },
+                draggable: true,
+                _raw: n
+            }));
+
+            const chartEdges = edges.map(e => ({
+                source: e.source,
+                target: e.target,
+                relation: e.type,
+                label: {
+                    show: true,
+                    formatter: e.label,
+                    fontSize: 10,
+                    color: '#8A7A6A'
+                },
+                lineStyle: {
+                    color: e.type === 'DEPENDS_ON' ? 'rgba(99,102,241,0.4)' :
+                        e.type === 'REQUIRES' ? 'rgba(201,168,76,0.4)' :
+                        'rgba(139,92,246,0.35)',
+                    width: 1.5,
+                    curveness: 0.15
+                }
+            }));
+
+            const option = {
+                backgroundColor: 'transparent',
+                tooltip: {
+                    backgroundColor: 'rgba(255,255,255,0.96)',
+                    borderColor: '#E8DDD0',
+                    textStyle: { color: '#2D1F14', fontSize: 12 },
+                    formatter: function(params) {
+                        if (params.dataType === 'node') {
+                            const n = params.data._raw;
+                            if (!n) return '节点信息';
+                            let html = `<div style="font-weight:700;margin-bottom:4px;color:#2D1F14">${n.name}</div>`;
+                            if (n.type === 'technique') {
+                                const c = getNodeColor(n);
+                                html += `<div style="color:#5A4A3A">类型: 技法 · ${n.category}</div>`;
+                                html += `<div style="color:${c}">班级掌握度: ${(n.mastery * 100).toFixed(0)}%</div>`;
+                            } else if (n.type === 'phrase') {
+                                const c = getNodeColor(n);
+                                html += `<div style="color:#5A4A3A">类型: 唱句 · ${n.piece}</div>`;
+                                html += `<div style="color:${c}">动态难度: ${n.difficulty.toFixed(2)}</div>`;
+                            } else {
+                                html += `<div style="color:#5A4A3A">类型: 剧目 · ${n.style}</div>`;
+                            }
+                            html += `<div style="margin-top:4px;font-size:11px;color:#8A7A6A;">点击查看完整依赖链</div>`;
+                            return html;
+                        }
+                        return `${params.data.relation || '关系'}`;
+                    }
+                },
+                animationDuration: 1200,
+                animationEasingUpdate: 'quinticInOut',
+                series: [{
+                    type: 'graph',
+                    layout: 'force',
+                    data: chartNodes,
+                    links: chartEdges,
+                    roam: true,
+                    label: { show: true, position: 'bottom' },
+                    emphasis: {
+                        focus: 'adjacency',
+                        lineStyle: { width: 3 }
+                    },
+                    force: {
+                        repulsion: 400,
+                        gravity: 0.1,
+                        edgeLength: [80, 160],
+                        layoutAnimation: true
+                    },
+                    lineStyle: {
+                        curveness: 0.15,
+                        opacity: 0.6
+                    },
+                    edgeSymbol: ['none', 'arrow'],
+                    edgeSymbolSize: [0, 8]
+                }]
+            };
+
+            chart.setOption(option, true);
+            chartDataCache = { nodes, edges };
+
+            setTimeout(() => {
+                if (chart) chart.resize();
+            }, 100);
+        }
+
+        // ================================================================
+        // 详情面板
+        // ================================================================
+
+        function showNodeDetail(node) {
+            const panel = document.getElementById('sidePanel');
+            const content = document.getElementById('panelContent');
+            panel.classList.add('show');
+
+            let html = '';
+
+            if (node.type === 'technique') {
+                const color = getNodeColor(node);
+                const status = node.mastery >= 0.85 ? '已掌握' :
+                    node.mastery >= 0.60 ? '学习中' :
+                    node.mastery >= 0.40 ? '薄弱' : '未掌握';
+
+                html += `<div class="node-badge technique">技法节点 · ${node.category}</div>`;
+                html += `<div class="meter">
+                    <div class="meter-label"><span class="name">班级平均掌握度</span><span class="val" style="color:${color}">${(node.mastery * 100).toFixed(0)}% · ${status}</span></div>
+                    <div class="meter-bar"><div class="meter-fill" style="width:${node.mastery * 100}%;background:${color}"></div></div>
+                </div>`;
+
+                const prereqs = GRAPH_DATA.edges.filter(e => e.target === node.id && e.type === 'DEPENDS_ON');
+                if (prereqs.length > 0) {
+                    html += `<div class="chain-section">
+                        <div class="chain-title">⬅️ 前置依赖（必须先掌握）</div>
+                        <div class="chain-list">`;
+                    prereqs.forEach(e => {
+                        const src = GRAPH_DATA.nodes.find(n => n.id === e.source);
+                        if (src) {
+                            const c = getNodeColor(src);
+                            const s = src.mastery >= 0.85 ? '已掌握' : src.mastery >= 0.60 ? '学习中' : '薄弱';
+                            html += `<div class="chain-item">
+                                <span class="chain-dot" style="background:${c}"></span>
+                                <span class="chain-name">${src.name}</span>
+                                <span class="chain-status" style="background:${c}20;color:${c}">${s} ${(src.mastery * 100).toFixed(0)}%</span>
+                            </div>`;
+                        }
+                    });
+                    html += `</div></div>`;
+                }
+
+                const postreqs = GRAPH_DATA.edges.filter(e => e.source === node.id && e.type === 'DEPENDS_ON');
+                if (postreqs.length > 0) {
+                    html += `<div class="chain-section">
+                        <div class="chain-title">➡️ 后置技法（解锁后可用）</div>
+                        <div class="chain-list">`;
+                    postreqs.forEach(e => {
+                        const tgt = GRAPH_DATA.nodes.find(n => n.id === e.target);
+                        if (tgt) {
+                            html += `<div class="chain-item">
+                                <span class="chain-dot" style="background:#a78bfa"></span>
+                                <span class="chain-name">${tgt.name}</span>
+                            </div>`;
+                        }
+                    });
+                    html += `</div></div>`;
+                }
+
+                const phrases = GRAPH_DATA.edges.filter(e => e.target === node.id && e.type === 'REQUIRES');
+                if (phrases.length > 0) {
+                    html += `<div class="chain-section">
+                        <div class="chain-title">🎵 涉及该技法的唱句</div>
+                        <div class="chain-list">`;
+                    phrases.forEach(e => {
+                        const src = GRAPH_DATA.nodes.find(n => n.id === e.source);
+                        if (src) {
+                            html += `<div class="chain-item">
+                                <span class="chain-dot" style="background:#C9A84C"></span>
+                                <span class="chain-name">${src.name}</span>
+                                <span class="chain-status" style="background:rgba(201,168,76,0.10);color:#C9A84C">难度 ${src.difficulty.toFixed(2)}</span>
+                            </div>`;
+                        }
+                    });
+                    html += `</div></div>`;
+                }
+
+                if (node.mastery < 0.60) {
+                    const chainInfo = PREREQ_CHAINS[node.id];
+                    if (chainInfo) {
+                        html += `<div class="block-alert">
+                            <div class="block-alert-title">🔒 系统暂缓推送原因</div>
+                            <div class="block-alert-text">${chainInfo.reason}<br>受影响学生: ${chainInfo.blockedFor.join('、')}（${chainInfo.blockedFor.length}人）</div>
+                        </div>`;
+                    }
+                }
+
+            } else if (node.type === 'phrase') {
+                const color = getNodeColor(node);
+                html += `<div class="node-badge phrase">唱句节点 · ${node.piece}</div>`;
+                html += `<div class="meter">
+                    <div class="meter-label"><span class="name">动态难度 (Elo)</span><span class="val" style="color:${color}">${node.difficulty.toFixed(2)}</span></div>
+                    <div class="meter-bar"><div class="meter-fill" style="width:${node.difficulty * 100}%;background:${color}"></div></div>
+                </div>`;
+
+                const reqs = GRAPH_DATA.edges.filter(e => e.source === node.id && e.type === 'REQUIRES');
+                if (reqs.length > 0) {
+                    html += `<div class="chain-section">
+                        <div class="chain-title">🎯 所需技法</div>
+                        <div class="chain-list">`;
+                    let allReady = true;
+                    reqs.forEach(e => {
+                        const tgt = GRAPH_DATA.nodes.find(n => n.id === e.target);
+                        if (tgt) {
+                            const c = getNodeColor(tgt);
+                            const ready = tgt.mastery >= 0.70;
+                            if (!ready) allReady = false;
+                            html += `<div class="chain-item">
+                                <span class="chain-dot" style="background:${c}"></span>
+                                <span class="chain-name">${tgt.name}</span>
+                                <span class="chain-status" style="background:${c}20;color:${c}">${ready ? '✓ 达标' : '✗ 未达标'} ${(tgt.mastery * 100).toFixed(0)}%</span>
+                            </div>`;
+                        }
+                    });
+                    html += `</div></div>`;
+
+                    if (!allReady) {
+                        const chainInfo = PREREQ_CHAINS[node.id];
+                        if (chainInfo) {
+                            html += `<div class="block-alert">
+                                <div class="block-alert-title">🔒 暂缓推荐原因</div>
+                                <div class="block-alert-text">${chainInfo.reason}<br>受影响学生: ${chainInfo.blockedFor.join('、')}</div>
+                            </div>`;
+                        }
+                    }
+                }
+
+                const belongs = GRAPH_DATA.edges.filter(e => e.source === node.id && e.type === 'BELONGS_TO');
+                if (belongs.length > 0) {
+                    html += `<div class="chain-section">
+                        <div class="chain-title">🎭 所属剧目</div>
+                        <div class="chain-list">`;
+                    belongs.forEach(e => {
+                        const tgt = GRAPH_DATA.nodes.find(n => n.id === e.target);
+                        if (tgt) {
+                            html += `<div class="chain-item">
+                                <span class="chain-dot" style="background:#a855f7"></span>
+                                <span class="chain-name">${tgt.name}</span>
+                                <span class="chain-status" style="background:rgba(139,92,246,0.10);color:#7C3AED">${tgt.style}</span>
+                            </div>`;
+                        }
+                    });
+                    html += `</div></div>`;
+                }
+
+            } else if (node.type === 'piece') {
+                html += `<div class="node-badge piece">剧目节点 · ${node.style}</div>`;
+                const piecePhrases = GRAPH_DATA.edges.filter(e => e.target === node.id && e.type === 'BELONGS_TO');
+                if (piecePhrases.length > 0) {
+                    html += `<div class="chain-section">
+                        <div class="chain-title">🎭 包含唱句</div>
+                        <div class="chain-list">`;
+                    piecePhrases.forEach(e => {
+                        const src = GRAPH_DATA.nodes.find(n => n.id === e.source);
+                        if (src) {
+                            html += `<div class="chain-item">
+                                <span class="chain-dot" style="background:#C9A84C"></span>
+                                <span class="chain-name">${src.name}</span>
+                                <span class="chain-status" style="background:rgba(201,168,76,0.10);color:#C9A84C">难度 ${src.difficulty.toFixed(2)}</span>
+                            </div>`;
+                        }
+                    });
+                    html += `</div></div>`;
+                } else {
+                    html += `<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">暂无关联唱句</div>`;
+                }
+            }
+
+            content.innerHTML = html;
+            document.getElementById('panelTitle').textContent = `📌 ${node.name}`;
+        }
+
+        function closePanel() {
+            document.getElementById('sidePanel').classList.remove('show');
+        }
+
+        // ================================================================
+        // 工具栏交互
+        // ================================================================
+
+        function filterGraph(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.filter === filter);
+            });
+            renderGraph(filter);
+            closePanel();
+            selectedNodeId = null;
+            document.getElementById('highlightBtn').disabled = true;
+            showToast('info', '🔍 已筛选', filter === 'all' ? '显示全部节点' :
+                filter === 'technique' ? '仅显示技法节点' :
+                filter === 'phrase' ? '仅显示唱句节点' : '仅显示剧目节点');
+        }
+
+        function highlightPrereqChain() {
+            if (!selectedNodeId) {
+                showToast('warning', '⚠️ 请先选择节点', '点击图谱中的节点以查看其前置依赖链');
+                return;
+            }
+            const chainInfo = PREREQ_CHAINS[selectedNodeId];
+            if (!chainInfo) {
+                showToast('info', 'ℹ️ 无前置依赖', '该节点没有前置依赖要求');
+                return;
+            }
+
+            const node = GRAPH_DATA.nodes.find(n => n.id === selectedNodeId);
+            if (node) {
+                showNodeDetail(node);
+                const panel = document.getElementById('sidePanel');
+                setTimeout(() => {
+                    const chainSection = panel.querySelector('.chain-section');
+                    if (chainSection) {
+                        chainSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }, 100);
+                showToast('success', '🔦 已高亮', `显示「${node.name}」的前置依赖链`);
+            }
+        }
+
+        function toggleEditMode() {
+            editMode = !editMode;
+            const hint = document.getElementById('editHint');
+            hint.classList.toggle('show', editMode);
+            if (chart) {
+                chart.setOption({
+                    series: [{
+                        draggable: editMode
+                    }]
+                });
+            }
+            showToast('info', editMode ? '✏️ 编辑模式已开启' : '✏️ 编辑模式已关闭',
+                editMode ? '可拖拽节点调整位置，点击空白处取消选中' : '已退出编辑模式');
+        }
+
+        function resetLayout() {
+            if (chart) {
+                renderGraph(currentFilter);
+                closePanel();
+                selectedNodeId = null;
+                document.getElementById('highlightBtn').disabled = true;
+                showToast('success', '↺ 布局已重置', '图谱布局已恢复初始状态');
+            }
+        }
+
+        // ================================================================
+        // Toast 组件
+        // ================================================================
+
+        function showToast(type, title, msg) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            const iconMap = { success: '✅', info: 'ℹ️', warning: '⚠️' };
+            const icon = iconMap[type] || 'ℹ️';
+            toast.innerHTML = `
+                <div class="toast-icon">${icon}</div>
+                <div class="toast-content">
+                    <div class="toast-title">${title}</div>
+                    <div class="toast-msg">${msg}</div>
+                </div>
+                <div class="toast-close" onclick="this.parentElement.remove()">✕</div>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                if (toast.parentElement) toast.remove();
+            }, 4000);
+        }
+
+        // ================================================================
+        // 初始化
+        // ================================================================
+
+        function init() {
+            if (typeof echarts === 'undefined') {
+                document.getElementById('graphChart').innerHTML =
+                    '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#B83A2F;font-size:14px;">⚠️ ECharts 库加载失败，请检查网络连接后刷新页面</div>';
+                console.error('ECharts 未加载');
+                return;
+            }
+
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    initChart();
+                    setTimeout(() => {
+                        showToast('success', '🧠 知识图谱已加载',
+                            '点击节点查看依赖链 · 拖拽调整布局 · 筛选器切换视图');
+                    }, 500);
+                }, 100);
+            });
+
+            console.log('🧠 知识图谱可视化已初始化');
+        }
+
+        if (document.readyState === 'complete') {
+            init();
+        } else {
+            window.addEventListener('load', init);
+        }
+
+        window.filterGraph = filterGraph;
+        window.highlightPrereqChain = highlightPrereqChain;
+        window.toggleEditMode = toggleEditMode;
+        window.resetLayout = resetLayout;
+        window.closePanel = closePanel;
+        window.showToast = showToast;
+        window.showNodeDetail = showNodeDetail;
+    </script>
+
+</body>
+</html>

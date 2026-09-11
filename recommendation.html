@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>戏韵AI · 渐进式推荐</title>
+<script src="static/echarts.min.js"></script>
+<style>
+/* ============================================================
+   浅色高对比度配色 · 宣纸背景 + 景泰蓝/朱砂红
+   与 sing_along 保持一致
+   ============================================================ */
+:root {
+  --bg-primary: #F5EDE4;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F0E8DC;
+  --bg-hover: #F5F0EA;
+  --bg-card-header: #F8F3EC;
+  --text-primary: #2D1F14;
+  --text-secondary: #5A4A3A;
+  --text-muted: #8A7A6A;
+  --text-light: #B0A090;
+  --border-light: #E8DDD0;
+  --border-medium: #D5C8B8;
+  --border-strong: #C0B0A0;
+  --primary: #0066B3;
+  --primary-hover: #0055A0;
+  --primary-glow: rgba(0, 102, 179, 0.30);
+  --primary-soft: rgba(0, 102, 179, 0.08);
+  --primary-border: rgba(0, 102, 179, 0.25);
+  --success: #4A8F6B;
+  --success-soft: rgba(74, 143, 107, 0.12);
+  --warning: #C9A84C;
+  --warning-soft: rgba(201, 168, 76, 0.12);
+  --danger: #B83A2F;
+  --danger-soft: rgba(184, 58, 47, 0.12);
+  --nav-gradient: linear-gradient(90deg, #F5EDE4, #E8DDD0 40%, #D5C8B8 50%, #E8DDD0 60%, #F5EDE4);
+  --progress-gradient: linear-gradient(90deg, #0066B3, #4A8AF4);
+  --shadow-sm: 0 1px 4px rgba(0,0,0,0.04);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg-primary);
+  color:var(--text-primary);
+  min-height:100vh;
+  line-height:1.7;
+  font-size:16px;
+}
+
+/* ===== Navbar ===== */
+.navbar{
+  background:var(--nav-gradient);
+  border-bottom:2px solid var(--border-medium);
+  padding:0 24px;
+  height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  position:sticky;
+  top:0;
+  z-index:50;
+}
+.nav-brand{display:flex;align-items:center;gap:12px}
+.nav-brand .logo{
+  width:34px;height:34px;
+  background:linear-gradient(135deg, var(--primary), #004080);
+  border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:700;color:#fff;
+  box-shadow:0 2px 12px var(--primary-glow);
+}
+.nav-brand h1{font-size:17px;color:var(--text-primary);font-weight:700}
+.nav-brand .badge{
+  background:var(--primary-soft);
+  color:var(--primary);
+  padding:2px 10px;border-radius:12px;
+  font-size:11px;font-weight:600;
+  border:1px solid var(--primary-border);
+}
+.nav-user{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary)}
+.nav-user .avatar{
+  width:30px;height:30px;border-radius:50%;
+  background:linear-gradient(135deg, #B89076, #8B6B4F);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;color:#fff;
+}
+
+/* ===== Layout ===== */
+.layout{display:flex;min-height:calc(100vh - 58px)}
+.sidebar{
+  width:200px;background:var(--bg-secondary);
+  border-right:2px solid var(--border-light);
+  padding:12px 0;position:fixed;height:100%;overflow-y:auto;z-index:40;
+}
+.nav-group{margin-bottom:6px}
+.nav-group-title{
+  padding:6px 16px;font-size:11px;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:0.8px;font-weight:700;
+}
+.nav-item{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 16px;margin:0 8px;
+  color:var(--text-secondary);font-size:13px;
+  cursor:pointer;transition:all 0.2s;text-decoration:none;
+  border-radius:8px;border-left:4px solid transparent;
+}
+.nav-item:hover{color:var(--text-primary);background:var(--bg-hover)}
+.nav-item.active{
+  color:var(--primary);
+  background:var(--primary-soft);
+  border-left-color:var(--primary);
+  font-weight:600;
+}
+.nav-item .icon{font-size:16px;width:22px;text-align:center}
+.nav-badge{
+  margin-left:auto;background:var(--danger);color:#fff;
+  font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600;
+}
+.main-content{margin-left:200px;flex:1;padding:20px;max-width:1400px}
+
+/* ===== 页面头部 ===== */
+.page-header{margin-bottom:20px}
+.page-header h2{font-size:20px;color:var(--text-primary);font-weight:700;margin-bottom:2px}
+.page-header p{font-size:14px;color:var(--text-secondary)}
+
+/* ===== 学生选择器 ===== */
+.student-selector{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+.student-chip{
+  padding:8px 16px;border:2px solid var(--border-light);border-radius:8px;
+  background:var(--bg-secondary);color:var(--text-secondary);font-size:13px;
+  cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:8px;
+  font-weight:600;
+}
+.student-chip:hover{border-color:var(--border-medium);color:var(--text-primary)}
+.student-chip.active{
+  border-color:var(--primary);
+  background:var(--primary-soft);
+  color:var(--primary);
+}
+.student-chip .st-avatar{
+  width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:12px;background:var(--bg-primary);border:1px solid var(--border-light);
+}
+
+/* ===== 统计卡片 ===== */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+.stat-card{
+  background:var(--bg-secondary);
+  border:1px solid var(--border-light);
+  border-radius:12px;
+  padding:18px;display:flex;align-items:center;gap:14px;
+  box-shadow:var(--shadow-sm);
+}
+.stat-icon{
+  width:44px;height:44px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;font-size:20px;
+}
+.stat-info{flex:1}
+.stat-value{font-size:26px;font-weight:700;color:var(--text-primary);line-height:1}
+.stat-label{font-size:12px;color:var(--text-muted);margin-top:2px}
+
+/* ===== 卡片通用 ===== */
+.card{
+  background:var(--bg-secondary);
+  border:1px solid var(--border-light);
+  border-radius:14px;
+  padding:20px;
+  margin-bottom:16px;
+  box-shadow:var(--shadow-sm);
+  transition:border-color 0.3s, box-shadow 0.3s;
+}
+.card:hover{border-color:var(--border-medium);box-shadow:var(--shadow-md)}
+.card-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;flex-wrap:wrap;gap:10px;
+}
+.card-title{
+  font-size:15px;font-weight:700;color:var(--text-primary);
+  display:flex;align-items:center;gap:8px;
+}
+.card-title .icon{
+  width:28px;height:28px;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+  background:var(--primary-soft);color:var(--primary);
+}
+.card-action{
+  font-size:12px;color:var(--primary);cursor:pointer;font-weight:600;
+}
+.card-action:hover{text-decoration:underline}
+
+/* ===== 推荐列表 ===== */
+.rec-list{display:flex;flex-direction:column;gap:12px}
+.rec-item{
+  display:flex;align-items:flex-start;gap:14px;padding:16px;
+  background:var(--bg-primary);border-radius:12px;border:2px solid var(--border-light);
+  transition:all 0.2s;position:relative;overflow:hidden;
+}
+.rec-item:hover{border-color:var(--border-medium)}
+.rec-item.match{border-color:rgba(74,143,107,0.25)}
+.rec-item.challenge{border-color:rgba(201,168,76,0.25)}
+.rec-item.lock{border-color:rgba(139,92,246,0.25);opacity:0.85}
+.rec-item.teacher-override{border-color:rgba(139,92,246,0.4);box-shadow:0 0 0 1px rgba(139,92,246,0.1)}
+.rec-item.teacher-override::before{
+  content:"👩‍🏫 老师推荐";position:absolute;top:0;right:0;
+  background:linear-gradient(90deg,#7C3AED,#6D28D9);color:#fff;
+  font-size:10px;padding:2px 10px;border-radius:0 0 0 8px;font-weight:700;
+}
+.rec-rank{
+  width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:700;background:var(--bg-secondary);color:var(--text-muted);
+  flex-shrink:0;border:1px solid var(--border-light);
+}
+.rec-rank.top{background:linear-gradient(135deg, var(--warning), #B89076);color:#fff;border:none}
+.rec-rank.match{background:var(--success-soft);color:var(--success)}
+.rec-rank.challenge{background:var(--warning-soft);color:var(--warning)}
+.rec-rank.lock{background:rgba(139,92,246,0.12);color:#7C3AED}
+.rec-body{flex:1;min-width:0}
+.rec-header-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.rec-title{font-size:15px;font-weight:700;color:var(--text-primary)}
+.rec-badge{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700}
+.rec-badge.match{background:var(--success-soft);color:var(--success)}
+.rec-badge.challenge{background:var(--warning-soft);color:var(--warning)}
+.rec-badge.lock{background:rgba(139,92,246,0.12);color:#7C3AED}
+.rec-piece{font-size:12px;color:var(--text-muted)}
+.rec-reason{font-size:12px;color:var(--text-secondary);line-height:1.6;margin-bottom:10px}
+.rec-reason strong{color:var(--text-primary)}
+.rec-meta{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px}
+.rec-meta-item{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted)}
+.rec-meta-item .val{font-weight:700;color:var(--text-primary)}
+.rec-skills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.rec-skill{padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px}
+.rec-skill.ready{background:var(--success-soft);color:var(--success);border:1px solid rgba(74,143,107,0.2)}
+.rec-skill.blocked{background:var(--danger-soft);color:var(--danger);border:1px solid rgba(184,58,47,0.2)}
+.rec-skill .dot{width:6px;height:6px;border-radius:50%}
+.rec-bar-wrap{width:100%;height:6px;background:var(--border-light);border-radius:3px;overflow:hidden;margin-bottom:8px}
+.rec-bar{height:100%;border-radius:3px;transition:width 0.4s}
+.rec-bar-label{display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted)}
+.rec-actions{display:flex;gap:8px;flex-wrap:wrap}
+.rec-actions button{
+  padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;
+  cursor:pointer;transition:all 0.2s;border:2px solid var(--border-light);
+  background:var(--bg-secondary);color:var(--text-secondary);
+}
+.rec-actions button:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-soft)}
+.rec-actions .btn-start{
+  background:var(--primary);color:#fff;border:none;
+  box-shadow:0 2px 8px var(--primary-glow);
+}
+.rec-actions .btn-start:hover{background:var(--primary-hover);opacity:0.9}
+.rec-actions .btn-start:disabled{opacity:0.4;cursor:not-allowed}
+.rec-actions .btn-override:hover{border-color:#7C3AED;color:#7C3AED}
+
+/* ===== 锁定遮罩 ===== */
+.lock-overlay{
+  position:absolute;inset:0;background:rgba(245,237,228,0.85);
+  display:flex;align-items:center;justify-content:center;
+  backdrop-filter:blur(2px);border-radius:12px;
+  z-index:10;
+}
+.lock-content{text-align:center;padding:20px}
+.lock-icon{font-size:32px;margin-bottom:8px}
+.lock-text{font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:4px}
+.lock-detail{font-size:12px;color:var(--text-secondary);max-width:280px;line-height:1.5}
+.lock-skills{display:flex;gap:6px;justify-content:center;margin-top:10px;flex-wrap:wrap}
+
+/* ===== 能力雷达图 ===== */
+#abilityChart{width:100%;height:280px}
+
+/* ===== 曲目库 ===== */
+.lib-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.lib-item{
+  padding:12px;background:var(--bg-primary);border-radius:8px;
+  border:2px solid var(--border-light);cursor:pointer;transition:all 0.2s;
+  display:flex;align-items:center;gap:10px;
+}
+.lib-item:hover{border-color:var(--border-medium);background:var(--bg-hover)}
+.lib-item.selected{border-color:var(--primary);background:var(--primary-soft)}
+.lib-item .lib-icon{
+  width:36px;height:36px;border-radius:8px;
+  background:var(--primary-soft);display:flex;align-items:center;justify-content:center;
+  font-size:18px;flex-shrink:0;color:var(--primary);
+}
+.lib-item .lib-info{flex:1;min-width:0}
+.lib-item .lib-title{font-size:13px;font-weight:700;color:var(--text-primary)}
+.lib-item .lib-meta{font-size:11px;color:var(--text-muted);margin-top:2px}
+.lib-item .lib-diff{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;flex-shrink:0}
+.lib-diff.easy{background:var(--success-soft);color:var(--success)}
+.lib-diff.medium{background:var(--warning-soft);color:var(--warning)}
+.lib-diff.hard{background:var(--danger-soft);color:var(--danger)}
+
+/* ===== 前置锁定面板 ===== */
+#prereqPanel .prereq-item{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;background:var(--bg-primary);border-radius:8px;
+  border:1px solid var(--border-light);margin-bottom:8px;
+}
+
+/* ===== 模态框 ===== */
+.modal{
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  background:rgba(245,237,228,0.85);backdrop-filter:blur(5px);
+  display:none;align-items:center;justify-content:center;z-index:100;
+}
+.modal.show{display:flex}
+.modal-box{
+  background:var(--bg-secondary);border:2px solid var(--border-medium);
+  border-radius:14px;padding:24px;width:480px;max-width:90vw;max-height:85vh;
+  overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.08);
+}
+.modal-title{font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:14px}
+.modal-text{font-size:13px;color:var(--text-secondary);line-height:1.7;margin-bottom:16px}
+.modal-text strong{color:var(--text-primary)}
+.modal-btns{display:flex;gap:10px}
+.modal-btns button{flex:1;padding:10px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}
+.modal-btns .btn-confirm{background:var(--primary);color:#fff;border:none}
+.modal-btns .btn-cancel{background:var(--bg-primary);color:var(--text-secondary);border:2px solid var(--border-light)}
+.override-list{display:flex;flex-direction:column;gap:8px;max-height:200px;overflow-y:auto}
+.override-item{
+  padding:10px;background:var(--bg-primary);border-radius:6px;
+  border:2px solid var(--border-light);cursor:pointer;font-size:12px;
+  color:var(--text-secondary);transition:all 0.2s;
+}
+.override-item:hover{border-color:var(--border-medium)}
+.override-item.selected{border-color:#7C3AED;background:rgba(139,92,246,0.08);color:var(--text-primary)}
+
+/* ===== Toast ===== */
+.toast-container{
+  position:fixed;top:72px;right:20px;z-index:200;
+  display:flex;flex-direction:column;gap:10px;
+}
+.toast{
+  background:var(--bg-secondary);border:2px solid var(--border-light);
+  border-radius:12px;padding:14px 18px;
+  box-shadow:0 10px 30px rgba(0,0,0,0.06);
+  display:flex;align-items:flex-start;gap:12px;
+  min-width:300px;max-width:400px;animation:toastIn 0.3s ease;
+}
+.toast.success{border-color:rgba(74,143,107,0.4)}
+.toast.info{border-color:rgba(0,102,179,0.4)}
+.toast-icon{font-size:20px}
+.toast-content{flex:1}
+.toast-title{font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:2px}
+.toast-msg{font-size:12px;color:var(--text-secondary);line-height:1.5}
+@keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+
+/* ===== 滚动条 ===== */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg-primary)}
+::-webkit-scrollbar-thumb{background:var(--border-medium);border-radius:3px}
+
+@media (max-width:1200px){.sidebar{display:none}.main-content{margin-left:0}.stats-row{grid-template-columns:repeat(2,1fr)}.lib-grid{grid-template-columns:1fr}}
+@media (max-width:768px){.stats-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand">
+    <div class="logo">戏</div>
+    <h1>戏韵AI · 老师工作台</h1>
+    <span class="badge">渐进式推荐</span>
+  </div>
+  <div class="nav-user">
+    <div class="avatar">👩‍🏫</div>
+    <span>王慧芳</span>
+    <span style="color:var(--text-muted);font-size:13px">|</span>
+    <span style="color:var(--text-secondary);font-size:13px">中国戏曲学院</span>
+  </div>
+</nav>
+
+<div class="layout">
+<aside class="sidebar">
+  <div class="nav-group">
+    <div class="nav-group-title">核心功能</div>
+    <a href="dashboard.html" class="nav-item"><span class="icon">📊</span>班级看板</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">🧑‍🏫 教学工作台</div>
+    <a href="demo_library.html" class="nav-item"><span class="icon">🎵</span>示范库管理</a>
+    <a href="annotation.html" class="nav-item"><span class="icon">🏷️</span>歌词级标注</a>
+    <a href="homework.html" class="nav-item"><span class="icon">📝</span>作业批改</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">🎤 学生练习</div>
+    <a href="sing_along.html" class="nav-item"><span class="icon">🎙️</span>实时跟唱</a>
+    <a href="AI_teacher.html" class="nav-item"><span class="icon">🤖</span>AI教练对话</a>
+    <a href="cat_test.html" class="nav-item"><span class="icon">🎯</span>摸底测试（CAT）</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">📈 数据分析</div>
+    <a href="tracking.html" class="nav-item"><span class="icon">📈</span>能力追踪（BKT）</a>
+    <a href="recommendation.html" class="nav-item active"><span class="icon">🎯</span>渐进式推荐</a>
+    <a href="knowledge_graph.html" class="nav-item"><span class="icon">🧠</span>知识图谱</a>
+    <a href="cdm_report.html" class="nav-item"><span class="icon">🔍</span>归因诊断（CDM）</a>
+    <a href="daily_report.html" class="nav-item"><span class="icon">📰</span>每日学习报告</a>
+  </div>
+</aside>
+
+<main class="main-content">
+  <div class="page-header">
+    <h2>🎯 渐进式推荐</h2>
+    <p>基于 BKT + Elo + 知识图谱的 Top-5 自适应推荐 · 实现"跳一跳够得着"的学习路径</p>
+  </div>
+
+  <!-- 学生选择器 -->
+  <div class="student-selector" id="studentSelector"></div>
+
+  <!-- 统计卡片 -->
+  <div class="stats-row" id="statsRow"></div>
+
+  <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px">
+    <!-- 左侧：推荐列表 -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="icon" style="background:rgba(201,168,76,0.10);color:var(--warning)">🏆</div>
+            系统推荐 · Top 5
+          </div>
+          <span style="font-size:12px;color:var(--text-muted)">按学习增益排序 · 老师可覆盖</span>
+        </div>
+        <div class="rec-list" id="recList"></div>
+      </div>
+
+      <!-- 全部曲目库 -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="icon" style="background:rgba(0,102,179,0.10);color:var(--primary)">📚</div>
+            全部曲目库
+          </div>
+          <span style="font-size:12px;color:var(--text-muted)">学生可手动选择 · 不受算法限制</span>
+        </div>
+        <div class="lib-grid" id="libGrid"></div>
+      </div>
+    </div>
+
+    <!-- 右侧：能力雷达 + 前置状态 -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="icon" style="background:rgba(139,92,246,0.10);color:#7C3AED">🧬</div>
+            当前能力画像
+          </div>
+        </div>
+        <div id="abilityChart"></div>
+        <!-- 文字信息 - 确保显示 -->
+        <div style="font-size:13px;color:var(--text-muted);margin-top:8px;text-align:center;padding:4px 0;border-top:1px solid var(--border-light);">
+          综合掌握度 <strong id="overallMastery" style="color:var(--text-primary);font-size:14px;">—</strong>
+          <span style="margin:0 8px;">·</span>
+          推荐难度区间 <strong id="diffRange" style="color:var(--warning);font-size:14px;">—</strong>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="icon" style="background:rgba(184,58,47,0.10);color:var(--danger)">🔒</div>
+            前置技法锁定状态
+          </div>
+        </div>
+        <div id="prereqPanel"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="icon" style="background:rgba(0,102,179,0.10);color:var(--primary)">📖</div>
+            推荐算法说明
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);line-height:1.8">
+          <p style="margin-bottom:8px"><strong style="color:var(--text-primary)">🎯 匹配度</strong> = 1 - |唱句难度 - 学生能力|，越接近越优</p>
+          <p style="margin-bottom:8px"><strong style="color:var(--text-primary)">📈 信息增益</strong> = 该唱句涉及未掌握技法的 BKT 置信度提升预期</p>
+          <p style="margin-bottom:8px"><strong style="color:var(--text-primary)">🔓 解锁状态</strong> = 前置技法掌握度 ≥ 0.85 方可解锁</p>
+          <p><strong style="color:var(--text-primary)">🚫 去重规则</strong> = 排除最近 3 次已练习的唱句</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- 老师覆盖确认模态框 -->
+<div class="modal" id="overrideModal">
+  <div class="modal-box">
+    <div class="modal-title">👩‍🏫 老师覆盖推荐</div>
+    <div class="modal-text">
+      您正在将「<strong id="overrideStudent">—</strong>」的推荐列表中的第 <strong id="overrideRank">—</strong> 位替换为：<br><br>
+      <strong id="overrideTarget" style="color:#7C3AED;font-size:15px">—</strong><br><br>
+      系统将记录此次覆盖，并作为推荐算法的反馈数据。被覆盖的原有推荐将移至备选列表。
+    </div>
+    <div class="modal-btns">
+      <button class="btn-confirm" onclick="confirmOverride()">确认覆盖</button>
+      <button class="btn-cancel" onclick="closeModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast 容器 -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ============================================
+// 模拟数据层（后端 API 预留接口）
+// ============================================
+
+const STUDENTS = [
+  { id: "s01", name: "李小燕", avatar: "🎭", level: "初级" },
+  { id: "s02", name: "张博文", avatar: "🎤", level: "中级" },
+  { id: "s03", name: "刘思琪", avatar: "🎵", level: "初级" },
+  { id: "s04", name: "陈浩然", avatar: "🎶", level: "高级" },
+  { id: "s05", name: "赵雨桐", avatar: "🎼", level: "中级" },
+  { id: "s06", name: "周明轩", avatar: "🎹", level: "初级" },
+  { id: "s07", name: "吴佳怡", avatar: "🎸", level: "中级" },
+  { id: "s08", name: "孙志远", avatar: "🥁", level: "初级" }
+];
+
+const TECHNIQUES = ["音准控制","气息支撑","滑音","拖腔","归韵咬字","节奏感知","颤音","装饰音技巧"];
+
+const ABILITY_DATA = {
+  s01: { overall: 0.58, ability: { "音准控制": 0.72, "气息支撑": 0.51, "滑音": 0.63, "拖腔": 0.28, "归韵咬字": 0.45, "节奏感知": 0.68, "颤音": 0.35, "装饰音技巧": 0.30 } },
+  s02: { overall: 0.81, ability: { "音准控制": 0.85, "气息支撑": 0.78, "滑音": 0.82, "拖腔": 0.71, "归韵咬字": 0.80, "节奏感知": 0.88, "颤音": 0.65, "装饰音技巧": 0.60 } },
+  s03: { overall: 0.42, ability: { "音准控制": 0.48, "气息支撑": 0.42, "滑音": 0.35, "拖腔": 0.22, "归韵咬字": 0.55, "节奏感知": 0.50, "颤音": 0.25, "装饰音技巧": 0.20 } },
+  s04: { overall: 0.88, ability: { "音准控制": 0.94, "气息支撑": 0.91, "滑音": 0.88, "拖腔": 0.85, "归韵咬字": 0.90, "节奏感知": 0.87, "颤音": 0.82, "装饰音技巧": 0.78 } },
+  s05: { overall: 0.74, ability: { "音准控制": 0.76, "气息支撑": 0.68, "滑音": 0.72, "拖腔": 0.65, "归韵咬字": 0.78, "节奏感知": 0.82, "颤音": 0.55, "装饰音技巧": 0.50 } },
+  s06: { overall: 0.50, ability: { "音准控制": 0.55, "气息支撑": 0.48, "滑音": 0.43, "拖腔": 0.30, "归韵咬字": 0.52, "节奏感知": 0.60, "颤音": 0.30, "装饰音技巧": 0.25 } },
+  s07: { overall: 0.78, ability: { "音准控制": 0.82, "气息支撑": 0.75, "滑音": 0.79, "拖腔": 0.68, "归韵咬字": 0.85, "节奏感知": 0.80, "颤音": 0.62, "装饰音技巧": 0.58 } },
+  s08: { overall: 0.35, ability: { "音准控制": 0.40, "气息支撑": 0.35, "滑音": 0.28, "拖腔": 0.28, "归韵咬字": 0.42, "节奏感知": 0.45, "颤音": 0.20, "装饰音技巧": 0.18 } }
+};
+
+const PHRASE_LIBRARY = [
+  { id: "p01", title: "辕门外三声炮（前四句）", piece: "《穆桂英挂帅》", difficulty: 0.62, banshi: "西皮流水", duration: "18s", skills: ["音准控制","拖腔"] },
+  { id: "p02", title: "海岛冰轮初转腾（慢板）", piece: "《贵妃醉酒》", difficulty: 0.55, banshi: "四平调", duration: "22s", skills: ["滑音","气息支撑","归韵咬字"] },
+  { id: "p03", title: "看大王在帐中", piece: "《霸王别姬》", difficulty: 0.48, banshi: "南梆子", duration: "20s", skills: ["音准控制","颤音"] },
+  { id: "p04", title: "叫张生隐藏在棋盘之下", piece: "《红娘》", difficulty: 0.72, banshi: "西皮流水", duration: "16s", skills: ["滑音","节奏感知"] },
+  { id: "p05", title: "我正在城楼观山景", piece: "《空城计》", difficulty: 0.88, banshi: "西皮慢板", duration: "35s", skills: ["拖腔","气息支撑","音准控制","归韵咬字"] },
+  { id: "p06", title: "海岛冰轮初转腾（全段）", piece: "《贵妃醉酒》", difficulty: 0.85, banshi: "四平调", duration: "45s", skills: ["拖腔","滑音","气息支撑","归韵咬字"] },
+  { id: "p07", title: "辕门外三声炮（全段）", piece: "《穆桂英挂帅》", difficulty: 0.81, banshi: "西皮流水", duration: "38s", skills: ["拖腔","音准控制","归韵咬字"] },
+  { id: "p08", title: "气息基础短句 · 慢吸慢呼", piece: "基础练习", difficulty: 0.30, banshi: "练习曲", duration: "15s", skills: ["气息支撑"] },
+  { id: "p09", title: "音准感知训练 · 单音模唱", piece: "基础练习", difficulty: 0.25, banshi: "练习曲", duration: "12s", skills: ["音准控制"] },
+  { id: "p10", title: "调门找音练习 · 慢速跟唱", piece: "基础练习", difficulty: 0.20, banshi: "练习曲", duration: "14s", skills: ["音准控制"] },
+  { id: "p11", title: "滑音专项练习 · 上滑音", piece: "专项练习", difficulty: 0.50, banshi: "练习曲", duration: "16s", skills: ["滑音"] },
+  { id: "p12", title: "拖腔专项练习 · 长音保持", piece: "专项练习", difficulty: 0.55, banshi: "练习曲", duration: "20s", skills: ["拖腔","气息支撑"] }
+];
+
+const RECOMMENDATIONS = {
+  s01: [
+    { phraseId: "p01", matchScore: 0.81, infoGain: 0.45, status: "challenge", reason: "难度略高于当前水平（0.62 vs 0.58），适合挑战，重点练习拖腔" },
+    { phraseId: "p02", matchScore: 0.76, infoGain: 0.38, status: "match", reason: "难度匹配，前置技法已达标，巩固音准与气息" },
+    { phraseId: "p03", matchScore: 0.72, infoGain: 0.35, status: "match", reason: "难度适中，颤音技法可引入新挑战" },
+    { phraseId: "p08", matchScore: 0.65, infoGain: 0.52, status: "match", reason: "前置技能补齐，气息支撑薄弱需优先巩固" },
+    { phraseId: "p11", matchScore: 0.58, infoGain: 0.28, status: "lock", reason: "滑音前置技法「音准感知」未达标（0.63 < 0.85）" }
+  ],
+  s02: [
+    { phraseId: "p07", matchScore: 0.88, infoGain: 0.35, status: "match", reason: "难度匹配，综合技法训练，拖腔可再精进" },
+    { phraseId: "p04", matchScore: 0.82, infoGain: 0.42, status: "challenge", reason: "花旦唱腔，拓展滑音技法" },
+    { phraseId: "p06", matchScore: 0.78, infoGain: 0.38, status: "challenge", reason: "高难度挑战，四平调韵味处理" },
+    { phraseId: "p05", matchScore: 0.75, infoGain: 0.45, status: "challenge", reason: "老生慢板，气息长拖腔，跨流派拓展" },
+    { phraseId: "p12", matchScore: 0.60, infoGain: 0.20, status: "match", reason: "拖腔专项巩固，可作为热身练习" }
+  ],
+  s03: [
+    { phraseId: "p08", matchScore: 0.85, infoGain: 0.55, status: "match", reason: "前置技能补齐，气息支撑最薄弱，优先训练" },
+    { phraseId: "p09", matchScore: 0.82, infoGain: 0.58, status: "match", reason: "音准控制薄弱，需基础单音模唱训练" },
+    { phraseId: "p10", matchScore: 0.78, infoGain: 0.50, status: "match", reason: "整体音准偏低，调门找音建立基准" },
+    { phraseId: "p03", matchScore: 0.45, infoGain: 0.30, status: "lock", reason: "颤音前置「音准稳定性」未达标（0.48 < 0.85）" },
+    { phraseId: "p01", matchScore: 0.35, infoGain: 0.25, status: "lock", reason: "拖腔前置「气息支撑」未达标（0.42 < 0.85）" }
+  ],
+  s04: [
+    { phraseId: "p05", matchScore: 0.92, infoGain: 0.40, status: "challenge", reason: "高难度挑战，综合技法训练，老生唱腔拓展" },
+    { phraseId: "p06", matchScore: 0.88, infoGain: 0.35, status: "match", reason: "四平调韵味处理，梅派经典全段" },
+    { phraseId: "p07", matchScore: 0.85, infoGain: 0.30, status: "match", reason: "穆桂英挂帅全段，综合复习" },
+    { phraseId: "p04", matchScore: 0.78, infoGain: 0.38, status: "match", reason: "荀派花旦，风格拓展" },
+    { phraseId: "p12", matchScore: 0.55, infoGain: 0.15, status: "match", reason: "拖腔专项精进，可作为保持练习" }
+  ],
+  s05: [
+    { phraseId: "p07", matchScore: 0.82, infoGain: 0.38, status: "match", reason: "难度匹配，恢复练习，拖腔可再精进" },
+    { phraseId: "p06", matchScore: 0.78, infoGain: 0.42, status: "challenge", reason: "难度略高，四平调韵味适合挑战" },
+    { phraseId: "p02", matchScore: 0.75, infoGain: 0.30, status: "match", reason: "难度适中，巩固音准与气息" },
+    { phraseId: "p08", matchScore: 0.65, infoGain: 0.25, status: "match", reason: "气息支撑下降，建议巩固" },
+    { phraseId: "p05", matchScore: 0.55, infoGain: 0.35, status: "lock", reason: "老生唱腔前置「拖腔」需更稳固（0.65 < 0.85）" }
+  ],
+  s06: [
+    { phraseId: "p09", matchScore: 0.80, infoGain: 0.48, status: "match", reason: "音准感知 0.43，接近解锁滑音，基础训练" },
+    { phraseId: "p01", matchScore: 0.72, infoGain: 0.42, status: "match", reason: "前四句难度适中，音准控制训练" },
+    { phraseId: "p08", matchScore: 0.70, infoGain: 0.45, status: "match", reason: "气息支撑 0.48，前置技能补齐" },
+    { phraseId: "p11", matchScore: 0.48, infoGain: 0.30, status: "lock", reason: "前置技法「音准感知」未达标（0.43 < 0.85）" },
+    { phraseId: "p04", matchScore: 0.35, infoGain: 0.20, status: "lock", reason: "多前置技法未达标，节奏感知不足" }
+  ],
+  s07: [
+    { phraseId: "p07", matchScore: 0.85, infoGain: 0.35, status: "match", reason: "难度匹配，拖腔可再精进" },
+    { phraseId: "p04", matchScore: 0.80, infoGain: 0.40, status: "challenge", reason: "花旦活泼唱腔，拓展风格" },
+    { phraseId: "p05", matchScore: 0.78, infoGain: 0.45, status: "challenge", reason: "老生慢板，气息长拖腔挑战" },
+    { phraseId: "p06", matchScore: 0.75, infoGain: 0.38, status: "match", reason: "四平调韵味处理" },
+    { phraseId: "p12", matchScore: 0.60, infoGain: 0.18, status: "match", reason: "拖腔专项保持" }
+  ],
+  s08: [
+    { phraseId: "p10", matchScore: 0.88, infoGain: 0.55, status: "match", reason: "整体音准偏低，需基础调门找音训练" },
+    { phraseId: "p08", matchScore: 0.85, infoGain: 0.50, status: "match", reason: "气息支撑 0.35，最薄弱前置技能补齐" },
+    { phraseId: "p09", matchScore: 0.80, infoGain: 0.48, status: "match", reason: "音准控制 0.40，单音模唱建立感知" },
+    { phraseId: "p03", matchScore: 0.30, infoGain: 0.20, status: "lock", reason: "多前置技法未达标" },
+    { phraseId: "p01", matchScore: 0.25, infoGain: 0.15, status: "lock", reason: "气息支撑与音准稳定性均未达标" }
+  ]
+};
+
+let currentStudentId = "s01";
+let overrideTarget = null;
+let overrideRank = null;
+let abilityChart = null;
+
+// ============================================
+// 工具函数
+// ============================================
+
+function getDiffLabel(d) {
+  if (d >= 0.85) return { text: "高难度", cls: "hard", color: "#B83A2F" };
+  if (d >= 0.70) return { text: "中等", cls: "medium", color: "#C9A84C" };
+  return { text: "入门", cls: "easy", color: "#4A8F6B" };
+}
+
+function getPLColor(p) {
+  if (p >= 0.85) return { bar: "#4A8F6B", text: "#4A8F6B", label: "已掌握" };
+  if (p >= 0.60) return { bar: "#0066B3", text: "#0066B3", label: "学习中" };
+  if (p >= 0.40) return { bar: "#C9A84C", text: "#C9A84C", label: "薄弱" };
+  return { bar: "#B83A2F", text: "#B83A2F", label: "未掌握" };
+}
+
+// ============================================
+// 渲染逻辑
+// ============================================
+
+function renderStudentSelector() {
+  document.getElementById("studentSelector").innerHTML = STUDENTS.map(s => {
+    const isActive = s.id === currentStudentId;
+    return `<div class="student-chip ${isActive ? 'active' : ''}" onclick="selectStudent('${s.id}')">
+      <span class="st-avatar">${s.avatar}</span>
+      <span>${s.name}</span>
+      <span style="font-size:11px;color:var(--text-muted)">· ${s.level}</span>
+    </div>`;
+  }).join("");
+}
+
+function renderStats() {
+  const data = ABILITY_DATA[currentStudentId];
+  const recs = RECOMMENDATIONS[currentStudentId];
+  const matchCount = recs.filter(r => r.status === "match").length;
+  const challengeCount = recs.filter(r => r.status === "challenge").length;
+  const lockCount = recs.filter(r => r.status === "lock").length;
+
+  document.getElementById("statsRow").innerHTML = `
+    <div class="stat-card">
+      <div class="stat-icon" style="background:rgba(0,102,179,0.10)">📊</div>
+      <div class="stat-info">
+        <div class="stat-value" style="color:var(--primary)">${(data.overall * 100).toFixed(0)}%</div>
+        <div class="stat-label">综合掌握度</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:rgba(74,143,107,0.10)">✅</div>
+      <div class="stat-info">
+        <div class="stat-value" style="color:var(--success)">${matchCount}</div>
+        <div class="stat-label">难度匹配</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:rgba(201,168,76,0.10)">🔥</div>
+      <div class="stat-info">
+        <div class="stat-value" style="color:var(--warning)">${challengeCount}</div>
+        <div class="stat-label">挑战推荐</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:rgba(139,92,246,0.10)">🔒</div>
+      <div class="stat-info">
+        <div class="stat-value" style="color:#7C3AED">${lockCount}</div>
+        <div class="stat-label">已锁定</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderRecList() {
+  const recs = RECOMMENDATIONS[currentStudentId];
+  const ability = ABILITY_DATA[currentStudentId];
+  const container = document.getElementById("recList");
+
+  container.innerHTML = recs.map((rec, idx) => {
+    const phrase = PHRASE_LIBRARY.find(p => p.id === rec.phraseId);
+    const diffInfo = getDiffLabel(phrase.difficulty);
+    const isLock = rec.status === "lock";
+    const isTop3 = idx < 3;
+
+    const skillsHtml = phrase.skills.map(sk => {
+      const mastery = ability.ability[sk] || 0;
+      const ready = mastery >= 0.60;
+      return `<span class="rec-skill ${ready ? 'ready' : 'blocked'}"><span class="dot" style="background:${ready ? '#4A8F6B' : '#B83A2F'}"></span>${sk} ${(mastery * 100).toFixed(0)}%</span>`;
+    }).join("");
+
+    const matchColor = rec.status === "match" ? "#4A8F6B" : (rec.status === "challenge" ? "#C9A84C" : "#7C3AED");
+
+    const lockOverlay = isLock ? `
+      <div class="lock-overlay">
+        <div class="lock-content">
+          <div class="lock-icon">🔒</div>
+          <div class="lock-text">前置技法未达标</div>
+          <div class="lock-detail">${rec.reason}</div>
+          <div class="lock-skills">${phrase.skills.map(sk => {
+            const m = ability.ability[sk] || 0;
+            const r = m >= 0.60;
+            return `<span class="rec-skill ${r ? 'ready' : 'blocked'}"><span class="dot" style="background:${r ? '#4A8F6B' : '#B83A2F'}"></span>${sk}</span>`;
+          }).join("")}</div>
+        </div>
+      </div>
+    ` : "";
+
+    return `
+      <div class="rec-item ${rec.status} ${rec.teacherOverride ? 'teacher-override' : ''}" id="rec-${idx}">
+        ${lockOverlay}
+        <div class="rec-rank ${isTop3 ? 'top' : rec.status}">${idx + 1}</div>
+        <div class="rec-body">
+          <div class="rec-header-row">
+            <span class="rec-title">${phrase.title}</span>
+            <span class="rec-badge ${rec.status}">${rec.status === "match" ? "难度匹配" : (rec.status === "challenge" ? "挑战" : "已锁定")}</span>
+            <span class="rec-piece">${phrase.piece} · ${phrase.banshi}</span>
+          </div>
+          <div class="rec-reason">${rec.reason}</div>
+          <div class="rec-meta">
+            <span class="rec-meta-item">难度: <span class="val" style="color:${diffInfo.color}">${phrase.difficulty.toFixed(2)} · ${diffInfo.text}</span></span>
+            <span class="rec-meta-item">匹配度: <span class="val">${(rec.matchScore * 100).toFixed(0)}%</span></span>
+            <span class="rec-meta-item">信息增益: <span class="val">${(rec.infoGain * 100).toFixed(0)}%</span></span>
+            <span class="rec-meta-item">⏱️ ${phrase.duration}</span>
+          </div>
+          <div class="rec-bar-wrap">
+            <div class="rec-bar" style="width:${rec.matchScore * 100}%;background:linear-gradient(90deg,${matchColor},${matchColor}80)"></div>
+          </div>
+          <div class="rec-bar-label">
+            <span>学习增益综合评分</span>
+            <span>${(rec.matchScore * rec.infoGain * 100).toFixed(1)} 分</span>
+          </div>
+          <div class="rec-skills">${skillsHtml}</div>
+          <div class="rec-actions">
+            <button class="btn-start" onclick="startPractice('${phrase.id}')" ${isLock ? 'disabled' : ''}>${isLock ? '🔒 前置未达标' : '▶ 开始练习'}</button>
+            <button class="btn-override" onclick="openOverrideModal(${idx})">👩‍🏫 老师推荐</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderLibGrid() {
+  const ability = ABILITY_DATA[currentStudentId];
+  const recs = RECOMMENDATIONS[currentStudentId];
+  const recIds = recs.map(r => r.phraseId);
+
+  document.getElementById("libGrid").innerHTML = PHRASE_LIBRARY.map(p => {
+    const inRec = recIds.includes(p.id);
+    const diffInfo = getDiffLabel(p.difficulty);
+    return `
+      <div class="lib-item ${inRec ? 'selected' : ''}" onclick="selectFromLib('${p.id}')">
+        <div class="lib-icon">🎵</div>
+        <div class="lib-info">
+          <div class="lib-title">${p.title}</div>
+          <div class="lib-meta">${p.piece} · ${p.banshi} · ${p.duration}</div>
+        </div>
+        <span class="lib-diff ${diffInfo.cls}">${diffInfo.text}</span>
+      </div>
+    `;
+  }).join("");
+}
+
+function initAbilityChart() {
+  const data = ABILITY_DATA[currentStudentId];
+  const dom = document.getElementById("abilityChart");
+  if (abilityChart) abilityChart.dispose();
+  abilityChart = echarts.init(dom);
+
+  const values = TECHNIQUES.map(t => data.ability[t] || 0);
+
+  const option = {
+    backgroundColor: "transparent",
+    tooltip: {
+      backgroundColor: "var(--bg-secondary)",
+      borderColor: "var(--border-light)",
+      textStyle: { color: "var(--text-primary)", fontSize: 12 },
+      formatter: function(p) {
+        const color = getPLColor(p.value);
+        return `<div style="font-weight:700">${p.name}</div><div style="color:${color.text};font-size:16px;font-weight:700">${(p.value * 100).toFixed(0)}% · ${color.label}</div>`;
+      }
+    },
+    radar: {
+      indicator: TECHNIQUES.map(t => ({ name: t, max: 1 })),
+      shape: "polygon",
+      splitNumber: 4,
+      axisName: { color: "#2D1F14", fontSize: 10 },
+      splitLine: { lineStyle: { color: "var(--border-light)" } },
+      splitArea: { show: true, areaStyle: { color: ["rgba(245,237,228,0.4)", "rgba(245,237,228,0.2)"] } },
+      axisLine: { lineStyle: { color: "var(--border-light)" } }
+    },
+    series: [{
+      type: "radar",
+      data: [{
+        value: values,
+        name: "掌握度",
+        areaStyle: { color: "rgba(0,102,179,0.12)" },
+        lineStyle: { color: "#0066B3", width: 2 },
+        itemStyle: { color: "#0066B3" }
+      }],
+      symbolSize: 5
+    }]
+  };
+
+  abilityChart.setOption(option);
+  
+  // 延迟确保图表渲染完成后更新文字信息（修复文字不显示问题）
+  setTimeout(() => {
+    // 更新综合掌握度
+    const overallEl = document.getElementById("overallMastery");
+    if (overallEl) {
+      overallEl.textContent = (data.overall * 100).toFixed(0) + "%";
+    }
+    
+    // 更新推荐难度区间
+    const diffEl = document.getElementById("diffRange");
+    if (diffEl) {
+      const minDiff = Math.max(0.20, data.overall - 0.15);
+      const maxDiff = Math.min(0.95, data.overall + 0.20);
+      diffEl.textContent = minDiff.toFixed(2) + " ~ " + maxDiff.toFixed(2);
+    }
+    
+    // 如果 abilityChart 存在，resize 确保正确渲染
+    if (abilityChart) {
+      abilityChart.resize();
+    }
+  }, 150);
+
+  window.addEventListener("resize", () => { if (abilityChart) abilityChart.resize(); });
+}
+
+function renderPrereqPanel() {
+  const ability = ABILITY_DATA[currentStudentId];
+  const container = document.getElementById("prereqPanel");
+
+  const blocked = TECHNIQUES.filter(t => (ability.ability[t] || 0) < 0.60).map(t => {
+    const p = ability.ability[t] || 0;
+    const color = getPLColor(p);
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-primary);border-radius:8px;border:1px solid var(--border-light);margin-bottom:8px">
+        <span style="font-size:13px;font-weight:700;color:var(--text-primary);flex:1">${t}</span>
+        <div style="width:80px;height:6px;background:var(--border-light);border-radius:3px;overflow:hidden">
+          <div style="width:${p*100}%;height:100%;background:${color.bar};border-radius:3px"></div>
+        </div>
+        <span style="font-size:12px;font-weight:700;color:${color.text};min-width:50px;text-align:right">${(p*100).toFixed(0)}%</span>
+        <span style="font-size:10px;padding:2px 8px;border-radius:4px;background:${color.bar}20;color:${color.text};font-weight:700">${color.label}</span>
+      </div>
+    `;
+  }).join("");
+
+  if (!blocked || blocked.length === 0) {
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">🔓 所有前置技法均已达标，全部唱句已解锁</div>`;
+  } else {
+    container.innerHTML = blocked + `<div style="font-size:11px;color:var(--text-muted);margin-top:8px">以上技法掌握度 &lt; 0.60，依赖这些技法的唱句将被锁定。建议优先练习基础曲目提升前置技能。</div>`;
+  }
+}
+
+// ============================================
+// 交互操作
+// ============================================
+
+function selectStudent(id) {
+  currentStudentId = id;
+  renderStudentSelector();
+  renderStats();
+  renderRecList();
+  renderLibGrid();
+  initAbilityChart();
+  renderPrereqPanel();
+}
+
+function startPractice(phraseId) {
+  const phrase = PHRASE_LIBRARY.find(p => p.id === phraseId);
+  showToast("success", "▶ 开始练习", `已选择「${phrase.title}」，系统将记录练习数据并更新 BKT 状态。`);
+}
+
+function selectFromLib(phraseId) {
+  const phrase = PHRASE_LIBRARY.find(p => p.id === phraseId);
+  showToast("info", "📚 手动选择曲目", `已选择「${phrase.title}」，学生可自主练习。`);
+}
+
+function openOverrideModal(rankIdx) {
+  overrideRank = rankIdx;
+  const student = STUDENTS.find(s => s.id === currentStudentId);
+  document.getElementById("overrideStudent").textContent = student.name;
+  document.getElementById("overrideRank").textContent = rankIdx + 1;
+
+  const currentRec = RECOMMENDATIONS[currentStudentId][rankIdx];
+  const currentPhrase = PHRASE_LIBRARY.find(p => p.id === currentRec.phraseId);
+
+  const recIds = RECOMMENDATIONS[currentStudentId].map(r => r.phraseId);
+  const alternatives = PHRASE_LIBRARY.filter(p => !recIds.includes(p.id));
+
+  let html = alternatives.map(p => {
+    const diffInfo = getDiffLabel(p.difficulty);
+    return `<div class="override-item" onclick="selectOverrideTarget('${p.id}', this)">
+      <strong style="color:var(--text-primary)">${p.title}</strong> · ${p.piece}
+      <span style="margin-left:8px;padding:2px 6px;border-radius:3px;font-size:10px;background:${diffInfo.color}20;color:${diffInfo.color}">${diffInfo.text}</span>
+    </div>`;
+  }).join("");
+
+  const modalText = document.querySelector("#overrideModal .modal-text");
+  modalText.innerHTML = `
+    您正在将「<strong>${student.name}</strong>」的推荐列表中的第 <strong>${rankIdx + 1}</strong> 位<br>
+    「<span style="color:var(--text-secondary)">${currentPhrase.title}</span>」替换为以下曲目：<br><br>
+    <div class="override-list" style="max-height:200px;overflow-y:auto">${html}</div>
+  `;
+
+  document.getElementById("overrideModal").classList.add("show");
+}
+
+function selectOverrideTarget(phraseId, el) {
+  overrideTarget = phraseId;
+  document.querySelectorAll(".override-item").forEach(o => o.classList.remove("selected"));
+  el.classList.add("selected");
+}
+
+function confirmOverride() {
+  if (!overrideTarget) {
+    alert("请先选择一个替换曲目");
+    return;
+  }
+  const phrase = PHRASE_LIBRARY.find(p => p.id === overrideTarget);
+  RECOMMENDATIONS[currentStudentId][overrideRank] = {
+    phraseId: overrideTarget,
+    matchScore: 0.95,
+    infoGain: 0.50,
+    status: "match",
+    reason: "👩‍🏫 老师手动推荐：" + phrase.title,
+    teacherOverride: true
+  };
+  closeModal();
+  renderRecList();
+  showToast("success", "👩‍🏫 已覆盖推荐", `已将第 ${overrideRank + 1} 位推荐替换为「${phrase.title}」。系统将记录此次覆盖作为算法反馈。`);
+}
+
+function closeModal() {
+  document.getElementById("overrideModal").classList.remove("show");
+  overrideTarget = null;
+  overrideRank = null;
+}
+
+function showToast(type, title, msg) {
+  const container = document.getElementById("toastContainer");
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `
+    <div class="toast-icon">${type === "success" ? "✅" : "ℹ️"}</div>
+    <div class="toast-content">
+      <div class="toast-title">${title}</div>
+      <div class="toast-msg">${msg}</div>
+    </div>
+  `;
+  container.appendChild(toast);
+  setTimeout(() => { if (toast.parentElement) toast.remove(); }, 4000);
+}
+
+// ============================================
+// 初始化
+// ============================================
+
+function init() {
+  renderStudentSelector();
+  renderStats();
+  renderRecList();
+  renderLibGrid();
+  initAbilityChart();
+  renderPrereqPanel();
+}
+
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    requestAnimationFrame(() => setTimeout(init, 50));
+} else {
+    document.addEventListener('DOMContentLoaded', init);
+}
+</script>
+</body>
+</html>

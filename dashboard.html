@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>戏韵AI · 班级看板</title>
+<script src="static/echarts.min.js"></script>
+<style>
+/* ============================================================
+   浅色高对比度配色 · 宣纸背景 + 景泰蓝/朱砂红
+   与 sing_along 保持一致
+   ============================================================ */
+:root {
+  --bg-primary: #F5EDE4;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F0E8DC;
+  --bg-hover: #F5F0EA;
+  --bg-card-header: #F8F3EC;
+  --text-primary: #2D1F14;
+  --text-secondary: #5A4A3A;
+  --text-muted: #8A7A6A;
+  --text-light: #B0A090;
+  --border-light: #E8DDD0;
+  --border-medium: #D5C8B8;
+  --border-strong: #C0B0A0;
+  --primary: #0066B3;
+  --primary-hover: #0055A0;
+  --primary-glow: rgba(0, 102, 179, 0.30);
+  --primary-soft: rgba(0, 102, 179, 0.08);
+  --primary-border: rgba(0, 102, 179, 0.25);
+  --success: #4A8F6B;
+  --success-soft: rgba(74, 143, 107, 0.12);
+  --warning: #C9A84C;
+  --warning-soft: rgba(201, 168, 76, 0.12);
+  --danger: #B83A2F;
+  --danger-soft: rgba(184, 58, 47, 0.12);
+  --nav-gradient: linear-gradient(90deg, #F5EDE4, #E8DDD0 40%, #D5C8B8 50%, #E8DDD0 60%, #F5EDE4);
+  --progress-gradient: linear-gradient(90deg, #0066B3, #4A8AF4);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg-primary);
+  color:var(--text-primary);
+  min-height:100vh;
+  line-height:1.7;
+  font-size:16px;
+}
+
+/* ===== Navbar ===== */
+.navbar{
+  background:var(--nav-gradient);
+  border-bottom:2px solid var(--border-medium);
+  padding:0 24px;
+  height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  position:sticky;
+  top:0;
+  z-index:50;
+}
+.nav-brand{display:flex;align-items:center;gap:12px}
+.nav-brand .logo{
+  width:34px;height:34px;
+  background:linear-gradient(135deg, var(--primary), #004080);
+  border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:700;color:#fff;
+  box-shadow:0 2px 12px var(--primary-glow);
+}
+.nav-brand h1{font-size:17px;color:var(--text-primary);font-weight:700}
+.nav-brand .badge{
+  background:var(--primary-soft);
+  color:var(--primary);
+  padding:2px 10px;border-radius:12px;
+  font-size:11px;font-weight:600;
+  border:1px solid var(--primary-border);
+}
+.nav-user{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary)}
+.nav-user .avatar{
+  width:30px;height:30px;border-radius:50%;
+  background:linear-gradient(135deg, #B89076, #8B6B4F);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;color:#fff;
+}
+
+/* ===== Layout ===== */
+.layout{display:flex;min-height:calc(100vh - 58px)}
+.sidebar{
+  width:200px;background:var(--bg-secondary);
+  border-right:2px solid var(--border-light);
+  padding:12px 0;position:fixed;height:100%;overflow-y:auto;z-index:40;
+}
+.nav-group{margin-bottom:6px}
+.nav-group-title{
+  padding:6px 16px;font-size:11px;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:0.8px;font-weight:700;
+}
+.nav-item{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 16px;margin:0 8px;
+  color:var(--text-secondary);font-size:13px;
+  cursor:pointer;transition:all 0.2s;text-decoration:none;
+  border-radius:8px;border-left:4px solid transparent;
+}
+.nav-item:hover{color:var(--text-primary);background:var(--bg-hover)}
+.nav-item.active{
+  color:var(--primary);
+  background:var(--primary-soft);
+  border-left-color:var(--primary);
+  font-weight:600;
+}
+.nav-item .icon{font-size:16px;width:22px;text-align:center}
+.nav-badge{
+  margin-left:auto;background:var(--danger);color:#fff;
+  font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600;
+}
+.main-content{margin-left:200px;flex:1;padding:20px;max-width:1600px}
+
+/* ===== 页面头部 ===== */
+.page-header{margin-bottom:16px}
+.page-header h2{font-size:20px;color:var(--text-primary);font-weight:700;margin-bottom:2px}
+.page-header p{font-size:14px;color:var(--text-secondary)}
+
+/* ===== 卡片 ===== */
+.card{
+  background:var(--bg-secondary);
+  border:1px solid var(--border-light);
+  border-radius:14px;
+  padding:16px 18px;
+  margin-bottom:14px;
+  box-shadow:0 1px 4px rgba(0,0,0,0.04);
+  transition:border-color 0.3s, box-shadow 0.3s;
+}
+.card:hover{border-color:var(--border-medium);box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+.card-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:12px;flex-wrap:wrap;gap:8px;
+}
+.card-title{
+  font-size:15px;font-weight:700;color:var(--text-primary);
+  display:flex;align-items:center;gap:8px;
+}
+.card-title .icon{
+  width:28px;height:28px;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:15px;
+  background:var(--primary-soft);color:var(--primary);
+}
+.card-action{font-size:13px;color:var(--primary);cursor:pointer;font-weight:600}
+.card-action:hover{text-decoration:underline}
+
+/* ===== 统计卡片 ===== */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+.stat-card{
+  background:var(--bg-secondary);
+  border:1px solid var(--border-light);
+  border-radius:12px;
+  padding:18px;display:flex;align-items:center;gap:14px;
+}
+.stat-icon{
+  width:44px;height:44px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;font-size:20px;
+}
+.stat-info{flex:1}
+.stat-value{font-size:26px;font-weight:700;color:var(--text-primary);line-height:1}
+.stat-label{font-size:12px;color:var(--text-muted);margin-top:2px}
+.stat-change{font-size:11px;margin-top:2px}
+.stat-change.up{color:var(--success)}
+.stat-change.down{color:var(--danger)}
+
+/* ===== 预警卡片 ===== */
+.alert-section{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.alert-card{
+  background:var(--bg-secondary);
+  border:1px solid var(--border-light);
+  border-radius:12px;padding:14px;
+}
+.alert-card.danger{border-color:rgba(184,58,47,0.3)}
+.alert-card.warn{border-color:rgba(201,168,76,0.3)}
+.alert-card.info{border-color:rgba(0,102,179,0.3)}
+.alert-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.alert-icon{
+  width:28px;height:28px;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+}
+.alert-title{font-size:13px;font-weight:600;color:var(--text-primary)}
+.alert-count{
+  font-size:11px;padding:1px 6px;border-radius:10px;margin-left:auto;font-weight:600;
+}
+.alert-count.danger{background:rgba(184,58,47,0.12);color:var(--danger)}
+.alert-count.warn{background:rgba(201,168,76,0.12);color:var(--warning)}
+.alert-count.info{background:rgba(0,102,179,0.12);color:var(--primary)}
+.alert-list{display:flex;flex-direction:column;gap:6px}
+.alert-row{
+  padding:8px 10px;background:var(--bg-primary);border-radius:6px;
+  font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:8px;
+}
+.alert-row .name{font-weight:600;color:var(--text-primary)}
+.alert-row .detail{color:var(--text-muted);flex:1}
+
+/* ===== 热力图 ===== */
+#heatmapChart{width:100%;height:340px}
+
+/* ===== 学生列表 ===== */
+.student-list-wrap{max-height:380px;overflow-y:auto;padding-right:4px}
+.student-list-wrap::-webkit-scrollbar{width:4px}
+.student-list-wrap::-webkit-scrollbar-track{background:var(--bg-primary);border-radius:2px}
+.student-list-wrap::-webkit-scrollbar-thumb{background:var(--border-medium);border-radius:2px}
+.student-item{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 12px;background:var(--bg-primary);
+  border-radius:10px;border:1px solid var(--border-light);
+  margin-bottom:6px;transition:all 0.2s;cursor:pointer;
+}
+.student-item:hover{border-color:var(--border-medium);background:var(--bg-hover)}
+.student-item.active{border-color:var(--primary);background:var(--primary-soft)}
+.student-item.warning{border-color:rgba(184,58,47,0.3);background:rgba(184,58,47,0.04)}
+.student-avatar{
+  width:36px;height:36px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:16px;
+  background:var(--bg-secondary);border:1px solid var(--border-light);
+}
+.student-info{flex:1;min-width:0}
+.student-name{font-size:14px;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:6px}
+.student-meta{font-size:11px;color:var(--text-muted);margin-top:2px}
+.student-skills{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap}
+.skill-pill{
+  display:flex;align-items:center;gap:4px;
+  padding:2px 8px;border-radius:6px;font-size:10px;
+  background:var(--bg-secondary);border:1px solid var(--border-light);
+}
+.skill-pill .dot{width:6px;height:6px;border-radius:50%}
+.skill-pill .name{color:var(--text-secondary)}
+.skill-pill .val{font-weight:600}
+.student-status{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.status-active{background:var(--success);box-shadow:0 0 6px rgba(74,143,107,0.4)}
+.status-warning{background:var(--warning);box-shadow:0 0 6px rgba(201,168,76,0.4)}
+.status-danger{background:var(--danger);box-shadow:0 0 6px rgba(184,58,47,0.4)}
+.alert-tag{
+  font-size:10px;padding:1px 6px;border-radius:4px;font-weight:600;margin-left:4px;
+}
+.alert-tag.danger{background:rgba(184,58,47,0.12);color:var(--danger)}
+.alert-tag.warn{background:rgba(201,168,76,0.12);color:var(--warning)}
+.alert-tag.info{background:rgba(0,102,179,0.12);color:var(--primary)}
+
+/* ===== 推荐面板 ===== */
+.recommend-panel{
+  background:var(--bg-primary);
+  border-radius:12px;border:1px solid var(--border-light);
+  padding:14px;margin-top:12px;
+}
+.rec-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.rec-avatar{
+  width:36px;height:36px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:16px;
+  background:var(--bg-secondary);border:1px solid var(--border-light);
+}
+.rec-name{font-size:15px;font-weight:700;color:var(--text-primary)}
+.rec-level{font-size:12px;color:var(--text-muted)}
+.rec-list{display:flex;flex-direction:column;gap:8px}
+.rec-item{
+  padding:10px 12px;background:var(--bg-secondary);border-radius:8px;
+  border:1px solid var(--border-light);display:flex;align-items:center;gap:12px;
+}
+.rec-rank{
+  width:24px;height:24px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;background:var(--bg-primary);color:var(--text-muted);
+}
+.rec-rank.top{background:linear-gradient(135deg,#C9A84C,#B89076);color:#fff}
+.rec-info{flex:1;min-width:0}
+.rec-title{font-size:13px;font-weight:600;color:var(--text-primary)}
+.rec-reason{font-size:11px;color:var(--text-muted)}
+.rec-diff{
+  padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;
+}
+.rec-diff.match{background:rgba(74,143,107,0.12);color:var(--success)}
+.rec-diff.challenge{background:rgba(201,168,76,0.12);color:var(--warning)}
+.rec-diff.lock{background:rgba(0,102,179,0.12);color:var(--primary)}
+
+/* ===== 过程指标 ===== */
+.metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.metric-card{
+  padding:14px;background:var(--bg-primary);border-radius:10px;
+  border:1px solid var(--border-light);text-align:center;
+}
+.metric-val{font-size:24px;font-weight:700;color:var(--text-primary)}
+.metric-label{font-size:12px;color:var(--text-muted);margin-top:4px}
+.metric-trend{font-size:11px;margin-top:4px}
+.metric-trend.up{color:var(--success)}
+.metric-trend.down{color:var(--danger)}
+
+/* ===== 作业进度 ===== */
+.hw-list{display:flex;flex-direction:column;gap:10px}
+.hw-item{
+  padding:12px 14px;background:var(--bg-primary);border-radius:10px;
+  border:1px solid var(--border-light);
+}
+.hw-title{font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px}
+.hw-meta{display:flex;gap:16px;font-size:12px;color:var(--text-muted);flex-wrap:wrap}
+.hw-progress{margin-top:8px;display:flex;align-items:center;gap:10px}
+.hw-bar{flex:1;height:6px;background:var(--border-light);border-radius:3px;overflow:hidden}
+.hw-bar-fill{height:100%;border-radius:3px}
+.hw-bar-text{font-size:11px;color:var(--text-muted);min-width:60px;text-align:right}
+.hw-status{
+  display:inline-block;padding:2px 10px;border-radius:6px;
+  font-size:11px;font-weight:600;margin-left:auto;
+}
+.hw-status.grading{background:rgba(201,168,76,0.12);color:var(--warning)}
+.hw-status.ongoing{background:rgba(0,102,179,0.12);color:var(--primary)}
+.hw-status.closed{background:rgba(74,143,107,0.12);color:var(--success)}
+
+/* ===== 滚动条 ===== */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg-primary);border-radius:3px}
+::-webkit-scrollbar-thumb{background:var(--border-medium);border-radius:3px}
+
+/* ===== 响应式 ===== */
+@media (max-width:1200px){.sidebar{display:none}.main-content{margin-left:0}.stats-row{grid-template-columns:repeat(2,1fr)}.alert-section{grid-template-columns:1fr}}
+@media (max-width:768px){.stats-row{grid-template-columns:1fr}.metric-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <div class="nav-brand">
+    <div class="logo">戏</div>
+    <h1>戏韵AI · 老师工作台</h1>
+    <span class="badge">班级看板</span>
+  </div>
+  <div class="nav-user">
+    <div class="avatar">👩‍🏫</div>
+    <span>王慧芳</span>
+    <span style="color:var(--text-muted);font-size:13px">|</span>
+    <span style="color:var(--text-secondary);font-size:13px">中国戏曲学院</span>
+  </div>
+</nav>
+
+<div class="layout">
+<aside class="sidebar">
+  <div class="nav-group">
+    <div class="nav-group-title">核心功能</div>
+    <a href="dashboard.html" class="nav-item active"><span class="icon">📊</span>班级看板</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group-title">🧑‍🏫 教学工作台</div>
+    <a href="demo_library.html" class="nav-item"><span class="icon">🎵</span>示范库管理</a>
+    <a href="annotation.html" class="nav-item"><span class="icon">🏷️</span>歌词级标注</a>
+    <a href="homework.html" class="nav-item"><span class="icon">📝</span>作业批改</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group-title">🎤 学生练习</div>
+    <a href="sing_along.html" class="nav-item"><span class="icon">🎙️</span>实时跟唱</a>
+    <a href="AI_teacher.html" class="nav-item"><span class="icon">🤖</span>AI教练对话</a>
+    <a href="cat_test.html" class="nav-item"><span class="icon">🎯</span>摸底测试</a>
+  </div>
+  <div class="nav-group">
+    <div class="nav-group-title">📈 数据分析</div>
+    <a href="tracking.html" class="nav-item"><span class="icon">📈</span>能力追踪</a>
+    <a href="recommendation.html" class="nav-item"><span class="icon">🎯</span>渐进式推荐</a>
+    <a href="knowledge_graph.html" class="nav-item"><span class="icon">🧠</span>知识图谱</a>
+    <a href="cdm_report.html" class="nav-item"><span class="icon">🔍</span>归因诊断</a>
+    <a href="daily_report.html" class="nav-item"><span class="icon">📰</span>学习报告</a>
+  </div>
+</aside>
+
+<main class="main-content">
+
+  <div class="page-header">
+    <h2>📊 班级看板</h2>
+    <p>基于 BKT 引擎的技能掌握概率追踪与自适应推荐预览</p>
+  </div>
+
+  <!-- 统计行 -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-icon" style="background:rgba(0,102,179,0.10)">👥</div>
+      <div class="stat-info">
+        <div class="stat-value">24</div>
+        <div class="stat-label">在班学生</div>
+        <div class="stat-change up">↑ 本周新增 2 人</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:rgba(74,143,107,0.10)">🎵</div>
+      <div class="stat-info">
+        <div class="stat-value">8</div>
+        <div class="stat-label">示范曲目</div>
+        <div class="stat-change up">↑ 本周新增 2 首</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:rgba(201,168,76,0.10)">🏷️</div>
+      <div class="stat-info">
+        <div class="stat-value">156</div>
+        <div class="stat-label">标注规则</div>
+        <div class="stat-change up">↑ 本周新增 12 条</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:rgba(184,58,47,0.10)">📝</div>
+      <div class="stat-info">
+        <div class="stat-value">7</div>
+        <div class="stat-label">待批改</div>
+        <div class="stat-change down">需尽快处理</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 预警区 -->
+  <div class="alert-section">
+    <div class="alert-card danger">
+      <div class="alert-header">
+        <div class="alert-icon" style="background:rgba(184,58,47,0.10)">🔴</div>
+        <div class="alert-title">掌握度骤降预警</div>
+        <div class="alert-count danger">2</div>
+      </div>
+      <div class="alert-list">
+        <div class="alert-row"><span class="name">孙志远</span><span class="detail">拖腔 P(L) 0.45→0.28（-0.17）</span></div>
+        <div class="alert-row"><span class="name">刘思琪</span><span class="detail">音准控制 P(L) 0.62→0.48（-0.14）</span></div>
+      </div>
+    </div>
+    <div class="alert-card warn">
+      <div class="alert-header">
+        <div class="alert-icon" style="background:rgba(201,168,76,0.10)">🟡</div>
+        <div class="alert-title">连续未练习</div>
+        <div class="alert-count warn">3</div>
+      </div>
+      <div class="alert-list">
+        <div class="alert-row"><span class="name">赵雨桐</span><span class="detail">已 3 天未提交练习</span></div>
+        <div class="alert-row"><span class="name">孙志远</span><span class="detail">已 2 天未提交练习</span></div>
+        <div class="alert-row"><span class="name">周明轩</span><span class="detail">已 2 天未提交练习</span></div>
+      </div>
+    </div>
+    <div class="alert-card info">
+      <div class="alert-header">
+        <div class="alert-icon" style="background:rgba(0,102,179,0.10)">🔵</div>
+        <div class="alert-title">前置技法锁定</div>
+        <div class="alert-count info">4</div>
+      </div>
+      <div class="alert-list">
+        <div class="alert-row"><span class="name">李小燕</span><span class="detail">气息支撑 0.51，拖腔练习已锁定</span></div>
+        <div class="alert-row"><span class="name">周明轩</span><span class="detail">音准感知 0.43，滑音练习已锁定</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主区域：热力图 + 学生列表（左右布局） -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <!-- 左侧：热力图 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="icon" style="background:rgba(0,102,179,0.10);color:var(--primary)">🔥</div>
+          班级技能掌握概率热力图（BKT）
+        </div>
+        <span class="card-action" onclick="refreshBKT()">刷新数据 →</span>
+      </div>
+      <div id="heatmapChart"></div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--text-muted)">
+        <div style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;border-radius:2px;background:#4A8F6B"></span>已掌握 ≥0.85</div>
+        <div style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;border-radius:2px;background:#0066B3"></span>学习中 0.60~0.85</div>
+        <div style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;border-radius:2px;background:#C9A84C"></span>薄弱 0.40~0.60</div>
+        <div style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;border-radius:2px;background:#B83A2F"></span>未掌握 &lt;0.40</div>
+      </div>
+    </div>
+
+    <!-- 右侧：学生列表 + 推荐路径（紧凑） -->
+    <div class="card" style="display:flex;flex-direction:column;padding:16px 18px;">
+      <div class="card-header" style="margin-bottom:8px">
+        <div class="card-title">
+          <div class="icon" style="background:rgba(0,102,179,0.10);color:var(--primary)">👥</div>
+          学生能力状态
+        </div>
+        <span style="font-size:12px;color:var(--text-muted)">点击学生查看推荐</span>
+      </div>
+      <div class="student-list-wrap" id="studentListWrap">
+        <div id="studentList"></div>
+      </div>
+      <!-- 推荐路径预览（动态显示） -->
+      <div id="recommendPanel" style="display:none;margin-top:12px;border-top:1px solid var(--border-light);padding-top:12px;">
+        <div class="rec-header" style="margin-bottom:8px">
+          <div class="rec-avatar" id="recAvatar">🎭</div>
+          <div>
+            <div class="rec-name" id="recName">—</div>
+            <div class="rec-level" id="recLevel">—</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">系统推荐 · Top 3 练习曲目</div>
+        <div class="rec-list" id="recList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 过程指标 + 作业进度 -->
+  <div style="display:grid;grid-template-columns:1fr 1.5fr;gap:16px">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="icon" style="background:rgba(0,102,179,0.10);color:var(--primary)">📈</div>
+          班级过程指标
+        </div>
+      </div>
+      <div class="metric-grid">
+        <div class="metric-card">
+          <div class="metric-val" style="color:var(--primary)">18.5</div>
+          <div class="metric-label">本周平均练习时长(分)</div>
+          <div class="metric-trend up">↑ +2.3 分</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val" style="color:var(--warning)">4.2</div>
+          <div class="metric-label">平均练习频次(次/周)</div>
+          <div class="metric-trend up">↑ +0.5 次</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val" style="color:var(--danger)">0.31</div>
+          <div class="metric-label">班级畏难倾向指数</div>
+          <div class="metric-trend down">↑ +0.04 需关注</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="icon" style="background:rgba(201,168,76,0.10);color:var(--warning)">📚</div>
+          作业进度
+        </div>
+        <span class="card-action" onclick="location.href='homework.html'">管理作业 →</span>
+      </div>
+      <div class="hw-list">
+        <div class="hw-item">
+          <div class="hw-title">《穆桂英挂帅》· 辕门外三声炮</div>
+          <div class="hw-meta"><span>📅 截止: 2026-08-02</span><span>🎵 王老师标准版</span><span>👥 18/24 人已提交</span></div>
+          <div class="hw-progress">
+            <div class="hw-bar"><div class="hw-bar-fill" style="width:75%;background:var(--progress-gradient)"></div></div>
+            <span class="hw-bar-text">提交 75%</span>
+            <span class="hw-status grading">批改中</span>
+          </div>
+        </div>
+        <div class="hw-item">
+          <div class="hw-title">《贵妃醉酒》· 海岛冰轮初转腾</div>
+          <div class="hw-meta"><span>📅 截止: 2026-08-05</span><span>🎵 王老师标准版</span><span>👥 12/24 人已提交</span></div>
+          <div class="hw-progress">
+            <div class="hw-bar"><div class="hw-bar-fill" style="width:50%;background:var(--progress-gradient)"></div></div>
+            <span class="hw-bar-text">提交 50%</span>
+            <span class="hw-status ongoing">进行中</span>
+          </div>
+        </div>
+        <div class="hw-item">
+          <div class="hw-title">《霸王别姬》· 看大王在帐中</div>
+          <div class="hw-meta"><span>📅 截止: 2026-07-28</span><span>🎵 王老师标准版</span><span>👥 24/24 人已提交</span></div>
+          <div class="hw-progress">
+            <div class="hw-bar"><div class="hw-bar-fill" style="width:100%;background:var(--progress-gradient)"></div></div>
+            <span class="hw-bar-text">提交 100%</span>
+            <span class="hw-status closed">已截止</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+
+<script>
+// ============================================
+// 模拟数据（与之前一致）
+// ============================================
+const STUDENTS = [
+  {
+    id: "s01", name: "李小燕", level: "初级", avatar: "🎭", streak: 12, last: "2小时前", weekly: 5,
+    bkt: { "音准控制": 0.72, "气息支撑": 0.51, "滑音": 0.63, "拖腔": 0.28, "归韵咬字": 0.45, "节奏感知": 0.68 },
+    trends: { "音准控制": "up", "气息支撑": "flat", "滑音": "up", "拖腔": "flat", "归韵咬字": "up", "节奏感知": "up" },
+    alerts: [{ type: "info", text: "气息支撑 0.51，拖腔已锁定" }]
+  },
+  {
+    id: "s02", name: "张博文", level: "中级", avatar: "🎤", streak: 8, last: "30分钟前", weekly: 4,
+    bkt: { "音准控制": 0.85, "气息支撑": 0.78, "滑音": 0.82, "拖腔": 0.71, "归韵咬字": 0.80, "节奏感知": 0.88 },
+    trends: { "音准控制": "up", "气息支撑": "up", "滑音": "flat", "拖腔": "up", "归韵咬字": "up", "节奏感知": "flat" },
+    alerts: []
+  },
+  {
+    id: "s03", name: "刘思琪", level: "初级", avatar: "🎵", streak: 3, last: "5小时前", weekly: 2,
+    bkt: { "音准控制": 0.48, "气息支撑": 0.42, "滑音": 0.35, "拖腔": 0.22, "归韵咬字": 0.55, "节奏感知": 0.50 },
+    trends: { "音准控制": "down", "气息支撑": "down", "滑音": "flat", "拖腔": "down", "归韵咬字": "up", "节奏感知": "flat" },
+    alerts: [{ type: "danger", text: "音准控制骤降 -0.14" }]
+  },
+  {
+    id: "s04", name: "陈浩然", level: "高级", avatar: "🎶", streak: 21, last: "1小时前", weekly: 6,
+    bkt: { "音准控制": 0.94, "气息支撑": 0.91, "滑音": 0.88, "拖腔": 0.85, "归韵咬字": 0.90, "节奏感知": 0.87 },
+    trends: { "音准控制": "up", "气息支撑": "up", "滑音": "up", "拖腔": "up", "归韵咬字": "flat", "节奏感知": "up" },
+    alerts: []
+  },
+  {
+    id: "s05", name: "赵雨桐", level: "中级", avatar: "🎼", streak: 0, last: "昨天", weekly: 3,
+    bkt: { "音准控制": 0.76, "气息支撑": 0.68, "滑音": 0.72, "拖腔": 0.65, "归韵咬字": 0.78, "节奏感知": 0.82 },
+    trends: { "音准控制": "flat", "气息支撑": "down", "滑音": "flat", "拖腔": "down", "归韵咬字": "up", "节奏感知": "flat" },
+    alerts: [{ type: "warn", text: "已 3 天未练习" }]
+  },
+  {
+    id: "s06", name: "周明轩", level: "初级", avatar: "🎹", streak: 5, last: "3小时前", weekly: 3,
+    bkt: { "音准控制": 0.55, "气息支撑": 0.48, "滑音": 0.43, "拖腔": 0.30, "归韵咬字": 0.52, "节奏感知": 0.60 },
+    trends: { "音准控制": "up", "气息支撑": "up", "滑音": "flat", "拖腔": "flat", "归韵咬字": "up", "节奏感知": "up" },
+    alerts: [{ type: "info", text: "音准感知 0.43，滑音已锁定" }]
+  },
+  {
+    id: "s07", name: "吴佳怡", level: "中级", avatar: "🎸", streak: 15, last: "10分钟前", weekly: 5,
+    bkt: { "音准控制": 0.82, "气息支撑": 0.75, "滑音": 0.79, "拖腔": 0.68, "归韵咬字": 0.85, "节奏感知": 0.80 },
+    trends: { "音准控制": "up", "气息支撑": "up", "滑音": "up", "拖腔": "up", "归韵咬字": "flat", "节奏感知": "up" },
+    alerts: []
+  },
+  {
+    id: "s08", name: "孙志远", level: "初级", avatar: "🥁", streak: 1, last: "昨天", weekly: 1,
+    bkt: { "音准控制": 0.40, "气息支撑": 0.35, "滑音": 0.28, "拖腔": 0.28, "归韵咬字": 0.42, "节奏感知": 0.45 },
+    trends: { "音准控制": "down", "气息支撑": "down", "滑音": "down", "拖腔": "down", "归韵咬字": "flat", "节奏感知": "down" },
+    alerts: [{ type: "danger", text: "拖腔骤降 -0.17" }, { type: "warn", text: "已 2 天未练习" }]
+  }
+];
+
+const TECHNIQUES = ["音准控制", "气息支撑", "滑音", "拖腔", "归韵咬字", "节奏感知"];
+
+const RECOMMENDATIONS = {
+  s01: [
+    { title: "《穆桂英挂帅》· 辕门外三声炮（前四句）", difficulty: 0.62, reason: "难度略高于当前水平，适合挑战", status: "challenge" },
+    { title: "《贵妃醉酒》· 海岛冰轮初转腾（慢板）", difficulty: 0.55, reason: "前置技法已达标，巩固音准", status: "match" },
+    { title: "《霸王别姬》· 看大王在帐中", difficulty: 0.48, reason: "难度适中，强化气息支撑", status: "match" }
+  ],
+  s02: [
+    { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "难度匹配，重点练习拖腔", status: "match" },
+    { title: "《红娘》· 叫张生隐藏在棋盘之下", difficulty: 0.78, reason: "花旦唱腔，拓展滑音技法", status: "challenge" },
+    { title: "《空城计》· 我正在城楼观山景", difficulty: 0.65, reason: "老生唱腔，节奏感知训练", status: "match" }
+  ],
+  s03: [
+    { title: "气息基础短句 · 慢吸慢呼练习", difficulty: 0.35, reason: "前置技能补齐，先练气息", status: "match" },
+    { title: "音准感知训练 · 单音模唱", difficulty: 0.30, reason: "音准控制薄弱，需基础训练", status: "match" },
+    { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "拖腔依赖气息支撑，当前已锁定", status: "lock" }
+  ],
+  s04: [
+    { title: "《穆桂英挂帅》· 辕门外三声炮（全段）", difficulty: 0.85, reason: "高难度挑战，综合技法训练", status: "challenge" },
+    { title: "《贵妃醉酒》· 海岛冰轮初转腾", difficulty: 0.78, reason: "四平调韵味处理", status: "match" },
+    { title: "《霸王别姬》· 看大王在帐中", difficulty: 0.72, reason: "南梆子板式，情感表达", status: "match" }
+  ],
+  s05: [
+    { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "难度匹配，恢复练习", status: "match" },
+    { title: "《贵妃醉酒》· 海岛冰轮初转腾", difficulty: 0.78, reason: "难度略高，适合挑战", status: "challenge" },
+    { title: "气息基础短句", difficulty: 0.35, reason: "气息支撑下降，建议巩固", status: "match" }
+  ],
+  s06: [
+    { title: "音准感知训练 · 音阶模唱", difficulty: 0.40, reason: "音准感知 0.43，接近解锁滑音", status: "match" },
+    { title: "《穆桂英挂帅》· 辕门外三声炮（前两句）", difficulty: 0.55, reason: "难度适中，音准控制训练", status: "match" },
+    { title: "滑音专项练习 · 上滑音", difficulty: 0.50, reason: "前置技法未达标，已锁定", status: "lock" }
+  ],
+  s07: [
+    { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "难度匹配，拖腔可再精进", status: "match" },
+    { title: "《红娘》· 叫张生隐藏在棋盘之下", difficulty: 0.78, reason: "花旦活泼唱腔，拓展风格", status: "challenge" },
+    { title: "《空城计》· 我正在城楼观山景", difficulty: 0.82, reason: "老生慢板，气息长拖腔", status: "challenge" }
+  ],
+  s08: [
+    { title: "调门找音练习 · 慢速跟唱", difficulty: 0.25, reason: "整体音准偏低，需基础训练", status: "match" },
+    { title: "气息基础短句", difficulty: 0.35, reason: "气息支撑 0.35，前置技能补齐", status: "match" },
+    { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "多前置技法未达标，已锁定", status: "lock" }
+  ]
+};
+
+// ============================================
+// 渲染函数
+// ============================================
+function getPLColor(p) {
+  if (p >= 0.85) return { bg: "rgba(74,143,107,0.15)", text: "#4A8F6B", label: "已掌握" };
+  if (p >= 0.60) return { bg: "rgba(0,102,179,0.15)", text: "#0066B3", label: "学习中" };
+  if (p >= 0.40) return { bg: "rgba(201,168,76,0.15)", text: "#C9A84C", label: "薄弱" };
+  return { bg: "rgba(184,58,47,0.15)", text: "#B83A2F", label: "未掌握" };
+}
+
+function getTrendArrow(trend) {
+  if (trend === "up") return "↗";
+  if (trend === "down") return "↘";
+  return "→";
+}
+
+function getTrendColor(trend) {
+  if (trend === "up") return "#4A8F6B";
+  if (trend === "down") return "#B83A2F";
+  return "#8A7A6A";
+}
+
+function renderStudentList() {
+  const container = document.getElementById("studentList");
+  container.innerHTML = STUDENTS.map((s, idx) => {
+    const hasAlert = s.alerts.length > 0;
+    const alertHtml = s.alerts.map(a => {
+      const cls = a.type === "danger" ? "danger" : (a.type === "warn" ? "warn" : "info");
+      return `<span class="alert-tag ${cls}">${a.text}</span>`;
+    }).join("");
+
+    const topSkills = TECHNIQUES.slice(0, 3);
+    const skillsHtml = topSkills.map(t => {
+      const p = s.bkt[t];
+      const color = getPLColor(p);
+      const arrow = getTrendArrow(s.trends[t]);
+      return `<div class="skill-pill"><span class="dot" style="background:${color.text}"></span><span class="name">${t}</span><span class="val" style="color:${color.text}">${(p*100).toFixed(0)}% ${arrow}</span></div>`;
+    }).join("");
+
+    const statusClass = hasAlert ? (s.alerts.some(a=>a.type==="danger") ? "status-danger" : "status-warning") : "status-active";
+
+    return `
+      <div class="student-item ${hasAlert ? 'warning' : ''}" data-id="${s.id}" onclick="selectStudent('${s.id}')">
+        <div class="student-avatar">${s.avatar}</div>
+        <div class="student-info">
+          <div class="student-name">${s.name} <span style="font-size:11px;color:var(--text-muted);font-weight:400">· ${s.level}</span>${alertHtml}</div>
+          <div class="student-meta">最近练习: ${s.last} · 本周${s.weekly}次 · 连续${s.streak}天</div>
+          <div class="student-skills">${skillsHtml}</div>
+        </div>
+        <div class="student-status ${statusClass}"></div>
+      </div>
+    `;
+  }).join("");
+}
+
+function initHeatmap() {
+  const chart = echarts.init(document.getElementById("heatmapChart"));
+  const data = [];
+  STUDENTS.forEach((s, yIdx) => {
+    TECHNIQUES.forEach((t, xIdx) => {
+      data.push([xIdx, yIdx, s.bkt[t]]);
+    });
+  });
+
+  const option = {
+    backgroundColor: "transparent",
+    tooltip: {
+      position: "top",
+      backgroundColor: "rgba(255,255,255,0.95)",
+      borderColor: "var(--border-light)",
+      textStyle: { color: "var(--text-primary)", fontSize: 12 },
+      formatter: function(p) {
+        const s = STUDENTS[p.data[1]];
+        const t = TECHNIQUES[p.data[0]];
+        const val = p.data[2];
+        const color = getPLColor(val);
+        return `<div style="font-weight:600;margin-bottom:4px">${s.name} · ${t}</div>
+                <div style="color:${color.text};font-size:16px;font-weight:700">P(L) = ${val.toFixed(2)}</div>
+                <div style="color:var(--text-muted);font-size:11px">状态: ${color.label} · 趋势: ${getTrendArrow(s.trends[t])}</div>`;
+      }
+    },
+    grid: { left: 60, right: 10, top: 10, bottom: 30 },
+    xAxis: {
+      type: "category",
+      data: TECHNIQUES,
+      axisLine: { lineStyle: { color: "var(--border-light)" } },
+      axisLabel: { color: "var(--text-muted)", fontSize: 11 },
+      splitLine: { show: false }
+    },
+    yAxis: {
+      type: "category",
+      data: STUDENTS.map(s => s.name),
+      axisLine: { lineStyle: { color: "var(--border-light)" } },
+      axisLabel: { color: "var(--text-muted)", fontSize: 11 },
+      splitLine: { show: false }
+    },
+    visualMap: {
+      min: 0, max: 1,
+      calculable: false,
+      orient: "horizontal",
+      left: "center",
+      bottom: 0,
+      itemWidth: 12, itemHeight: 100,
+      inRange: {
+        color: ["#B83A2F", "#C9A84C", "#0066B3", "#4A8F6B"]
+      },
+      text: ["1.0", "0.0"],
+      textStyle: { color: "var(--text-muted)", fontSize: 11 }
+    },
+    series: [{
+      name: "掌握概率",
+      type: "heatmap",
+      data: data,
+      label: {
+        show: true,
+        color: "#fff",
+        fontSize: 11,
+        fontWeight: "bold",
+        formatter: p => p.data[2].toFixed(2)
+      },
+      itemStyle: {
+        borderColor: "var(--bg-secondary)",
+        borderWidth: 2,
+        borderRadius: 4
+      },
+      emphasis: {
+        itemStyle: { borderColor: "var(--primary)", borderWidth: 2, shadowBlur: 10, shadowColor: "var(--primary-glow)" }
+      }
+    }]
+  };
+  chart.setOption(option);
+
+  chart.on("click", function(params) {
+    const studentId = STUDENTS[params.data[1]].id;
+    selectStudent(studentId);
+  });
+
+  window.addEventListener("resize", () => chart.resize());
+}
+
+let selectedStudentId = null;
+
+function selectStudent(id) {
+  selectedStudentId = id;
+
+  document.querySelectorAll(".student-item").forEach(el => el.classList.remove("active"));
+  const el = document.querySelector(`.student-item[data-id="${id}"]`);
+  if (el) el.classList.add("active");
+
+  const s = STUDENTS.find(x => x.id === id);
+  if (!s) return;
+
+  const panel = document.getElementById("recommendPanel");
+  panel.style.display = "block";
+  document.getElementById("recAvatar").textContent = s.avatar;
+  document.getElementById("recName").textContent = s.name;
+  document.getElementById("recLevel").textContent = `${s.level} · 综合掌握度 ${(Object.values(s.bkt).reduce((a,b)=>a+b,0)/6*100).toFixed(0)}%`;
+
+  const recs = RECOMMENDATIONS[id] || [];
+  document.getElementById("recList").innerHTML = recs.map((r, i) => {
+    const diffCls = r.status === "match" ? "match" : (r.status === "challenge" ? "challenge" : "lock");
+    const diffText = r.status === "match" ? "难度匹配" : (r.status === "challenge" ? "挑战" : "已锁定");
+    return `
+      <div class="rec-item">
+        <div class="rec-rank ${i===0?'top':''}">${i+1}</div>
+        <div class="rec-info">
+          <div class="rec-title">${r.title}</div>
+          <div class="rec-reason">${r.reason}</div>
+        </div>
+        <div class="rec-diff ${diffCls}">${diffText}</div>
+      </div>
+    `;
+  }).join("");
+
+  // 高亮热力图对应行
+  const chart = echarts.getInstanceByDom(document.getElementById("heatmapChart"));
+  if (chart) {
+    const yIdx = STUDENTS.findIndex(x => x.id === id);
+    chart.dispatchAction({ type: "highlight", seriesIndex: 0, dataIndex: yIdx * TECHNIQUES.length });
+  }
+}
+
+function refreshBKT() {
+  alert("模拟数据刷新：BKT 状态已更新（实际将调用 /api/v1/students/bkt-state）");
+}
+
+// ============================================
+// 初始化
+// ============================================
+renderStudentList();
+initHeatmap();
+selectStudent("s01");
+</script>
+</body>
+</html>

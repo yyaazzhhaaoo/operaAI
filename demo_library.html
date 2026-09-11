@@ -1,0 +1,2094 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>戏韵AI · 示范库管理</title>
+    <style>
+        /* ============================================================
+           浅色高对比度配色 · 宣纸背景 + 景泰蓝/朱砂红
+           与 sing_along 保持一致
+           ============================================================ */
+        :root {
+            --bg-primary: #F5EDE4;
+            --bg-secondary: #FFFFFF;
+            --bg-tertiary: #F0E8DC;
+            --bg-hover: #F5F0EA;
+            --bg-card-header: #F8F3EC;
+            --text-primary: #2D1F14;
+            --text-secondary: #5A4A3A;
+            --text-muted: #8A7A6A;
+            --text-light: #B0A090;
+            --border-light: #E8DDD0;
+            --border-medium: #D5C8B8;
+            --border-strong: #C0B0A0;
+            --primary: #0066B3;
+            --primary-hover: #0055A0;
+            --primary-glow: rgba(0, 102, 179, 0.30);
+            --primary-soft: rgba(0, 102, 179, 0.08);
+            --primary-border: rgba(0, 102, 179, 0.25);
+            --success: #4A8F6B;
+            --success-soft: rgba(74, 143, 107, 0.12);
+            --warning: #C9A84C;
+            --warning-soft: rgba(201, 168, 76, 0.12);
+            --danger: #B83A2F;
+            --danger-soft: rgba(184, 58, 47, 0.12);
+            --nav-gradient: linear-gradient(90deg, #F5EDE4, #E8DDD0 40%, #D5C8B8 50%, #E8DDD0 60%, #F5EDE4);
+            --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.04);
+            --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+            --progress-gradient: linear-gradient(90deg, #0066B3, #4A8AF4);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.7;
+            font-size: 16px;
+        }
+
+        /* ===== Navbar ===== */
+        .navbar {
+            background: var(--nav-gradient);
+            border-bottom: 2px solid var(--border-medium);
+            padding: 0 24px;
+            height: 58px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .nav-brand .logo {
+            width: 34px;
+            height: 34px;
+            background: linear-gradient(135deg, var(--primary), #004080);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+            box-shadow: 0 2px 12px var(--primary-glow);
+        }
+        .nav-brand h1 {
+            font-size: 17px;
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+        .nav-brand .badge {
+            background: var(--primary-soft);
+            color: var(--primary);
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            border: 1px solid var(--primary-border);
+        }
+        .nav-user {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .nav-user .avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #B89076, #8B6B4F);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: #fff;
+        }
+
+        /* ===== Layout ===== */
+        .layout {
+            display: flex;
+            min-height: calc(100vh - 58px);
+        }
+        .sidebar {
+            width: 200px;
+            background: var(--bg-secondary);
+            border-right: 2px solid var(--border-light);
+            padding: 12px 0;
+            position: fixed;
+            height: 100%;
+            overflow-y: auto;
+            z-index: 40;
+        }
+        .nav-group {
+            margin-bottom: 6px;
+        }
+        .nav-group-title {
+            padding: 6px 16px;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            font-weight: 700;
+        }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            margin: 0 8px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            border-radius: 8px;
+            border-left: 4px solid transparent;
+        }
+        .nav-item:hover {
+            color: var(--text-primary);
+            background: var(--bg-hover);
+        }
+        .nav-item.active {
+            color: var(--primary);
+            background: var(--primary-soft);
+            border-left-color: var(--primary);
+            font-weight: 600;
+        }
+        .nav-item .icon {
+            font-size: 16px;
+            width: 22px;
+            text-align: center;
+        }
+        .nav-badge {
+            margin-left: auto;
+            background: var(--danger);
+            color: #fff;
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        .main-content {
+            margin-left: 200px;
+            flex: 1;
+            padding: 20px;
+            max-width: 1400px;
+        }
+
+        /* ===== 页面头部 ===== */
+        .page-header {
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .page-header h2 {
+            font-size: 20px;
+            color: var(--text-primary);
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+        .page-header p {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        /* ===== 按钮 ===== */
+        .btn-primary {
+            padding: 10px 22px;
+            border: none;
+            border-radius: 10px;
+            background: var(--primary);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 2px 12px var(--primary-glow);
+            min-height: 44px;
+        }
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            box-shadow: 0 4px 20px var(--primary-glow);
+            transform: translateY(-1px);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .btn-secondary {
+            padding: 10px 22px;
+            border: 2px solid var(--border-medium);
+            border-radius: 10px;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 44px;
+        }
+        .btn-secondary:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: var(--primary-soft);
+        }
+
+        /* ===== 卡片通用 ===== */
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-light);
+            border-radius: 14px;
+            padding: 18px 20px;
+            margin-bottom: 16px;
+            box-shadow: var(--shadow-sm);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .card:hover {
+            border-color: var(--border-medium);
+            box-shadow: var(--shadow-md);
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .card-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card-title .icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            background: var(--primary-soft);
+            color: var(--primary);
+        }
+
+        /* ===== 解析流程 ===== */
+        .parse-flow {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .parse-step {
+            padding: 8px 14px;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            border: 1px solid var(--border-light);
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+        }
+        .parse-step.done {
+            border-color: var(--success);
+            color: var(--success);
+            background: var(--success-soft);
+        }
+        .parse-step.active {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: var(--primary-soft);
+            animation: pulse-border 2s infinite;
+        }
+        .parse-arrow {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        @keyframes pulse-border {
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(0, 102, 179, 0.15);
+            }
+            50% {
+                box-shadow: 0 0 0 4px rgba(0, 102, 179, 0.08);
+            }
+        }
+
+        /* ===== 示范列表 ===== */
+        .demo-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .demo-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 16px;
+            background: var(--bg-primary);
+            border-radius: 12px;
+            border: 1px solid var(--border-light);
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .demo-item:hover {
+            border-color: var(--border-medium);
+            background: var(--bg-hover);
+        }
+        .demo-item.active {
+            border-color: var(--primary);
+            background: var(--primary-soft);
+        }
+        .demo-cover {
+            width: 52px;
+            height: 52px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--primary-soft), var(--primary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+            color: #fff;
+        }
+        .demo-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .demo-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 3px;
+        }
+        .demo-meta {
+            display: flex;
+            gap: 14px;
+            font-size: 12px;
+            color: var(--text-muted);
+            flex-wrap: wrap;
+        }
+        .demo-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .demo-tags {
+            display: flex;
+            gap: 6px;
+            margin-top: 5px;
+            flex-wrap: wrap;
+        }
+        .demo-tag {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .demo-tag.role {
+            background: rgba(139, 92, 246, 0.10);
+            color: #7C3AED;
+        }
+        .demo-tag.banshi {
+            background: var(--warning-soft);
+            color: var(--warning);
+        }
+        .demo-tag.parsed {
+            background: var(--success-soft);
+            color: var(--success);
+        }
+        .demo-tag.parsing {
+            background: var(--primary-soft);
+            color: var(--primary);
+        }
+        .demo-difficulty {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 5px;
+            font-size: 11px;
+        }
+        .diff-badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+        }
+        .diff-badge.easy {
+            background: var(--success-soft);
+            color: var(--success);
+        }
+        .diff-badge.medium {
+            background: var(--warning-soft);
+            color: var(--warning);
+        }
+        .diff-badge.hard {
+            background: var(--danger-soft);
+            color: var(--danger);
+        }
+        .demo-actions {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+        .demo-action {
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 2px solid var(--border-light);
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            transition: all 0.2s;
+            font-weight: 600;
+        }
+        .demo-action:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: var(--primary-soft);
+        }
+
+        /* ===== 详情面板 ===== */
+        .detail-panel {
+            background: var(--bg-secondary);
+            border-radius: 14px;
+            border: 1px solid var(--border-light);
+            padding: 18px 20px;
+            box-shadow: var(--shadow-sm);
+        }
+        .detail-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .detail-cover {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--primary-soft), var(--primary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            color: #fff;
+            flex-shrink: 0;
+        }
+        .detail-info {
+            flex: 1;
+        }
+        .detail-title {
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .detail-meta {
+            display: flex;
+            gap: 14px;
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 3px;
+            flex-wrap: wrap;
+        }
+        .detail-stats {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .detail-stat {
+            text-align: center;
+            padding: 12px 8px;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            border: 1px solid var(--border-light);
+        }
+        .detail-stat .val {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .detail-stat .lab {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* ===== 技法要求 ===== */
+        .tech-section {
+            margin-bottom: 16px;
+        }
+        .tech-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .tech-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .tech-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .tech-chip {
+            padding: 6px 12px;
+            border-radius: 6px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-light);
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .tech-chip .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+        .tech-chip .name {
+            color: var(--text-primary);
+        }
+        .tech-chip .level {
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-weight: 700;
+        }
+        .level-master {
+            background: var(--success-soft);
+            color: var(--success);
+        }
+        .level-learning {
+            background: var(--primary-soft);
+            color: var(--primary);
+        }
+        .level-weak {
+            background: var(--warning-soft);
+            color: var(--warning);
+        }
+        .graph-link {
+            font-size: 12px;
+            color: var(--primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-weight: 600;
+        }
+        .graph-link:hover {
+            text-decoration: underline;
+        }
+
+        /* ===== 歌词时间线 ===== */
+        .lyrics-timeline {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 12px;
+            background: var(--bg-primary);
+            border-radius: 10px;
+            border: 1px solid var(--border-light);
+            max-height: 280px;
+            overflow-y: auto;
+        }
+        .timeline-cell {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 44px;
+            padding: 6px 3px 4px;
+            border-radius: 6px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-light);
+        }
+        .timeline-cell.punct {
+            background: transparent;
+            border: none;
+            min-width: 16px;
+        }
+        .timeline-char {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .timeline-cell.punct .timeline-char {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        .timeline-pitch {
+            font-size: 9px;
+            color: var(--text-muted);
+            font-family: monospace;
+        }
+        .timeline-time {
+            font-size: 8px;
+            color: var(--text-light);
+        }
+        .timeline-note {
+            font-size: 8px;
+            color: var(--text-light);
+        }
+
+        /* ===== 版本管理 ===== */
+        .version-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .version-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            border: 1px solid var(--border-light);
+        }
+        .version-item.current {
+            border-color: var(--success);
+        }
+        .version-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+            flex: 1;
+        }
+        .version-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+        .version-badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+        }
+        .version-badge.current {
+            background: var(--success-soft);
+            color: var(--success);
+        }
+
+        /* ===== 难度趋势 ===== */
+        .diff-trend {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 3px;
+        }
+        .trend-bar {
+            flex: 1;
+            height: 4px;
+            background: var(--border-light);
+            border-radius: 2px;
+            overflow: hidden;
+            max-width: 100px;
+        }
+        .trend-fill {
+            height: 100%;
+            border-radius: 2px;
+            background: var(--progress-gradient);
+        }
+        .trend-text {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        /* ===== Toast ===== */
+        .toast-container {
+            position: fixed;
+            top: 72px;
+            right: 20px;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            background: var(--bg-secondary);
+            border: 2px solid var(--border-light);
+            border-radius: 12px;
+            padding: 14px 18px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            min-width: 300px;
+            max-width: 400px;
+            animation: toastIn 0.3s ease;
+        }
+        .toast.success {
+            border-color: rgba(74, 143, 107, 0.4);
+        }
+        .toast.info {
+            border-color: rgba(0, 102, 179, 0.4);
+        }
+        .toast.error {
+            border-color: rgba(184, 58, 47, 0.4);
+        }
+        .toast-icon {
+            font-size: 20px;
+        }
+        .toast-content {
+            flex: 1;
+        }
+        .toast-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+        .toast-msg {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+        .toast-close {
+            cursor: pointer;
+            color: var(--text-muted);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 16px;
+            line-height: 1;
+        }
+        .toast-close:hover {
+            background: var(--danger-soft);
+            color: var(--danger);
+        }
+        @keyframes toastIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* ===== 上传弹窗 ===== */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(245, 237, 228, 0.85);
+            backdrop-filter: blur(5px);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .modal-overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal {
+            background: var(--bg-secondary);
+            border: 2px solid var(--border-medium);
+            border-radius: 14px;
+            padding: 24px;
+            width: 480px;
+            max-width: 90vw;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.06);
+        }
+        .modal-header {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+        }
+        .modal-row {
+            margin-bottom: 14px;
+        }
+        .modal-row label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+        .modal-row input,
+        .modal-row select {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-primary);
+            border: 2px solid var(--border-light);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: inherit;
+        }
+        .modal-row input:focus,
+        .modal-row select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        .file-drop {
+            border: 2px dashed var(--border-medium);
+            border-radius: 10px;
+            padding: 28px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: var(--bg-primary);
+        }
+        .file-drop:hover {
+            border-color: var(--primary);
+            background: var(--primary-soft);
+        }
+        .file-drop .hint {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .file-drop .file-name {
+            font-size: 13px;
+            color: var(--primary);
+            margin-top: 6px;
+            font-weight: 600;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        /* ===== 处理中弹窗 ===== */
+        .processing-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(245, 237, 228, 0.88);
+            backdrop-filter: blur(6px);
+            z-index: 150;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .processing-overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .processing-modal {
+            background: var(--bg-secondary);
+            border: 2px solid var(--border-medium);
+            border-radius: 16px;
+            padding: 28px 32px;
+            width: 520px;
+            max-width: 92vw;
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.06);
+            position: relative;
+            overflow: hidden;
+        }
+        .processing-modal::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--progress-gradient);
+            animation: processing-bar 2s linear infinite;
+        }
+        @keyframes processing-bar {
+            0% {
+                transform: translateX(-100%);
+            }
+            100% {
+                transform: translateX(100%);
+            }
+        }
+        .processing-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .processing-header .icon {
+            font-size: 38px;
+            margin-bottom: 6px;
+            display: block;
+            animation: processing-pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes processing-pulse {
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1.06);
+                opacity: 0.85;
+            }
+        }
+        .processing-header h3 {
+            font-size: 18px;
+            color: var(--text-primary);
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+        .processing-header p {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .processing-file {
+            background: var(--bg-primary);
+            border: 1px dashed var(--border-medium);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .processing-file .file-icon {
+            font-size: 22px;
+        }
+        .processing-file .file-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .processing-file .file-name {
+            font-size: 14px;
+            color: var(--text-primary);
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .processing-file .file-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 1px;
+        }
+        .processing-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .processing-step {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            border: 1px solid var(--border-light);
+            transition: all 0.3s ease;
+        }
+        .processing-step.done {
+            border-color: rgba(74, 143, 107, 0.3);
+            background: var(--success-soft);
+        }
+        .processing-step.active {
+            border-color: rgba(0, 102, 179, 0.3);
+            background: var(--primary-soft);
+            box-shadow: 0 0 0 3px rgba(0, 102, 179, 0.08);
+        }
+        .processing-step .step-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            flex-shrink: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-light);
+            transition: all 0.3s ease;
+        }
+        .processing-step.done .step-icon {
+            background: var(--success-soft);
+            border-color: rgba(74, 143, 107, 0.3);
+            color: var(--success);
+        }
+        .processing-step.active .step-icon {
+            background: var(--primary-soft);
+            border-color: rgba(0, 102, 179, 0.3);
+            color: var(--primary);
+            animation: step-spin 2s linear infinite;
+        }
+        @keyframes step-spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+        .processing-step .step-text {
+            flex: 1;
+            font-size: 13px;
+            color: var(--text-secondary);
+            transition: color 0.3s;
+        }
+        .processing-step.done .step-text {
+            color: var(--success);
+        }
+        .processing-step.active .step-text {
+            color: var(--primary);
+            font-weight: 600;
+        }
+        .processing-step .step-time {
+            font-size: 11px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+        .processing-progress {
+            margin-bottom: 8px;
+        }
+        .processing-progress-bar {
+            height: 6px;
+            background: var(--border-light);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .processing-progress-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: var(--progress-gradient);
+            transition: width 0.5s ease;
+            position: relative;
+        }
+        .processing-progress-fill::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 30px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25));
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0% {
+                transform: translateX(0);
+            }
+            100% {
+                transform: translateX(30px);
+            }
+        }
+        .processing-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 8px;
+        }
+        .processing-status .status-msg {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .processing-status .status-pct {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        .processing-close {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 2px solid var(--border-light);
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .processing-close:hover {
+            background: var(--danger-soft);
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+        .processing-result {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            background: var(--success-soft);
+            border: 1px solid rgba(74, 143, 107, 0.2);
+            border-radius: 10px;
+            margin-top: 14px;
+        }
+        .processing-result.error {
+            background: var(--danger-soft);
+            border-color: rgba(184, 58, 47, 0.2);
+        }
+        .processing-result .result-icon {
+            font-size: 28px;
+        }
+        .processing-result .result-info {
+            flex: 1;
+        }
+        .processing-result .result-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--success);
+        }
+        .processing-result.error .result-title {
+            color: var(--danger);
+        }
+        .processing-result .result-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 1px;
+        }
+
+        /* ===== 滚动条 ===== */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-medium);
+            border-radius: 3px;
+        }
+
+        /* ===== 响应式 ===== */
+        @media (max-width: 1024px) {
+            .sidebar {
+                display: none;
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .detail-stats {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        @media (max-width: 768px) {
+            .detail-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+            .modal {
+                width: 95vw;
+                padding: 18px;
+            }
+            .processing-modal {
+                padding: 20px;
+            }
+            .demo-item {
+                flex-wrap: wrap;
+            }
+            .demo-actions {
+                width: 100%;
+                justify-content: flex-end;
+            }
+            .page-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .page-header .btn-primary {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+    <base target="_blank">
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="logo">戏</div>
+            <h1>戏韵AI · 老师工作台</h1>
+            <span class="badge">示范库管理</span>
+        </div>
+        <div class="nav-user">
+            <div class="avatar">👩‍🏫</div>
+            <span>王慧芳</span>
+            <span style="color:var(--text-muted);font-size:13px">|</span>
+            <span style="color:var(--text-secondary);font-size:13px">中国戏曲学院</span>
+        </div>
+    </nav>
+
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="nav-group">
+                <div class="nav-group-title">核心功能</div>
+                <a href="dashboard.html" class="nav-item"><span class="icon">📊</span>班级看板</a>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-group-title">🧑‍🏫 教学工作台</div>
+                <a href="demo_library.html" class="nav-item active"><span class="icon">🎵</span>示范库管理</a>
+                <a href="annotation.html" class="nav-item"><span class="icon">🏷️</span>歌词级标注</a>
+                <a href="homework.html" class="nav-item"><span class="icon">📝</span>作业批改</a>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-group-title">🎤 学生练习</div>
+                <a href="sing_along.html" class="nav-item"><span class="icon">🎙️</span>实时跟唱</a>
+                <a href="AI_teacher.html" class="nav-item"><span class="icon">🤖</span>AI教练对话</a>
+                <a href="cat_test.html" class="nav-item"><span class="icon">🎯</span>摸底测试（CAT）</a>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-group-title">📈 数据分析</div>
+                <a href="tracking.html" class="nav-item"><span class="icon">📈</span>能力追踪（BKT）</a>
+                <a href="recommendation.html" class="nav-item"><span class="icon">🎯</span>渐进式推荐</a>
+                <a href="knowledge_graph.html" class="nav-item"><span class="icon">🧠</span>知识图谱</a>
+                <a href="cdm_report.html" class="nav-item"><span class="icon">🔍</span>归因诊断（CDM）</a>
+                <a href="daily_report.html" class="nav-item"><span class="icon">📰</span>每日学习报告</a>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-header">
+                <div>
+                    <h2>🎵 示范库管理</h2>
+                    <p>上传示范音频 → VocalParse 自动解析 → 存入基准库 · 动态难度校准</p>
+                </div>
+                <button class="btn-primary" onclick="showUploadModal()">⬆️ 上传新示范</button>
+            </div>
+
+            <!-- 解析流程 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="icon" style="background:rgba(0,102,179,0.10);color:var(--primary)">⚡</div>
+                        VocalParse 解析流程
+                    </div>
+                </div>
+                <div class="parse-flow">
+                    <div class="parse-step active">音频上传</div>
+                    <span class="parse-arrow">→</span>
+                    <div class="parse-step active">Demucs 分离</div>
+                    <span class="parse-arrow">→</span>
+                    <div class="parse-step active">VocalParse 推理</div>
+                    <span class="parse-arrow">→</span>
+                    <div class="parse-step active">结构化输出</div>
+                    <span class="parse-arrow">→</span>
+                    <div class="parse-step active">Elo 难度校准</div>
+                    <span class="parse-arrow">→</span>
+                    <div class="parse-step active">存入基准库</div>
+                </div>
+                <div style="font-size:12px;color:var(--text-muted)">请点击右侧【上传新示范】按钮进行新音频解析</div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:16px">
+                <!-- 左侧：已入库示范 -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <div class="icon" style="background:rgba(139,92,246,0.10);color:#7C3AED">📚</div>
+                            已入库示范
+                        </div>
+                        <span style="font-size:12px;color:var(--text-muted)">共 5 首 · Elo 动态难度已校准</span>
+                    </div>
+                    <div class="demo-list" id="demoList"></div>
+                </div>
+
+                <!-- 右侧：详情面板 -->
+                <div class="detail-panel" id="detailPanel">
+                    <div class="detail-header">
+                        <div class="detail-cover" id="detailCover">🎭</div>
+                        <div class="detail-info">
+                            <div class="detail-title" id="detailTitle">《穆桂英挂帅》· 辕门外三声炮</div>
+                            <div class="detail-meta" id="detailMeta">
+                                <span>🎭 青衣</span>
+                                <span>🎵 西皮流水</span>
+                                <span>⏱️ 128 BPM</span>
+                                <span>📏 24.7秒</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="detail-stats" id="detailStats"></div>
+
+                    <!-- 技法要求 & 知识图谱 -->
+                    <div class="tech-section" id="techSection">
+                        <div class="tech-header">
+                            <div class="tech-title">🎯 技法要求 & 班级掌握状态</div>
+                            <span class="graph-link" onclick="viewKnowledgeGraph()">
+                                🧠 在知识图谱中查看 →
+                            </span>
+                        </div>
+                        <div class="tech-grid" id="techGrid"></div>
+                    </div>
+
+                    <!-- 多版本管理 -->
+                    <div style="margin-bottom:16px" id="versionSection">
+                        <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:8px">📦 多版本管理</div>
+                        <div class="version-list" id="versionList"></div>
+                    </div>
+
+                    <!-- 歌词时间线 -->
+                    <div id="timelineSection">
+                        <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:8px">🎵 VocalParse 解析结果 · 歌词-音高-时值时间线</div>
+                        <div class="lyrics-timeline" id="lyricsTimeline"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast 容器 -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- 上传弹窗 -->
+    <div class="modal-overlay" id="uploadModal">
+        <div class="modal">
+            <div class="modal-header">⬆️ 上传新示范</div>
+            <div class="modal-row">
+                <label>曲目名称</label>
+                <input type="text" id="uploadTitle" placeholder="如：《穆桂英挂帅》· 辕门外三声炮">
+            </div>
+            <div class="modal-row">
+                <label>行当</label>
+                <select id="uploadRole">
+                    <option value="">请选择</option>
+                    <option value="青衣">青衣</option>
+                    <option value="花旦">花旦</option>
+                    <option value="老生">老生</option>
+                    <option value="小生">小生</option>
+                    <option value="老旦">老旦</option>
+                    <option value="净">净</option>
+                </select>
+            </div>
+            <div class="modal-row">
+                <label>板式</label>
+                <select id="uploadBanshi">
+                    <option value="">请选择</option>
+                    <option value="西皮流水">西皮流水</option>
+                    <option value="西皮慢板">西皮慢板</option>
+                    <option value="四平调">四平调</option>
+                    <option value="南梆子">南梆子</option>
+                    <option value="二黄原板">二黄原板</option>
+                </select>
+            </div>
+            <div class="modal-row">
+                <label>音频文件</label>
+                <div class="file-drop" id="fileDrop" onclick="document.getElementById('fileInput').click()">
+                    <div class="hint">点击选择音频文件<br><span style="color:var(--text-muted);font-size:11px">支持 wav / mp3 / flac</span></div>
+                    <div class="file-name" id="fileName" style="display:none"></div>
+                </div>
+                <input type="file" id="fileInput" accept="audio/*" style="display:none" onchange="onFileSelect(event)">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="hideUploadModal()">取消</button>
+                <button class="btn-primary" onclick="doUpload()" id="uploadBtn">开始上传</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 处理中弹窗 -->
+    <div class="processing-overlay" id="processingModal">
+        <div class="processing-modal">
+            <div class="processing-close" onclick="hideProcessingModal()" id="processingClose">✕</div>
+            <div class="processing-header">
+                <span class="icon" id="processingIcon">⚡</span>
+                <h3 id="processingTitle">正在解析音频</h3>
+                <p id="processingSubtitle">VocalParse 智能分析引擎工作中</p>
+            </div>
+            <div class="processing-file">
+                <span class="file-icon">🎵</span>
+                <div class="file-info">
+                    <div class="file-name" id="processingFileName">--</div>
+                    <div class="file-meta" id="processingFileMeta">等待开始...</div>
+                </div>
+            </div>
+            <div class="processing-steps" id="processingSteps">
+                <!-- 动态生成 -->
+            </div>
+            <div class="processing-progress">
+                <div class="processing-progress-bar">
+                    <div class="processing-progress-fill" id="processingProgressBar" style="width:0%"></div>
+                </div>
+            </div>
+            <div class="processing-status">
+                <span class="status-msg" id="processingStatusMsg">准备中...</span>
+                <span class="status-pct" id="processingStatusPct">0%</span>
+            </div>
+            <div class="processing-result" id="processingResult" style="display:none">
+                <span class="result-icon" id="resultIcon">✅</span>
+                <div class="result-info">
+                    <div class="result-title" id="resultTitle">解析完成</div>
+                    <div class="result-desc" id="resultDesc">该示范已入库，可查看详情</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "";
+		// ============================================================
+		// 模拟数据（后端 API 预留接口）
+		// ============================================================
+
+		/* TODO: API GET /api/v1/demos
+		   返回：已入库示范列表
+		*/
+		const DEMO_DATA = [
+		  {
+			id: "demo_001",
+			title: "《穆桂英挂帅》· 辕门外三声炮",
+			role: "青衣",
+			banshi: "西皮流水",
+			bpm: 128,
+			duration: 24.7,
+			elo_difficulty: 0.72,
+			status: "parsed",
+			created_at: "2026-08-01T10:30:00Z",
+			parse_result: {
+			  word_count: 62,
+			  parse_time_sec: 4.8,
+			  techniques: ["拖腔", "音准稳定性", "归韵咬字", "节奏感知"],
+			  timeline: [
+				{ char: "辕", pitch: 64, note: "NOTE_8", time: 0.0 },
+				{ char: "门", pitch: 66, note: "NOTE_8", time: 0.4 },
+				{ char: "外", pitch: 67, note: "NOTE_4", time: 0.75 },
+				{ char: "三", pitch: 69, note: "NOTE_8", time: 1.25 },
+				{ char: "声", pitch: 71, note: "NOTE_8", time: 1.6 },
+				{ char: "炮", pitch: 72, note: "NOTE_4", time: 2.0 },
+				{ char: "如", pitch: 69, note: "NOTE_8", time: 2.8 },
+				{ char: "同", pitch: 67, note: "NOTE_8", time: 3.1 },
+				{ char: "雷", pitch: 71, note: "NOTE_4", time: 3.4 },
+				{ char: "震", pitch: 69, note: "NOTE_2", time: 4.2 },
+				{ char: "，", pitch: null, note: null, time: 5.4, punct: true },
+				{ char: "天", pitch: 67, note: "NOTE_8", time: 5.6 },
+				{ char: "波", pitch: 66, note: "NOTE_8", time: 5.9 },
+				{ char: "府", pitch: 64, note: "NOTE_4", time: 6.2 },
+				{ char: "走", pitch: 67, note: "NOTE_8", time: 6.9 },
+				{ char: "出", pitch: 69, note: "NOTE_8", time: 7.2 },
+				{ char: "来", pitch: 71, note: "NOTE_8", time: 7.5 },
+				{ char: "保", pitch: 72, note: "NOTE_4", time: 7.8 },
+				{ char: "国", pitch: 71, note: "NOTE_8", time: 8.5 },
+				{ char: "臣", pitch: 69, note: "NOTE_2", time: 8.8 },
+				{ char: "。", pitch: null, note: null, time: 10.0, punct: true },
+				{ char: "头", pitch: 67, note: "NOTE_8", time: 10.2 },
+				{ char: "戴", pitch: 69, note: "NOTE_8", time: 10.5 },
+				{ char: "金", pitch: 71, note: "NOTE_8", time: 10.8 },
+				{ char: "冠", pitch: 72, note: "NOTE_4", time: 11.1 },
+				{ char: "遮", pitch: 74, note: "NOTE_8", time: 11.8 },
+				{ char: "云", pitch: 72, note: "NOTE_8", time: 12.1 },
+				{ char: "鬓", pitch: 71, note: "NOTE_2", time: 12.4 },
+				{ char: "，", pitch: null, note: null, time: 13.6, punct: true },
+				{ char: "当", pitch: 69, note: "NOTE_8", time: 13.8 },
+				{ char: "年", pitch: 67, note: "NOTE_8", time: 14.1 },
+				{ char: "的", pitch: 66, note: "NOTE_16", time: 14.4 },
+				{ char: "铠", pitch: 69, note: "NOTE_4", time: 14.6 },
+				{ char: "甲", pitch: 71, note: "NOTE_8", time: 15.3 },
+				{ char: "披", pitch: 72, note: "NOTE_8", time: 15.6 },
+				{ char: "上", pitch: 74, note: "NOTE_8", time: 15.9 },
+				{ char: "身", pitch: 72, note: "NOTE_2", time: 16.2 }
+			  ]
+			},
+			versions: [
+			  { id: "v1", name: "王老师标准版", date: "2026-08-01", bpm: 128, duration: 24.7, is_current: true },
+			  { id: "v2", name: "王老师慢速教学版", date: "2026-07-25", bpm: 96, duration: 32.8, is_current: false }
+			]
+		  },
+		  {
+			id: "demo_002",
+			title: "《贵妃醉酒》· 海岛冰轮初转腾",
+			role: "青衣",
+			banshi: "四平调",
+			bpm: 96,
+			duration: 44.7,
+			elo_difficulty: 0.85,
+			status: "parsed",
+			created_at: "2026-07-28T14:20:00Z",
+			parse_result: {
+			  word_count: 48,
+			  parse_time_sec: 6.2,
+			  techniques: ["拖腔", "滑音", "气息支撑", "归韵咬字", "润腔"],
+			  timeline: [
+				{ char: "海", pitch: 67, note: "NOTE_DOT_16", time: 0.0 },
+				{ char: "岛", pitch: 60, note: "NOTE_16", time: 0.6 },
+				{ char: "冰", pitch: 63, note: "NOTE_16", time: 1.2 },
+				{ char: "轮", pitch: 63, note: "NOTE_16", time: 1.9 },
+				{ char: "初", pitch: 61, note: "NOTE_16", time: 2.5 },
+				{ char: "转", pitch: 63, note: "NOTE_DOT_8", time: 3.1 },
+				{ char: "腾", pitch: 63, note: "NOTE_DOT_16", time: 3.7 },
+				{ char: "—", pitch: 58, note: "NOTE_16", time: 4.4 },
+				{ char: "—", pitch: 63, note: "NOTE_4", time: 5.0 },
+				{ char: "海", pitch: 64, note: "NOTE_DOT_16", time: 5.6 },
+				{ char: "岛", pitch: 58, note: "NOTE_16", time: 6.2 },
+				{ char: "冰", pitch: 63, note: "NOTE_8", time: 6.8 },
+				{ char: "轮", pitch: 63, note: "NOTE_8", time: 7.5 },
+				{ char: "初", pitch: 55, note: "NOTE_16", time: 8.1 },
+				{ char: "转", pitch: 61, note: "NOTE_DOT_16", time: 8.7 },
+				{ char: "腾", pitch: 63, note: "NOTE_16", time: 9.3 },
+				{ char: "—", pitch: 63, note: "NOTE_16", time: 9.9 },
+				{ char: "—", pitch: 61, note: "NOTE_16", time: 10.6 },
+				{ char: "海", pitch: 62, note: "NOTE_16", time: 11.2 },
+				{ char: "岛", pitch: 65, note: "NOTE_8", time: 11.8 },
+				{ char: "冰", pitch: 68, note: "NOTE_8", time: 12.4 },
+				{ char: "轮", pitch: 65, note: "NOTE_4", time: 13.1 },
+				{ char: "初", pitch: 63, note: "NOTE_16", time: 13.7 },
+				{ char: "转", pitch: 65, note: "NOTE_8", time: 14.3 },
+				{ char: "腾", pitch: 59, note: "NOTE_DOT_16", time: 14.9 },
+				{ char: "—", pitch: 61, note: "NOTE_16", time: 15.5 },
+				{ char: "—", pitch: 59, note: "NOTE_16", time: 16.2 },
+				{ char: "—", pitch: 61, note: "NOTE_8", time: 16.8 }
+			  ]
+			},
+			versions: [
+			  { id: "v3", name: "王老师标准版", date: "2026-07-28", bpm: 96, duration: 44.7, is_current: true }
+			]
+		  },
+		  {
+			id: "demo_003",
+			title: "《霸王别姬》· 看大王在帐中",
+			role: "青衣",
+			banshi: "南梆子",
+			bpm: 110,
+			duration: 38.5,
+			elo_difficulty: 0.78,
+			status: "parsed",
+			created_at: "2026-07-20T09:15:00Z",
+			parse_result: {
+			  word_count: 36,
+			  parse_time_sec: 5.0,
+			  techniques: ["拖腔", "音准控制", "颤音", "归韵咬字"],
+			  timeline: [
+				{ char: "看", pitch: 62, note: "NOTE_DOT_16", time: 0.0 },
+				{ char: "大", pitch: 64, note: "NOTE_16", time: 0.6 },
+				{ char: "王", pitch: 64, note: "NOTE_DOT_16", time: 1.2 },
+				{ char: "在", pitch: 61, note: "NOTE_16", time: 1.9 },
+				{ char: "帐", pitch: 61, note: "NOTE_DOT_16", time: 2.5 },
+				{ char: "中", pitch: 57, note: "NOTE_DOT_16", time: 3.1 },
+				{ char: "—", pitch: 61, note: "NOTE_8", time: 3.7 },
+				{ char: "看", pitch: 58, note: "NOTE_DOT_16", time: 4.4 },
+				{ char: "大", pitch: 61, note: "NOTE_16", time: 5.0 },
+				{ char: "王", pitch: 58, note: "NOTE_16", time: 5.6 },
+				{ char: "在", pitch: 56, note: "NOTE_16", time: 6.2 },
+				{ char: "帐", pitch: 58, note: "NOTE_16", time: 6.8 },
+				{ char: "中", pitch: 57, note: "NOTE_DOT_32", time: 7.5 },
+				{ char: "—", pitch: 56, note: "NOTE_8", time: 8.1 }
+			  ]
+			},
+			versions: [
+			  { id: "v4", name: "王老师标准版", date: "2026-07-20", bpm: 110, duration: 38.5, is_current: true },
+			  { id: "v5", name: "李老师示范版", date: "2026-07-15", bpm: 108, duration: 39.2, is_current: false }
+			]
+		  },
+		  {
+			id: "demo_004",
+			title: "《红娘》· 叫张生隐藏在棋盘之下",
+			role: "花旦",
+			banshi: "西皮流水",
+			bpm: 132,
+			duration: 28.3,
+			elo_difficulty: 0.68,
+			status: "parsing",
+			created_at: "2026-08-03T16:45:00Z",
+			parse_result: null,
+			versions: [
+			  { id: "v6", name: "王老师标准版", date: "2026-08-03", bpm: 132, duration: 28.3, is_current: true }
+			]
+		  }
+		];
+        let activeDemoId = null,
+            pollTimer = null,
+            selectedFile = null;
+        let processingDemoId = null,
+            processingFileName = "";
+
+        async function fetchDemos() {
+		  try {
+			// 模拟网络延迟
+			await new Promise(resolve => setTimeout(resolve, 300));
+			
+			// 直接从模拟数据中读取
+			const demos = DEMO_DATA.map(d => ({
+			  id: d.id,
+			  title: d.title,
+			  role: d.role,
+			  banshi: d.banshi,
+			  bpm: d.bpm,
+			  duration: d.duration,
+			  elo_difficulty: d.elo_difficulty,
+			  status: d.status,
+			  created_at: d.created_at,
+			  parse_result: d.parse_result
+			}));
+			
+			renderDemoList(demos);
+		  } catch (e) {
+			showToast("error", "加载失败", `无法获取示范列表: ${e.message}`);
+			const listEl = document.getElementById("demoList");
+			if (listEl) listEl.innerHTML =
+			  `<div style="padding:40px;text-align:center;color:var(--text-muted)">加载失败，请刷新重试</div>`;
+		  }
+		}
+
+        async function fetchDemoDetail(demoId) {
+		  try {
+			// 模拟网络延迟
+			await new Promise(resolve => setTimeout(resolve, 200));
+			
+			const demo = DEMO_DATA.find(d => d.id === demoId);
+			if (!demo) throw new Error("未找到该示范");
+			
+			const versions = demo.versions || [];
+			const timeline = demo.parse_result?.timeline || [];
+			
+			renderDetail(demo, versions, timeline);
+		  } catch (e) {
+			showToast("error", "加载详情失败", e.message);
+		  }
+		}
+
+        async function fetchStatus(demoId) {
+		  try {
+			await new Promise(resolve => setTimeout(resolve, 200));
+			const demo = DEMO_DATA.find(d => d.id === demoId);
+			if (!demo) return null;
+			
+			// 模拟解析进度
+			const progressMap = {
+			  "demo_001": 100,
+			  "demo_002": 100,
+			  "demo_003": 100,
+			  "demo_004": 45
+			};
+			const statusMap = {
+			  "demo_001": "parsed",
+			  "demo_002": "parsed",
+			  "demo_003": "parsed",
+			  "demo_004": "parsing"
+			};
+			const msgMap = {
+			  "demo_001": "解析完成",
+			  "demo_002": "解析完成",
+			  "demo_003": "解析完成",
+			  "demo_004": "VocalParse 推理中..."
+			};
+			
+			return {
+			  status: statusMap[demoId] || "parsing",
+			  progress: progressMap[demoId] || 50,
+			  message: msgMap[demoId] || "处理中..."
+			};
+		  } catch (e) { return null; }
+		}
+
+        function getEloLabel(elo) {
+            if (elo >= 0.85) return { text: "高难度", cls: "hard" };
+            if (elo >= 0.70) return { text: "中等难度", cls: "medium" };
+            return { text: "入门难度", cls: "easy" };
+        }
+
+        function getMasteryLevel(p) {
+            if (p >= 0.85) return { cls: "level-master", text: "已掌握" };
+            if (p >= 0.60) return { cls: "level-learning", text: "学习中" };
+            return { cls: "level-weak", text: "薄弱" };
+        }
+
+        function getMasteryColor(p) {
+            if (p >= 0.85) return "#4A8F6B";
+            if (p >= 0.60) return "#0066B3";
+            if (p >= 0.40) return "#C9A84C";
+            return "#B83A2F";
+        }
+
+        function renderDemoList(demos) {
+            const container = document.getElementById("demoList");
+            if (!container) return;
+            if (!demos.length) {
+                container.innerHTML =
+                    `<div style="padding:40px;text-align:center;color:var(--text-muted)">暂无示范，点击右上角上传</div>`;
+                return;
+            }
+            container.innerHTML = demos.map(d => {
+                const eloInfo = getEloLabel(d.elo_difficulty);
+                const isActive = d.id === activeDemoId;
+                const dateStr = d.created_at ? d.created_at.slice(0, 10) : "";
+                return `
+              <div class="demo-item ${isActive ? 'active' : ''}" data-id="${d.id}" onclick="selectDemo('${d.id}')">
+                <div class="demo-cover">🎭</div>
+                <div class="demo-info">
+                  <div class="demo-title">${esc(d.title)}</div>
+                  <div class="demo-meta">
+                    <span>🎵 ${d.banshi || "未知板式"}</span>
+                    <span>⏱️ ${d.duration ? d.duration.toFixed(1) : "0.0"}s</span>
+                    <span>📅 ${dateStr}</span>
+                  </div>
+                  <div class="demo-tags">
+                    <span class="demo-tag role">${d.role || "未知行当"}</span>
+                    <span class="demo-tag ${d.status === 'parsed' ? 'parsed' : 'parsing'}">${d.status === 'parsed' ? '已解析' : '解析中'}</span>
+                  </div>
+                  <div class="demo-difficulty">
+                    <span class="diff-badge ${eloInfo.cls}">${eloInfo.text} · Elo ${d.elo_difficulty.toFixed(2)}</span>
+                    <div class="diff-trend">
+                      <div class="trend-bar"><div class="trend-fill" style="width:${d.elo_difficulty * 100}%"></div></div>
+                      <span class="trend-text">班级平均 ${(d.elo_difficulty * 0.88).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="demo-actions">
+                  <button class="demo-action" onclick="event.stopPropagation();annotateDemo('${d.id}')">标注</button>
+                  <button class="demo-action" onclick="event.stopPropagation();showVersions('${d.id}')">版本</button>
+                </div>
+              </div>`;
+            }).join("");
+        }
+
+        function renderDetail(demo, versions, timeline) {
+            const titleEl = document.getElementById("detailTitle");
+            const metaEl = document.getElementById("detailMeta");
+            const statsEl = document.getElementById("detailStats");
+            const techGridEl = document.getElementById("techGrid");
+            const techSectionEl = document.getElementById("techSection");
+            const versionListEl = document.getElementById("versionList");
+            const versionSectionEl = document.getElementById("versionSection");
+            const timelineEl = document.getElementById("lyricsTimeline");
+            const timelineSectionEl = document.getElementById("timelineSection");
+
+            if (titleEl) titleEl.textContent = demo.title || "未命名";
+            if (metaEl) metaEl.innerHTML = `
+            <span>🎭 ${demo.role || "未知行当"}</span>
+            <span>🎵 ${demo.banshi || "未知板式"}</span>
+            <span>⏱️ ${demo.bpm || 0} BPM</span>
+            <span>📏 ${demo.duration ? demo.duration.toFixed(1) : "0.0"}秒</span>`;
+
+            const eloInfo = getEloLabel(demo.elo_difficulty);
+            if (statsEl) statsEl.innerHTML = `
+            <div class="detail-stat"><div class="val">${versions.length}</div><div class="lab">版本数</div></div>
+            <div class="detail-stat"><div class="val">${demo.parse_result?.word_count || 0}</div><div class="lab">标注规则</div></div>
+            <div class="detail-stat"><div class="val">${demo.parse_result?.word_count || 0}</div><div class="lab">解析字数</div></div>
+            <div class="detail-stat"><div class="val">${demo.parse_result?.parse_time_sec || 0}s</div><div class="lab">解析耗时</div></div>
+            <div class="detail-stat" style="border-color:${demo.elo_difficulty >= 0.85 ? 'rgba(184,58,47,0.25)' : (demo.elo_difficulty >= 0.7 ? 'rgba(201,168,76,0.25)' : 'rgba(74,143,107,0.25)')}">
+              <div class="val" style="color:${demo.elo_difficulty >= 0.85 ? 'var(--danger)' : (demo.elo_difficulty >= 0.7 ? 'var(--warning)' : 'var(--success)')}">${demo.elo_difficulty.toFixed(2)}</div>
+              <div class="lab">动态难度(Elo)</div>
+            </div>`;
+
+            const techniques = demo.parse_result?.techniques || [];
+            if (techSectionEl) {
+                if (techniques.length && techGridEl) {
+                    techSectionEl.style.display = "";
+                    techGridEl.innerHTML = techniques.map(t => {
+                        const mastery = 0.65;
+                        const level = getMasteryLevel(mastery);
+                        const color = getMasteryColor(mastery);
+                        return `<div class="tech-chip"><span class="dot" style="background:${color}"></span><span class="name">${esc(t)}</span><span class="level ${level.cls}">${level.text} ${(mastery * 100).toFixed(0)}%</span></div>`;
+                    }).join("");
+                } else { techSectionEl.style.display = "none"; }
+            }
+
+            if (versionSectionEl) {
+                if (versions.length && versionListEl) {
+                    versionSectionEl.style.display = "";
+                    versionListEl.innerHTML = versions.map(v => `
+                <div class="version-item ${v.is_current ? 'current' : ''}">
+                  <div class="version-name">${esc(v.name)}</div>
+                  <div class="version-meta">${v.date ? v.date.slice(0, 10) : ""} · ${v.bpm}BPM · ${v.duration.toFixed(1)}s</div>
+                  ${v.is_current ? '<span class="version-badge current">当前默认</span>' : ''}
+                </div>`).join("");
+                } else { versionSectionEl.style.display = "none"; }
+            }
+
+            if (timelineSectionEl) {
+                if (timeline && timeline.length && timelineEl) {
+                    timelineSectionEl.style.display = "";
+                    timelineEl.innerHTML = timeline.map(t => {
+                        if (t.punct) {
+                            return `<div class="timeline-cell punct"><div class="timeline-char">${esc(t.char)}</div></div>`;
+                        }
+                        const hasPitch = t.pitch && t.pitch !== 0;
+                        const pitchStr = hasPitch ? t.pitch : "--";
+                        const noteStr = t.note && t.note !== "--" ? t.note : "--";
+                        const pitchColor = hasPitch ? "var(--text-secondary)" : "var(--text-light)";
+                        return `
+                  <div class="timeline-cell">
+                    <div class="timeline-char">${esc(t.char)}</div>
+                    <div class="timeline-pitch" style="color:${pitchColor}">${pitchStr}·${noteStr}</div>
+                    <div class="timeline-time">${t.time || "0.0s"}</div>
+                  </div>
+                `;
+                    }).join("");
+                } else {
+                    timelineSectionEl.style.display = "none";
+                }
+            }
+        }
+
+        function renderParseFlow(status, progress, message) {
+            const flowEl = document.getElementById("parseFlow");
+            if (!flowEl) return;
+
+            const steps = [
+                { label: "音频上传", t: 0 },
+                { label: "Demucs 分离", t: 20 },
+                { label: "VocalParse 推理", t: 50 },
+                { label: "结构化输出", t: 80 },
+                { label: "Elo 难度校准", t: 90 },
+                { label: "存入基准库", t: 100 },
+            ];
+
+            if (status === "parsed") { return; }
+            let html = "";
+            steps.forEach((s, i) => {
+                let cls = "",
+                    icon = "⏳";
+                if (progress >= s.t + 15) { cls = "done";
+                    icon = "✅"; } else if (progress >= s.t) { cls = "active";
+                    icon = "🔄"; }
+                html += `<div class="parse-step ${cls}">${icon} ${s.label}</div>`;
+                if (i < steps.length - 1) html += `<span class="parse-arrow">→</span>`;
+            });
+            flowEl.innerHTML = html;
+        }
+
+        /* ========== 处理中弹窗相关 ========== */
+        function showProcessingModal(fileName, demoId) {
+            processingDemoId = demoId;
+            processingFileName = fileName || "未命名文件";
+            const modal = document.getElementById("processingModal");
+            const fileNameEl = document.getElementById("processingFileName");
+            const fileMetaEl = document.getElementById("processingFileMeta");
+            const closeBtn = document.getElementById("processingClose");
+            const resultBox = document.getElementById("processingResult");
+
+            if (fileNameEl) fileNameEl.textContent = processingFileName;
+            if (fileMetaEl) fileMetaEl.textContent = `Demo ID: ${demoId}`;
+            if (closeBtn) closeBtn.style.display = "none";
+            if (resultBox) resultBox.style.display = "none";
+
+            renderProcessingModal("pending", 0, "等待解析...");
+            if (modal) modal.classList.add("show");
+        }
+
+        function hideProcessingModal() {
+            const modal = document.getElementById("processingModal");
+            if (modal) modal.classList.remove("show");
+            processingDemoId = null;
+        }
+
+        function renderProcessingModal(status, progress, message) {
+            const stepsEl = document.getElementById("processingSteps");
+            const barEl = document.getElementById("processingProgressBar");
+            const msgEl = document.getElementById("processingStatusMsg");
+            const pctEl = document.getElementById("processingStatusPct");
+            const iconEl = document.getElementById("processingIcon");
+            const titleEl = document.getElementById("processingTitle");
+            const subtitleEl = document.getElementById("processingSubtitle");
+
+            const steps = [
+                { key: "upload", label: "音频上传", icon: "📤", t: 0 },
+                { key: "demucs", label: "Demucs 人声分离", icon: "🎚️", t: 20 },
+                { key: "vocalparse", label: "VocalParse 智能推理", icon: "🧠", t: 50 },
+                { key: "structure", label: "结构化输出", icon: "📊", t: 80 },
+                { key: "elo", label: "Elo 难度校准", icon: "📈", t: 90 },
+                { key: "save", label: "存入基准库", icon: "💾", t: 100 },
+            ];
+
+            if (stepsEl) {
+                stepsEl.innerHTML = steps.map(s => {
+                    let cls = "",
+                        icon = s.icon;
+                    if (progress >= s.t + 15) { cls = "done"; } else if (progress >= s.t) { cls = "active";
+                        icon = "🔄"; }
+                    const timeStr = progress >= s.t + 15 ? "已完成" : (progress >= s.t ? "进行中..." : "等待中");
+                    return `
+                <div class="processing-step ${cls}">
+                  <div class="step-icon">${icon}</div>
+                  <div class="step-text">${s.label}</div>
+                  <div class="step-time">${timeStr}</div>
+                </div>
+              `;
+                }).join("");
+            }
+
+            if (barEl) barEl.style.width = `${Math.max(0, Math.min(100, progress))}%`;
+            if (msgEl) msgEl.textContent = message || "准备中...";
+            if (pctEl) pctEl.textContent = `${Math.max(0, Math.min(100, progress))}%`;
+
+            if (status === "parsed") {
+                if (iconEl) iconEl.textContent = "✅";
+                if (titleEl) titleEl.textContent = "解析完成";
+                if (subtitleEl) subtitleEl.textContent = "该示范已成功入库";
+            } else if (status === "error") {
+                if (iconEl) iconEl.textContent = "❌";
+                if (titleEl) titleEl.textContent = "解析失败";
+                if (subtitleEl) subtitleEl.textContent = "请检查音频质量或联系管理员";
+            } else {
+                if (iconEl) iconEl.textContent = "⚡";
+                if (titleEl) titleEl.textContent = "正在解析音频";
+                if (subtitleEl) subtitleEl.textContent = "VocalParse 智能分析引擎工作中";
+            }
+        }
+
+        function renderProcessingResult(status) {
+            const resultBox = document.getElementById("processingResult");
+            const resultIcon = document.getElementById("resultIcon");
+            const resultTitle = document.getElementById("resultTitle");
+            const resultDesc = document.getElementById("resultDesc");
+            const closeBtn = document.getElementById("processingClose");
+
+            if (!resultBox) return;
+            resultBox.style.display = "flex";
+            resultBox.className = status === "error" ? "processing-result error" : "processing-result";
+
+            if (status === "parsed") {
+                if (resultIcon) resultIcon.textContent = "✅";
+                if (resultTitle) resultTitle.textContent = "解析完成";
+                if (resultDesc) resultDesc.textContent = "该示范已入库，可查看详情";
+            } else {
+                if (resultIcon) resultIcon.textContent = "❌";
+                if (resultTitle) resultTitle.textContent = "解析失败";
+                if (resultDesc) resultDesc.textContent = "请检查音频文件或查看服务器日志";
+            }
+            if (closeBtn) closeBtn.style.display = "flex";
+        }
+
+        /* ========== 原有交互函数 ========== */
+        async function selectDemo(id) {
+            activeDemoId = id;
+            await fetchDemos();
+            await fetchDemoDetail(id);
+        }
+
+        function showUploadModal() {
+            document.getElementById("uploadModal").classList.add("show");
+            selectedFile = null;
+            document.getElementById("fileName").style.display = "none";
+            document.getElementById("fileName").textContent = "";
+            document.getElementById("uploadTitle").value = "";
+            document.getElementById("uploadRole").value = "";
+            document.getElementById("uploadBanshi").value = "";
+        }
+
+        function hideUploadModal() { document.getElementById("uploadModal").classList.remove("show"); }
+
+        function onFileSelect(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            selectedFile = file;
+            document.getElementById("fileName").textContent = file.name;
+            document.getElementById("fileName").style.display = "";
+            if (!document.getElementById("uploadTitle").value) {
+                document.getElementById("uploadTitle").value = file.name.replace(/\.[^/.]+$/, "");
+            }
+        }
+
+        async function doUpload() {
+            if (!selectedFile) { showToast("error", "请选择文件", "请先选择要上传的音频文件"); return; }
+            const title = document.getElementById("uploadTitle").value;
+            const role = document.getElementById("uploadRole").value;
+            const banshi = document.getElementById("uploadBanshi").value;
+            const form = new FormData();
+            form.append("file", selectedFile);
+            if (title) form.append("title", title);
+            if (role) form.append("role", role);
+            if (banshi) form.append("banshi", banshi);
+            const btn = document.getElementById("uploadBtn");
+            btn.textContent = "上传中...";
+            btn.disabled = true;
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/demos/upload`, { method: "POST", body: form });
+                if (!res.ok) throw new Error(await res.text());
+                const data = await res.json();
+                hideUploadModal();
+                showToast("success", "上传成功", data.message);
+
+                processingFileName = selectedFile ? selectedFile.name : (title || "未命名文件");
+                showProcessingModal(processingFileName, data.demo_id);
+
+                activeDemoId = data.demo_id;
+                await fetchDemos();
+                await fetchDemoDetail(data.demo_id);
+                startPolling(data.demo_id);
+            } catch (e) { showToast("error", "上传失败", e.message); } finally { btn.textContent = "开始上传";
+                btn.disabled = false; }
+        }
+
+        function startPolling(demoId) {
+            if (pollTimer) clearInterval(pollTimer);
+            renderParseFlow("parsing", 0, "等待解析...");
+            pollTimer = setInterval(async () => {
+                const st = await fetchStatus(demoId);
+                if (!st) return;
+                renderParseFlow(st.status, st.progress, st.message);
+                renderProcessingModal(st.status, st.progress, st.message);
+                if (st.status === "parsed" || st.status === "error") {
+                    clearInterval(pollTimer);
+                    pollTimer = null;
+                    renderProcessingResult(st.status);
+                    await fetchDemos();
+                    if (activeDemoId === demoId) await fetchDemoDetail(demoId);
+                    showToast(st.status === "parsed" ? "success" : "error",
+                        st.status === "parsed" ? "解析完成" : "解析失败", st.message);
+                    setTimeout(() => hideProcessingModal(), 3000);
+                }
+            }, 3000);
+        }
+
+        function annotateDemo(id) { showToast("info", "标注功能", `正在打开「${id}」的标注页面...`); }
+
+        function showVersions(id) { selectDemo(id);
+            showToast("info", "版本管理", `已切换到「${id}」的版本列表`); }
+
+        function viewKnowledgeGraph() {
+            if (!activeDemoId) return;
+            showToast("info", "🧠 知识图谱", "正在知识图谱中查看该曲目涉及技法的依赖关系...");
+        }
+
+        function esc(str) { if (!str) return ""; return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g,
+                "&gt;").replace(/"/g, "&quot;"); }
+
+        function showToast(type, title, msg) {
+            const container = document.getElementById("toastContainer");
+            const toast = document.createElement("div");
+            toast.className = `toast ${type}`;
+            const iconMap = { success: "✅", info: "ℹ️", error: "❌" };
+            toast.innerHTML =
+                `<div class="toast-icon">${iconMap[type] || "ℹ️"}</div><div class="toast-content"><div class="toast-title">${esc(title)}</div><div class="toast-msg">${esc(msg)}</div></div><div class="toast-close" onclick="this.parentElement.remove()">✕</div>`;
+            container.appendChild(toast);
+            setTimeout(() => { if (toast.parentElement) toast.remove(); }, 6000);
+        }
+
+        fetchDemos();
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>戏韵AI · 智能陪练</title>
+<style>
+/* ============================================================
+   全新浅色高对比度配色 · 宣纸背景 + 景泰蓝/朱砂红
+   专为中老年教师优化：大字体、高对比度、清晰色彩
+   ============================================================ */
+:root {
+  /* 宣纸背景系 */
+  --bg-primary: #F5EDE4;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F0E8DC;
+  --bg-hover: #F5F0EA;
+  --bg-card-header: #F8F3EC;
+
+  /* 文字色 — 深褐暖调，高对比 */
+  --text-primary: #2D1F14;
+  --text-secondary: #5A4A3A;
+  --text-muted: #8A7A6A;
+  --text-light: #B0A090;
+
+  /* 边框 — 暖灰 */
+  --border-light: #E8DDD0;
+  --border-medium: #D5C8B8;
+  --border-strong: #C0B0A0;
+
+  /* 曲线主色 — 高饱和、高辨识 */
+  --teacher-color: #0066B3;
+  --teacher-glow: rgba(0, 102, 179, 0.25);
+  --teacher-shadow: rgba(0, 102, 179, 0.15);
+  --student-color: #C0392B;
+  --student-glow: rgba(192, 57, 43, 0.20);
+  --tolerance-color: rgba(90, 143, 123, 0.18);
+
+  /* UI 主色 */
+  --primary: #0066B3;
+  --primary-hover: #0055A0;
+  --primary-glow: rgba(0, 102, 179, 0.30);
+  --primary-soft: rgba(0, 102, 179, 0.08);
+  --primary-border: rgba(0, 102, 179, 0.25);
+
+  /* 功能语义 */
+  --success: #4A8F6B;
+  --success-soft: rgba(74, 143, 107, 0.12);
+  --warning: #C9A84C;
+  --warning-soft: rgba(201, 168, 76, 0.12);
+  --danger: #B83A2F;
+  --danger-soft: rgba(184, 58, 47, 0.12);
+
+  /* 维度评分 */
+  --dim-high: #4A8F6B;
+  --dim-mid: #C9A84C;
+  --dim-low: #B83A2F;
+
+  /* 导航渐变 — 宣纸暖调 */
+  --nav-gradient: linear-gradient(90deg, #F5EDE4, #E8DDD0 40%, #D5C8B8 50%, #E8DDD0 60%, #F5EDE4);
+  --progress-gradient: linear-gradient(90deg, #0066B3, #4A8AF4);
+
+  /* 字体 */
+  --font-base: 16px;
+  --font-large: 19px;
+  --font-small: 13px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg-primary);
+  color:var(--text-primary);
+  min-height:100vh;
+  line-height:1.7;
+  font-size:var(--font-base);
+}
+
+/* ===== Navbar 浅色宣纸风格 ===== */
+.navbar{
+  background:var(--nav-gradient);
+  border-bottom:2px solid var(--border-medium);
+  padding:0 24px;
+  height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  position:sticky;
+  top:0;
+  z-index:50;
+}
+.nav-brand{display:flex;align-items:center;gap:12px}
+.nav-brand .logo{
+  width:34px;height:34px;
+  background:linear-gradient(135deg, var(--primary), #004080);
+  border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:700;color:#fff;
+  box-shadow:0 2px 12px var(--primary-glow);
+}
+.nav-brand h1{font-size:17px;color:var(--text-primary);font-weight:700}
+.nav-brand .badge{
+  background:var(--primary-soft);
+  color:var(--primary);
+  padding:2px 10px;border-radius:12px;
+  font-size:11px;font-weight:600;
+  border:1px solid var(--primary-border);
+}
+.nav-user{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary)}
+.nav-user .avatar{
+  width:30px;height:30px;border-radius:50%;
+  background:linear-gradient(135deg, #B89076, #8B6B4F);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;color:#fff;
+}
+
+/* ===== Layout ===== */
+.layout{display:flex;min-height:calc(100vh - 58px)}
+.sidebar{
+  width:200px;background:var(--bg-secondary);
+  border-right:2px solid var(--border-light);
+  padding:12px 0;position:fixed;height:100%;overflow-y:auto;z-index:40;
+}
+.nav-group{margin-bottom:6px}
+.nav-group-title{
+  padding:6px 16px;font-size:11px;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:0.8px;font-weight:700;
+}
+.nav-item{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 16px;margin:0 8px;
+  color:var(--text-secondary);font-size:13px;
+  cursor:pointer;transition:all 0.2s;text-decoration:none;
+  border-radius:8px;border-left:4px solid transparent;
+}
+.nav-item:hover{color:var(--text-primary);background:var(--bg-hover)}
+.nav-item.active{
+  color:var(--primary);
+  background:var(--primary-soft);
+  border-left-color:var(--primary);
+  font-weight:600;
+}
+.nav-item .icon{font-size:16px;width:22px;text-align:center}
+.nav-badge{
+  margin-left:auto;background:var(--danger);color:#fff;
+  font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600;
+}
+.main-content{margin-left:200px;flex:1;padding:20px;max-width:1600px}
+
+/* ===== 页面头部 ===== */
+.page-header{margin-bottom:16px}
+.page-header h2{font-size:20px;color:var(--text-primary);font-weight:700;margin-bottom:2px}
+.page-header p{font-size:14px;color:var(--text-secondary)}
+
+/* ===== 卡片 ===== */
+.card{
+  background:var(--bg-secondary);
+  border:1px solid var(--border-light);
+  border-radius:14px;
+  padding:16px 18px;
+  margin-bottom:14px;
+  position:relative;
+  box-shadow:0 1px 4px rgba(0,0,0,0.04);
+  transition:border-color 0.3s, box-shadow 0.3s;
+}
+.card:hover{border-color:var(--border-medium);box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+.card-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:12px;flex-wrap:wrap;gap:8px;
+}
+.card-title{
+  font-size:15px;font-weight:700;color:var(--text-primary);
+  display:flex;align-items:center;gap:8px;
+}
+.card-title .icon{
+  width:28px;height:28px;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:15px;
+  background:var(--primary-soft);color:var(--primary);
+}
+.card-subtitle{font-size:13px;color:var(--text-muted)}
+
+/* ===== 按钮 — 更大更易点击 ===== */
+.btn-primary{
+  padding:10px 22px;border:none;border-radius:10px;
+  background:var(--primary);
+  color:#fff;font-size:14px;font-weight:700;
+  cursor:pointer;transition:all 0.3s;
+  display:inline-flex;align-items:center;gap:6px;
+  box-shadow:0 2px 12px var(--primary-glow);
+  min-height:44px;
+}
+.btn-primary:hover{
+  background:var(--primary-hover);
+  box-shadow:0 4px 20px var(--primary-glow);
+  transform:translateY(-1px);
+}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed;transform:none;box-shadow:none}
+
+.btn-secondary{
+  padding:10px 22px;border:2px solid var(--border-medium);
+  border-radius:10px;background:var(--bg-secondary);
+  color:var(--text-secondary);font-size:14px;font-weight:600;
+  cursor:pointer;transition:all 0.3s;
+  display:inline-flex;align-items:center;gap:6px;
+  min-height:44px;
+}
+.btn-secondary:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-soft)}
+
+.btn-danger{
+  padding:10px 22px;border:none;border-radius:10px;
+  background:var(--danger);color:#fff;font-size:14px;font-weight:700;
+  cursor:pointer;transition:all 0.3s;
+  display:inline-flex;align-items:center;gap:6px;
+  min-height:44px;
+}
+.btn-danger:hover{opacity:0.9;transform:translateY(-1px)}
+
+.btn-success{
+  padding:10px 22px;border:none;border-radius:10px;
+  background:var(--success);color:#fff;font-size:14px;font-weight:700;
+  cursor:pointer;transition:all 0.3s;
+  display:inline-flex;align-items:center;gap:6px;
+  min-height:44px;
+}
+.btn-success:hover{opacity:0.9;transform:translateY(-1px)}
+
+/* ===== 控制栏 ===== */
+.control-bar{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+}
+.control-group{
+  display:flex;align-items:center;gap:8px;
+  background:var(--bg-primary);
+  border:1px solid var(--border-light);
+  border-radius:10px;padding:6px 12px;
+}
+.control-group label{
+  font-size:13px;color:var(--text-secondary);font-weight:600;white-space:nowrap;
+}
+.control-group select{
+  padding:6px 10px;background:var(--bg-secondary);
+  border:1px solid var(--border-medium);border-radius:6px;
+  color:var(--text-primary);font-size:13px;outline:none;
+  min-height:36px;
+}
+.control-group select:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow)}
+
+/* ===== 分段列表 ===== */
+.segment-list{
+  display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;
+}
+.segment-item{
+  flex:0 0 auto;padding:12px 18px;
+  background:var(--bg-primary);
+  border:2px solid var(--border-light);
+  border-radius:10px;cursor:pointer;transition:all 0.3s;
+  min-width:140px;
+}
+.segment-item:hover{border-color:var(--border-medium)}
+.segment-item.active{
+  border-color:var(--primary);
+  background:var(--primary-soft);
+  box-shadow:0 0 0 3px var(--primary-glow);
+}
+.segment-item.completed{border-color:var(--success);background:var(--success-soft)}
+.segment-title{font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:3px}
+.segment-meta{font-size:12px;color:var(--text-muted)}
+.segment-status{
+  font-size:11px;padding:2px 10px;border-radius:4px;font-weight:600;margin-top:4px;display:inline-block;
+}
+.segment-status.pending{background:var(--bg-hover);color:var(--text-muted)}
+.segment-status.ready{background:var(--primary-soft);color:var(--primary)}
+.segment-status.done{background:var(--success-soft);color:var(--success)}
+
+/* ===== 教师提示面板 (全新) ===== */
+.teacher-tips-panel {
+  background: var(--bg-primary);
+  border: 2px solid var(--border-light);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.teacher-tips-panel .tips-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.teacher-tips-panel .tips-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.teacher-tips-panel .tip-item {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 14px;
+  background: var(--bg-secondary);
+  padding: 4px 12px 4px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--border-light);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.teacher-tips-panel .tip-item .char {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 16px;
+}
+.teacher-tips-panel .tip-item .hint {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.teacher-tips-panel .tip-item .hint:empty::before {
+  content: "—";
+  color: var(--text-muted);
+}
+
+/* ===== 教练气泡 (保留用于动态提示，但主功能已移至教师提示面板) ===== */
+#coachingBubble{
+  margin-bottom:12px;padding:12px 18px;
+  background:var(--primary-soft);
+  border:2px solid var(--primary-border);
+  border-radius:10px;min-height:48px;
+  display:none;align-items:center;gap:10px;
+  font-size:15px;color:var(--text-primary);transition:all 0.4s ease;
+}
+#coachingText{flex:1}
+#coachingDismiss{cursor:pointer;color:var(--text-muted);font-size:14px;padding:4px 8px}
+#coachingDismiss:hover{color:var(--danger)}
+
+/* ===== 画布 ===== */
+.canvas-wrap{
+  position:relative;width:100%;height:280px;
+  background:var(--bg-secondary);
+  border-radius:12px;
+  border:2px solid var(--border-light);
+  overflow:hidden;
+}
+.canvas-wrap canvas{
+  display:block;width:100%;height:100%;
+}
+.canvas-overlay{
+  position:absolute;top:10px;right:14px;
+  display:flex;gap:16px;pointer-events:none;
+  background:rgba(255,255,255,0.88);
+  padding:6px 14px;border-radius:8px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.08);
+  backdrop-filter:blur(4px);
+  border:1px solid var(--border-light);
+}
+.canvas-legend{display:flex;gap:14px;font-size:12px;color:var(--text-secondary)}
+.canvas-legend span{display:flex;align-items:center;gap:4px}
+.legend-line{width:20px;height:3px;border-radius:2px}
+.rec-indicator{
+  position:absolute;top:10px;left:14px;
+  display:flex;align-items:center;gap:8px;
+  background:rgba(255,255,255,0.88);
+  padding:4px 14px;border-radius:8px;
+  border:1px solid var(--border-light);
+  box-shadow:0 2px 8px rgba(0,0,0,0.06);
+  backdrop-filter:blur(4px);
+}
+.rec-dot{
+  width:10px;height:10px;border-radius:50%;
+  background:var(--danger);box-shadow:0 0 8px rgba(184,58,47,0.4);
+  animation:recPulse 1.2s infinite;
+}
+@keyframes recPulse{0%{transform:scale(1);opacity:1}50%{transform:scale(1.3);opacity:0.7}100%{transform:scale(1);opacity:1}}
+
+.progress-wrap{
+  width:100%;height:4px;background:var(--border-light);
+  border-radius:2px;overflow:hidden;margin-top:10px;
+}
+.progress-fill{
+  height:100%;
+  background:var(--progress-gradient);
+  border-radius:2px;transition:width 0.1s linear;
+}
+.time-display{
+  display:flex;justify-content:space-between;
+  margin-top:6px;font-size:12px;color:var(--text-muted);
+}
+
+/* ===== 指标卡片 ===== */
+.metric-row{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px;
+}
+.metric-card{
+  background:var(--bg-secondary);
+  border:2px solid var(--border-light);
+  border-radius:12px;padding:16px;text-align:center;
+  transition:all 0.3s;position:relative;
+}
+.metric-card:hover{border-color:var(--border-medium)}
+.metric-card::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:4px;
+  background:var(--progress-gradient);opacity:0.5;
+  border-radius:12px 12px 0 0;
+}
+.metric-card.warn::before{background:linear-gradient(90deg, var(--warning), #B89076)}
+.metric-card.danger::before{background:linear-gradient(90deg, var(--danger), #8B2A22)}
+.metric-card.success::before{background:linear-gradient(90deg, var(--success), #3D6B5A)}
+.metric-value{
+  font-size:38px;font-weight:800;line-height:1.1;
+  font-variant-numeric:tabular-nums;
+}
+.metric-label{font-size:13px;color:var(--text-secondary);margin-top:6px;font-weight:600}
+.metric-sub{font-size:12px;color:var(--text-muted);margin-top:4px}
+.metric-trend{font-size:12px;margin-top:4px;font-weight:600}
+
+/* ===== 维度评分 ===== */
+.dimension-box{
+  background:var(--bg-secondary);
+  border:2px solid var(--border-light);
+  border-radius:12px;padding:16px;margin-top:14px;display:none;
+}
+.dimension-box.show{display:block}
+.dimension-box h4{font-size:13px;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;font-weight:700}
+.dimension-item{display:flex;align-items:center;margin-bottom:8px;gap:12px}
+.dim-label{width:52px;font-size:14px;color:var(--text-primary);font-weight:600;flex-shrink:0}
+.dim-bar-wrap{flex:1;height:8px;background:var(--border-light);border-radius:4px;overflow:hidden}
+.dim-bar{height:100%;border-radius:4px;width:0%;transition:width 0.8s ease}
+.dim-value{width:40px;text-align:right;font-size:14px;font-weight:700;color:var(--text-primary);flex-shrink:0}
+
+/* ===== 日志 ===== */
+.log-panel{
+  background:var(--bg-primary);
+  border:1px solid var(--border-light);
+  border-radius:10px;padding:12px;
+  max-height:110px;overflow-y:auto;
+  font-size:12px;line-height:1.8;color:var(--text-secondary);
+}
+.log-entry{display:flex;gap:8px}
+.log-time{color:var(--text-muted);white-space:nowrap;font-weight:500}
+.log-info{color:var(--primary)}
+.log-success{color:var(--success)}
+.log-warn{color:var(--warning)}
+.log-error{color:var(--danger)}
+
+/* ===== 滚动条 ===== */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg-primary);border-radius:3px}
+::-webkit-scrollbar-thumb{background:var(--border-medium);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--border-strong)}
+
+/* ===== 响应式 ===== */
+@media (max-width:1200px){.sidebar{display:none}.main-content{margin-left:0}.metric-row{grid-template-columns:1fr}}
+@media (max-width:768px){.canvas-wrap{height:300px}.control-bar{flex-direction:column;align-items:stretch}.nav-brand h1{font-size:14px}}
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand">
+    <div class="logo">戏</div>
+    <h1>戏韵AI · 智能陪练</h1>
+    <span class="badge">实时跟唱</span>
+  </div>
+  <div class="nav-user">
+    <div class="avatar">🎭</div>
+    <span>李小燕</span>
+    <span style="color:var(--text-muted);font-size:13px">|</span>
+    <span style="color:var(--text-secondary);font-size:13px">初级班</span>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="nav-group">
+      <div class="nav-group-title">核心功能</div>
+      <a href="dashboard.html" class="nav-item"><span class="icon">📊</span>班级看板</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">教学工作台</div>
+      <a href="demo_library.html" class="nav-item"><span class="icon">🎵</span>示范库管理</a>
+      <a href="annotation.html" class="nav-item"><span class="icon">🏷️</span>歌词级标注</a>
+      <a href="homework.html" class="nav-item"><span class="icon">📝</span>作业批改</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">学生练习</div>
+      <a href="sing_along.html" class="nav-item active"><span class="icon">🎙️</span>实时跟唱</a>
+      <a href="AI_teacher.html" class="nav-item"><span class="icon">🤖</span>AI教练对话</a>
+      <a href="cat_test.html" class="nav-item"><span class="icon">🎯</span>摸底测试</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">数据分析</div>
+      <a href="tracking.html" class="nav-item"><span class="icon">📈</span>能力追踪</a>
+      <a href="recommendation.html" class="nav-item"><span class="icon">🎯</span>渐进式推荐</a>
+      <a href="knowledge_graph.html" class="nav-item"><span class="icon">🧠</span>知识图谱</a>
+      <a href="daily_report.html" class="nav-item"><span class="icon">📰</span>学习报告</a>
+    </div>
+  </aside>
+
+  <main class="main-content">
+
+    <div class="page-header">
+      <h2>🎙️ 智能陪练 · 实时跟唱</h2>
+      <p>选择曲目和段落 → 查看教师提示 → 跟着示范唱 → 实时看音高和偏差</p>
+    </div>
+
+    <div class="card" style="padding:14px 18px">
+      <div class="control-bar">
+        <div class="control-group">
+          <label>🎵 曲目</label>
+          <select id="pieceSelect" onchange="changePiece()">
+            <option value="mu">《穆桂英挂帅》· 辕门外三声炮</option>
+            <option value="guifei">《贵妃醉酒》· 海岛冰轮初转腾</option>
+            <option value="bawang">《霸王别姬》· 看大王在帐中</option>
+          </select>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn-secondary" id="btnPlayDemo" onclick="playDemo()">▶️ 播放示范</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="icon">🧩</div>
+          分段练习
+        </div>
+        <span class="card-subtitle">跟唱练习前，先点击选择要练习的段落</span>		
+        <button class="btn-primary" id="btnRecord" onclick="toggleRecord()">🎙️ 开始跟唱</button>
+        <button class="btn-danger" id="btnStop" onclick="stopAll()" style="display:none">⏹️ 停止</button>
+      </div>
+      <div class="segment-list" id="segmentList"></div>
+    </div>
+
+    <!-- ===== 教师提示面板 (新增) ===== -->
+    <div class="teacher-tips-panel" id="teacherTipsPanel">
+      <div class="tips-title">
+        <span>👩‍🏫</span> 教师提示 · 唱前准备
+        <span style="font-size:12px;font-weight:400;color:var(--text-muted);margin-left:8px;">（点击分段后自动加载）</span>
+      </div>
+      <div class="tips-grid" id="tipsGrid">
+        <span style="color:var(--text-muted);font-size:14px;">请选择一个分段，查看对应的技巧提示。</span>
+      </div>
+    </div>
+
+    <div id="coachingBubble">
+      <span style="font-size:20px;">🎓</span>
+      <span id="coachingText">教练提示</span>
+      <span id="coachingDismiss" onclick="dismissCoaching()">✕</span>
+    </div>
+
+    <div class="card" style="padding:16px">
+      <div class="card-header" style="margin-bottom:10px">
+        <div class="card-title">
+          <div class="icon">📈</div>
+          歌词 · 音高对比时间线
+        </div>
+        <div class="card-subtitle" id="segmentInfo">请选择段落开始练习</div>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="pitchCanvas"></canvas>
+        <div class="canvas-overlay">
+          <div class="canvas-legend">
+            <span><span class="legend-line" style="background:var(--teacher-color);box-shadow:0 0 6px var(--teacher-glow)"></span>老师示范</span>
+            <span><span class="legend-line" style="background:var(--student-color);box-shadow:0 0 6px var(--student-glow)"></span>我的演唱</span>
+            <span><span class="legend-line" style="background:var(--tolerance-color);border:1px dashed var(--border-medium)"></span>容忍区间</span>
+          </div>
+        </div>
+        <div class="rec-indicator" id="recIndicator" style="display:none">
+          <span class="rec-dot"></span>
+          <span style="font-size:13px;color:var(--danger);font-weight:700">正在收音…</span>
+        </div>
+      </div>
+      <div class="progress-wrap"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      <div class="time-display">
+        <span id="timeCurrent">0.00s</span>
+        <span id="timeTotal">0.00s</span>
+      </div>
+    </div>
+
+    <div class="metric-row">
+      <div class="metric-card" id="cardPitch">
+        <div class="metric-value" id="valPitch" style="color:var(--primary)">--</div>
+        <div class="metric-label">音准偏差 (cents)</div>
+        <div class="metric-sub">当前字与老师的音高差</div>
+        <div class="metric-trend" id="trendPitch" style="color:var(--text-muted)">等待开始…</div>
+      </div>
+      <div class="metric-card" id="cardRhythm">
+        <div class="metric-value" id="valRhythm" style="color:var(--warning)">--</div>
+        <div class="metric-label">节奏偏差 (秒)</div>
+        <div class="metric-sub">当前字时长与标准差</div>
+        <div class="metric-trend" id="trendRhythm" style="color:var(--text-muted)">等待开始…</div>
+      </div>
+      <div class="metric-card" id="cardBreath">
+        <div class="metric-value" id="valBreath" style="color:var(--success)">--</div>
+        <div class="metric-label">气息稳定性</div>
+        <div class="metric-sub">长音段能量波动系数</div>
+        <div class="metric-trend" id="trendBreath" style="color:var(--text-muted)">等待开始…</div>
+      </div>
+    </div>
+
+    <div class="dimension-box" id="dimensionBox">
+      <h4>📊 维度评分</h4>
+      <div id="dimensionList"></div>
+    </div>
+
+    <div class="card" style="padding:16px">
+      <div class="card-header" style="margin-bottom:8px">
+        <div class="card-title">
+          <div class="icon">⚡</div>
+          练习日志
+        </div>
+      </div>
+      <div class="log-panel" id="logPanel">
+        <div class="log-entry"><span class="log-time">[系统]</span><span class="log-info">准备就绪，选择曲目和段落开始练习</span></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ============================================================
+// 曲目数据
+// ============================================================
+const PIECES = {
+  mu: {
+    title: "《穆桂英挂帅》· 辕门外三声炮",
+    bpm: 128, key: "E调",
+    segments: [
+      { id: "s1", title: "段落 1", subtitle: "辕门外三声炮", duration: 2.8,
+        lyrics: [
+          {char:"辕", pinyin:"yuan", start:0.0, dur:0.4, teacherPitch:64},
+          {char:"门", pinyin:"men", start:0.4, dur:0.35, teacherPitch:66},
+          {char:"外", pinyin:"wai", start:0.75, dur:0.5, teacherPitch:67},
+          {char:"三", pinyin:"san", start:1.25, dur:0.35, teacherPitch:69},
+          {char:"声", pinyin:"sheng", start:1.6, dur:0.4, teacherPitch:71},
+          {char:"炮", pinyin:"pao", start:2.0, dur:0.8, teacherPitch:72},
+        ],
+        // 为每个字添加教师提示
+        coachingTips: [
+          { char: "辕", technique: "起音", tip: "起音稳，气息下沉，喉头放松" },
+          { char: "门", technique: "咬字", tip: "唇齿用力，声音集中，归韵到'en'" },
+          { char: "外", technique: "归韵", tip: "字头清晰，归韵'ai'，口腔打开" },
+          { char: "三", technique: "音准", tip: "舌尖抵上颚，声音明亮，音准要准" },
+          { char: "声", technique: "发音", tip: "声母稳，韵母拉开，保持气息" },
+          { char: "炮", technique: "力度", tip: "腹部用力，爆发力足，声音有穿透力" },
+        ] },
+      { id: "s2", title: "段落 2", subtitle: "如同雷震", duration: 2.4,
+        lyrics: [
+          {char:"如", pinyin:"ru", start:0.0, dur:0.4, teacherPitch:69},
+          {char:"同", pinyin:"tong", start:0.4, dur:0.4, teacherPitch:67},
+          {char:"雷", pinyin:"lei", start:0.8, dur:0.7, teacherPitch:71},
+          {char:"震", pinyin:"zhen", start:1.5, dur:0.9, teacherPitch:69},
+        ],
+        coachingTips: [
+          { char: "如", technique: "起音", tip: "轻起，柔和进入" },
+          { char: "同", technique: "咬字", tip: "舌尖抵上颚，清晰" },
+          { char: "雷", technique: "强音", tip: "收腹用力，用横膈膜给一个爆发力" },
+          { char: "震", technique: "拖腔", tip: "保持气息，声音稳定" },
+        ] },
+      { id: "s3", title: "段落 3", subtitle: "天波府走出来", duration: 2.8,
+        lyrics: [
+          {char:"天", pinyin:"tian", start:0.0, dur:0.35, teacherPitch:67},
+          {char:"波", pinyin:"bo", start:0.35, dur:0.35, teacherPitch:66},
+          {char:"府", pinyin:"fu", start:0.7, dur:0.5, teacherPitch:64},
+          {char:"走", pinyin:"zou", start:1.2, dur:0.35, teacherPitch:67},
+          {char:"出", pinyin:"chu", start:1.55, dur:0.35, teacherPitch:69},
+          {char:"来", pinyin:"lai", start:1.9, dur:0.9, teacherPitch:71},
+        ],
+        coachingTips: [
+          { char: "天", technique: "起音", tip: "气息下沉，声音通透" },
+          { char: "波", technique: "咬字", tip: "唇齿配合，圆润" },
+          { char: "府", technique: "归韵", tip: "归韵'u'，口型保持" },
+          { char: "走", technique: "音准", tip: "音准要稳，不要滑" },
+          { char: "出", technique: "发音", tip: "声母清晰，韵母饱满" },
+          { char: "来", technique: "拖腔", tip: "气息支撑，保持音高" },
+        ] },
+      { id: "s4", title: "段落 4", subtitle: "保国臣", duration: 2.2,
+        lyrics: [
+          {char:"保", pinyin:"bao", start:0.0, dur:0.7, teacherPitch:72},
+          {char:"国", pinyin:"guo", start:0.7, dur:0.4, teacherPitch:71},
+          {char:"臣", pinyin:"chen", start:1.1, dur:1.1, teacherPitch:69},
+        ],
+        coachingTips: [
+          { char: "保", technique: "强音", tip: "'保'字要唱出气势，口腔打开，声音送出去" },
+          { char: "国", technique: "归韵", tip: "归韵'uo'，声音饱满" },
+          { char: "臣", technique: "拖腔", tip: "保持气息，声音稳定收尾" },
+        ] },
+    ] },
+  guifei: {
+    title: "《贵妃醉酒》· 海岛冰轮初转腾",
+    bpm: 96, key: "G调",
+    segments: [
+      { id:"g1", title:"段落 1", subtitle:"海岛冰轮", duration:3.5,
+        lyrics: [
+          {char:"海", pinyin:"hai", start:0.0, dur:0.5, teacherPitch:67},
+          {char:"岛", pinyin:"dao", start:0.5, dur:0.5, teacherPitch:69},
+          {char:"冰", pinyin:"bing", start:1.0, dur:0.5, teacherPitch:71},
+          {char:"轮", pinyin:"lun", start:1.5, dur:2.0, teacherPitch:72},
+        ],
+        coachingTips: [
+          { char: "海", technique: "起音", tip: "起音要稳，想象声音从海底升起" },
+          { char: "岛", technique: "咬字", tip: "舌尖抵上颚，清晰" },
+          { char: "冰", technique: "音准", tip: "音准要准，声音明亮" },
+          { char: "轮", technique: "拖腔", tip: "'轮'字拖腔要圆润，像月亮在空中缓缓转动" },
+        ] },
+      { id:"g2", title:"段落 2", subtitle:"初转腾", duration:3.0,
+        lyrics: [
+          {char:"初", pinyin:"chu", start:0.0, dur:0.5, teacherPitch:71},
+          {char:"转", pinyin:"zhuan", start:0.5, dur:0.8, teacherPitch:69},
+          {char:"腾", pinyin:"teng", start:1.3, dur:1.7, teacherPitch:67},
+        ],
+        coachingTips: [
+          { char: "初", technique: "起音", tip: "轻起，柔和" },
+          { char: "转", technique: "咬字", tip: "舌尖抵上颚，清晰" },
+          { char: "腾", technique: "拖腔", tip: "保持气息，声音稳定" },
+        ] }
+    ] },
+  bawang: {
+    title: "《霸王别姬》· 看大王在帐中",
+    bpm: 110, key: "D调",
+    segments: [
+      { id:"b1", title:"段落 1", subtitle:"看大王在帐中", duration:4.0,
+        lyrics: [
+          {char:"看", pinyin:"kan", start:0.0, dur:0.5, teacherPitch:62},
+          {char:"大", pinyin:"da", start:0.5, dur:0.4, teacherPitch:64},
+          {char:"王", pinyin:"wang", start:0.9, dur:0.8, teacherPitch:66},
+          {char:"在", pinyin:"zai", start:1.7, dur:0.4, teacherPitch:64},
+          {char:"帐", pinyin:"zhang", start:2.1, dur:0.6, teacherPitch:62},
+          {char:"中", pinyin:"zhong", start:2.7, dur:1.3, teacherPitch:61},
+        ],
+        coachingTips: [
+          { char: "看", technique: "起音", tip: "'看'字要唱出英雄气概，声音要有穿透力" },
+          { char: "大", technique: "咬字", tip: "口腔打开，声音饱满" },
+          { char: "王", technique: "拖腔", tip: "'王'字拖腔要稳，像霸王举鼎一般沉稳" },
+          { char: "在", technique: "音准", tip: "音准要稳" },
+          { char: "帐", technique: "归韵", tip: "归韵'ang'，口腔打开" },
+          { char: "中", technique: "拖腔", tip: "保持气息，声音稳定" },
+        ] }
+    ] }
+};
+
+// ============================================================
+// 全局状态
+// ============================================================
+let currentPiece = "mu";
+let currentSegmentIdx = -1;
+let isPlaying = false;
+let isRecording = false;
+let recordStartTime = 0;
+let segmentDuration = 0;
+let teacherPoints = [];
+let studentPoints = [];
+let currentWordIndex = -1;
+let syncCurrentTime = 0;
+let coachingTimer = null;
+let currentCoachingChar = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let stream = null;
+
+const canvas = document.getElementById("pitchCanvas");
+const ctx = canvas.getContext("2d");
+let canvasWidth = 0, canvasHeight = 0;
+const TOP_OFFSET = 48;
+const LEFT_PADDING = 46;
+
+const segmentInfo = document.getElementById("segmentInfo");
+const progressFill = document.getElementById("progressFill");
+const timeCurrent = document.getElementById("timeCurrent");
+const timeTotal = document.getElementById("timeTotal");
+const logPanel = document.getElementById("logPanel");
+const tipsGrid = document.getElementById("tipsGrid");
+
+// ============================================================
+// 工具函数
+// ============================================================
+function midiToNote(midi) {
+  const names = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  return names[Math.round(midi) % 12] + (Math.floor(Math.round(midi)/12)-1);
+}
+function timeToX(t) {
+  if (segmentDuration <= 0) return LEFT_PADDING;
+  return LEFT_PADDING + (t / segmentDuration) * (canvasWidth - LEFT_PADDING);
+}
+function pitchToY(pitch, minP=58, maxP=78) {
+  const ratio = (pitch - minP) / (maxP - minP);
+  return (canvasHeight - TOP_OFFSET - 12) - ratio * (canvasHeight - TOP_OFFSET - 50);
+}
+function addLog(msg, type="info") {
+  const entry = document.createElement("div");
+  entry.className = "log-entry";
+  const now = new Date();
+  const t = now.toLocaleTimeString("zh-CN", {hour12:false}) + "." + String(now.getMilliseconds()).padStart(3,"0");
+  const cls = type==="success"?"log-success":type==="warn"?"log-warn":type==="error"?"log-error":"log-info";
+  entry.innerHTML = `<span class="log-time">[${t}]</span><span class="${cls}">${msg}</span>`;
+  logPanel.appendChild(entry);
+  logPanel.scrollTop = logPanel.scrollHeight;
+  while (logPanel.children.length > 50) logPanel.removeChild(logPanel.firstChild);
+}
+
+// ============================================================
+// Canvas 绘制 — 浅色背景，高对比曲线
+// ============================================================
+function initCanvas() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvasWidth = rect.width - 4;
+  canvasHeight = rect.height - 4;
+  canvas.width = canvasWidth * window.devicePixelRatio;
+  canvas.height = canvasHeight * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  canvasWidth = rect.width - 4;
+  canvasHeight = rect.height - 4;
+}
+function drawGrid() {
+  ctx.strokeStyle = "rgba(200, 190, 180, 0.25)";
+  ctx.lineWidth = 1;
+  for (let p = 58; p <= 78; p += 2) {
+    const y = pitchToY(p);
+    ctx.beginPath(); ctx.moveTo(LEFT_PADDING, y); ctx.lineTo(canvasWidth, y); ctx.stroke();
+  }
+}
+function drawLyricsAndGrid() {
+  const seg = PIECES[currentPiece].segments[currentSegmentIdx];
+  if (!seg || !seg.lyrics) return;
+  seg.lyrics.forEach((ly, idx) => {
+    const x = timeToX(ly.start);
+    if (x >= 0 && x <= canvasWidth) {
+      const isActive = (idx === currentWordIndex);
+      ctx.save();
+      ctx.strokeStyle = isActive ? "rgba(0,102,179,0.5)" : "rgba(180,160,145,0.4)";
+      ctx.lineWidth = isActive ? 3 : 1.5;
+      ctx.setLineDash(isActive ? [] : [3, 5]);
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvasHeight);
+      ctx.stroke();
+      ctx.restore();
+      ctx.save();
+      const isPassed = (idx < currentWordIndex);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.font = isActive ? "bold 18px sans-serif" : "15px sans-serif";
+      ctx.fillStyle = isActive ? "#0066B3" : (isPassed ? "#4A8F6B" : "#8A7A6A");
+      ctx.fillText(ly.char, x, TOP_OFFSET - 4);
+      ctx.restore();
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.font = "10px sans-serif";
+      ctx.fillStyle = isActive ? "rgba(0,102,179,0.7)" : "rgba(140,125,110,0.5)";
+      ctx.fillText(ly.pinyin, x, TOP_OFFSET - 20);
+      ctx.restore();
+    }
+  });
+  ctx.save();
+  ctx.strokeStyle = "rgba(200,190,180,0.3)";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 5]);
+  ctx.beginPath();
+  ctx.moveTo(0, TOP_OFFSET + 2);
+  ctx.lineTo(canvasWidth, TOP_OFFSET + 2);
+  ctx.stroke();
+  ctx.restore();
+}
+function drawTeacherCurve(opacity=1.0) {
+  if (teacherPoints.length < 2) return;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,102,179,0.3)";
+  ctx.shadowBlur = 8;
+  ctx.strokeStyle = `rgba(0,102,179,${opacity})`;
+  ctx.lineWidth = 3.5;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  let started = false;
+  for (const pt of teacherPoints) {
+    const x = timeToX(pt.t);
+    const y = pitchToY(pt.pitch);
+    if (y < TOP_OFFSET || y > canvasHeight) continue;
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = `rgba(255,255,255,0.3)`;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  started = false;
+  for (const pt of teacherPoints) {
+    const x = timeToX(pt.t);
+    const y = pitchToY(pt.pitch);
+    if (y < TOP_OFFSET || y > canvasHeight) continue;
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+function drawStudentCurve() {
+  if (studentPoints.length < 2) return;
+  ctx.save();
+  ctx.shadowColor = "rgba(192,57,43,0.2)";
+  ctx.shadowBlur = 6;
+  ctx.strokeStyle = "#C0392B";
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  let started = false;
+  for (const pt of studentPoints) {
+    const x = timeToX(pt.t);
+    const y = pitchToY(pt.pitch);
+    if (y < TOP_OFFSET || y > canvasHeight) continue;
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+function drawToleranceBand() {
+  if (currentWordIndex < 0 || currentWordIndex >= teacherPoints.length) return;
+  const ly = teacherPoints[currentWordIndex];
+  if (!ly) return;
+  const basePitch = ly.pitch;
+  const bandHeight = 16;
+  const y = pitchToY(basePitch);
+  const x = timeToX(ly.t);
+  const w = Math.max(6, timeToX(ly.t + 0.06) - x);
+  ctx.save();
+  ctx.fillStyle = "rgba(90,143,123,0.13)";
+  ctx.shadowBlur = 0;
+  ctx.fillRect(x, y - bandHeight/2, w, bandHeight);
+  ctx.restore();
+}
+function drawPlayhead(t) {
+  const x = timeToX(t);
+  if (x < 0 || x > canvasWidth) return;
+  ctx.save();
+  ctx.strokeStyle = "rgba(45,31,20,0.3)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([2, 4]);
+  ctx.beginPath();
+  ctx.moveTo(x, 0);
+  ctx.lineTo(x, canvasHeight);
+  ctx.stroke();
+  ctx.restore();
+  ctx.save();
+  ctx.fillStyle = "rgba(45,31,20,0.5)";
+  ctx.font = "10px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText(t.toFixed(1)+"s", x, 4);
+  ctx.restore();
+}
+function drawYAxisLabels() {
+  ctx.save();
+  ctx.fillStyle = "rgba(90,80,70,0.6)";
+  ctx.font = "9px sans-serif";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let p = 58; p <= 78; p += 2) {
+    const y = pitchToY(p);
+    if (y > TOP_OFFSET + 6 && y < canvasHeight - 4) {
+      ctx.fillText(midiToNote(p), LEFT_PADDING - 10, y);
+    }
+  }
+  ctx.restore();
+}
+function drawEmptyState() {
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+  ctx.fillStyle = "#F5EDE4";
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+  ctx.fillStyle = "rgba(90,80,70,0.5)";
+  ctx.font = "15px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("选择段落，点击「开始跟唱」", (canvasWidth + LEFT_PADDING) / 2, canvasHeight/2);
+}
+function drawTimeline() {
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+  ctx.fillStyle = "#F5EDE4";
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+  drawGrid();
+  drawLyricsAndGrid();
+  drawYAxisLabels();
+  drawToleranceBand();
+  drawTeacherCurve(0.85);
+  drawStudentCurve();
+  if (isRecording || isPlaying || syncCurrentTime > 0) {
+    drawPlayhead(syncCurrentTime);
+  }
+}
+
+// ============================================================
+// 教师提示渲染 (新功能)
+// ============================================================
+function renderTeacherTips(seg) {
+  if (!seg) {
+    tipsGrid.innerHTML = `<span style="color:var(--text-muted);font-size:14px;">请选择一个分段，查看对应的技巧提示。</span>`;
+    return;
+  }
+  const tipsMap = {};
+  if (seg.coachingTips) {
+    seg.coachingTips.forEach(t => { tipsMap[t.char] = t.tip; });
+  }
+  let html = '';
+  seg.lyrics.forEach(ly => {
+    const hint = tipsMap[ly.char] || '';
+    html += `
+      <div class="tip-item">
+        <span class="char">${ly.char}</span>
+        <span class="hint">${hint}</span>
+      </div>
+    `;
+  });
+  tipsGrid.innerHTML = html;
+}
+
+// ============================================================
+// 曲目 / 段落 / 歌词渲染
+// ============================================================
+function renderSegments() {
+  const piece = PIECES[currentPiece];
+  const container = document.getElementById("segmentList");
+  container.innerHTML = piece.segments.map((seg, idx) => {
+    const isActive = idx === currentSegmentIdx;
+    const isCompleted = seg.completed;
+    const statusCls = isCompleted ? "done" : (isActive ? "ready" : "pending");
+    const statusText = isCompleted ? "✅ 已完成" : (isActive ? "▶ 当前" : "待练习");
+    return `
+      <div class="segment-item ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}" onclick="selectSegment(${idx})">
+        <div class="segment-title">${seg.title}</div>
+        <div class="segment-meta">${seg.subtitle} · ${seg.duration.toFixed(1)}s</div>
+        <span class="segment-status ${statusCls}">${statusText}</span>
+      </div>
+    `;
+  }).join("");
+}
+function selectSegment(idx) {
+  if (isRecording || isPlaying) stopAll();
+  currentSegmentIdx = idx;
+  renderSegments();
+  const seg = PIECES[currentPiece].segments[idx];
+  segmentInfo.textContent = `${PIECES[currentPiece].title} · ${seg.title} · ${seg.subtitle}`;
+  prepareTeacherCurve(seg);
+  // 加载教师提示
+  renderTeacherTips(seg);
+  currentWordIndex = -1;
+  studentPoints = [];
+  syncCurrentTime = 0;
+  drawTimeline();
+  addLog(`选择段落: ${seg.title} (${seg.subtitle})`, "info");
+}
+function prepareTeacherCurve(seg) {
+  teacherPoints = [];
+  segmentDuration = seg.duration;
+  const sampleRate = 0.02;
+  for (let t = 0; t <= seg.duration; t += sampleRate) {
+    let pitch = null;
+    for (let i = 0; i < seg.lyrics.length; i++) {
+      const ly = seg.lyrics[i];
+      if (t >= ly.start && t < ly.start + ly.dur) {
+        pitch = ly.teacherPitch;
+        const edge = 0.03;
+        if (i > 0 && t < ly.start + edge) {
+          const prev = seg.lyrics[i-1];
+          const ratio = (t - ly.start) / edge;
+          pitch = prev.teacherPitch + (ly.teacherPitch - prev.teacherPitch) * ratio;
+        }
+        break;
+      }
+    }
+    if (pitch !== null) teacherPoints.push({t, pitch});
+  }
+  timeTotal.textContent = seg.duration.toFixed(2) + "s";
+}
+
+// ============================================================
+// 教练提示 (动态气泡，保留但非主要)
+// ============================================================
+function showCoaching(tip, char) {
+  const bubble = document.getElementById('coachingBubble');
+  const text = document.getElementById('coachingText');
+  if (currentCoachingChar === char) return;
+  if (coachingTimer) { clearTimeout(coachingTimer); coachingTimer = null; }
+  text.textContent = tip;
+  bubble.style.display = 'flex';
+  bubble.style.opacity = '1';
+  currentCoachingChar = char;
+  coachingTimer = setTimeout(() => {
+    bubble.style.opacity = '0';
+    setTimeout(() => { bubble.style.display = 'none'; currentCoachingChar = null; }, 300);
+  }, 4000);
+}
+function dismissCoaching() {
+  const bubble = document.getElementById('coachingBubble');
+  if (coachingTimer) { clearTimeout(coachingTimer); coachingTimer = null; }
+  bubble.style.opacity = '0';
+  setTimeout(() => { bubble.style.display = 'none'; currentCoachingChar = null; }, 300);
+}
+
+// ============================================================
+// 核心模拟逻辑（P0 完善点：真实模拟"外"字偏差）
+// ============================================================
+async function toggleRecord() {
+  if (isRecording) { stopAll(); return; }
+  if (currentSegmentIdx < 0) { alert("请先选择一个练习段落"); return; }
+  if (isPlaying) stopAll();
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = () => {
+      addLog("录音完成，准备分析...", "success");
+      simulateAnalysisAfterRecord();
+    };
+    mediaRecorder.start();
+    isRecording = true;
+    recordStartTime = performance.now();
+    studentPoints = [];
+    currentWordIndex = -1;
+    document.getElementById("btnRecord").style.display = "none";
+    document.getElementById("btnStop").style.display = "inline-flex";
+    document.getElementById("recIndicator").style.display = "flex";
+    addLog("🎙️ 开始录音...", "info");
+    requestAnimationFrame(recordLoop);
+  } catch (err) {
+    alert("无法访问麦克风: " + err.message);
+    addLog("❌ 麦克风访问失败: " + err.message, "error");
+  }
+}
+
+function recordLoop(now) {
+  if (!isRecording) return;
+  const elapsed = (now - recordStartTime) / 1000;
+  const seg = PIECES[currentPiece].segments[currentSegmentIdx];
+  if (elapsed > seg.duration + 0.5) {
+    stopRecordingAndAnalyze();
+    return;
+  }
+
+  let widx = -1;
+  let teacherPitchNow = null;
+  for (let i = 0; i < seg.lyrics.length; i++) {
+    if (elapsed >= seg.lyrics[i].start && elapsed < seg.lyrics[i].start + seg.lyrics[i].dur) {
+      widx = i;
+      teacherPitchNow = seg.lyrics[i].teacherPitch;
+      break;
+    }
+  }
+
+  if (teacherPitchNow !== null) {
+    const noise = (Math.random() - 0.5) * 0.04;
+    const vibrato = Math.sin(elapsed * 2 * Math.PI * 6) * 0.06;
+    const drift = Math.sin(elapsed * 0.3) * 0.02;
+    let studentPitch = teacherPitchNow + noise + vibrato + drift;
+    // ★ "外"字（索引2）添加 -25 cents 系统性偏差
+    if (widx === 2) {
+      studentPitch -= 0.25;
+    }
+    studentPoints.push({ t: elapsed, pitch: studentPitch });
+  }
+
+  if (widx !== currentWordIndex) {
+    currentWordIndex = widx;
+    if (widx >= 0) {
+      const currentLyric = seg.lyrics[widx];
+      // 从静态提示中查找动态提示（备用）
+      const tip = seg.coachingTips?.find(t => t.char === currentLyric.char);
+      if (tip) showCoaching(tip.tip, tip.char);
+    }
+    updateMetrics(elapsed, seg, widx);
+  }
+
+  syncCurrentTime = elapsed;
+  drawTimeline();
+  updateProgress(elapsed);
+
+  if (isRecording) requestAnimationFrame(recordLoop);
+}
+
+function updateMetrics(elapsed, seg, widx) {
+  if (widx < 0) return;
+  const ly = seg.lyrics[widx];
+  const teacherP = ly.teacherPitch;
+
+  let nearest = null;
+  for (let i = studentPoints.length - 1; i >= 0; i--) {
+    if (Math.abs(studentPoints[i].t - elapsed) < 0.1) { nearest = studentPoints[i]; break; }
+  }
+  if (!nearest) return;
+  const diffCents = Math.round((nearest.pitch - teacherP) * 100);
+  const absDiff = Math.abs(diffCents);
+
+  document.getElementById("valPitch").textContent = (diffCents > 0 ? "+" : "") + diffCents;
+  document.getElementById("valPitch").style.color = absDiff <= 30 ? "#4A8F6B" : absDiff <= 50 ? "#C9A84C" : "#B83A2F";
+  document.getElementById("cardPitch").className = `metric-card ${absDiff <= 30 ? 'success' : absDiff <= 50 ? 'warn' : 'danger'}`;
+  document.getElementById("trendPitch").textContent = absDiff <= 30 ? "✓ 在容忍区间内" : (diffCents > 0 ? "↗ 偏高" : "↘ 偏低");
+  document.getElementById("trendPitch").style.color = absDiff <= 30 ? "#4A8F6B" : absDiff <= 50 ? "#C9A84C" : "#B83A2F";
+
+  let rhythmOffset = 0;
+  let breathVal = 0.85;
+  let rhythmDisplay = "0.00";
+  let breathDisplay = "85";
+  let rhythmTrend = "✓ 节奏准确";
+  let breathTrend = "✓ 气息稳定";
+
+  if (widx === 2) {
+    rhythmOffset = 0.08;
+    breathVal = 0.72;
+    rhythmDisplay = "+0.08";
+    breathDisplay = "72";
+    rhythmTrend = "↗ 偏慢";
+    breathTrend = "⚠ 气息波动";
+  } else if (widx === 0 || widx === 1) {
+    rhythmOffset = 0.02;
+    breathVal = 0.88;
+    rhythmDisplay = "+0.02";
+    breathDisplay = "88";
+    rhythmTrend = "✓ 节奏准确";
+    breathTrend = "✓ 气息稳定";
+  } else {
+    rhythmOffset = 0.03;
+    breathVal = 0.82;
+    rhythmDisplay = "+0.03";
+    breathDisplay = "82";
+    rhythmTrend = "✓ 节奏准确";
+    breathTrend = "✓ 气息稳定";
+  }
+
+  document.getElementById("valRhythm").textContent = rhythmDisplay + "s";
+  const rAbs = Math.abs(rhythmOffset);
+  document.getElementById("valRhythm").style.color = rAbs <= 0.04 ? "#4A8F6B" : rAbs <= 0.08 ? "#C9A84C" : "#B83A2F";
+  document.getElementById("trendRhythm").textContent = rhythmTrend;
+  document.getElementById("trendRhythm").style.color = rAbs <= 0.04 ? "#4A8F6B" : rAbs <= 0.08 ? "#C9A84C" : "#B83A2F";
+  document.getElementById("cardRhythm").className = `metric-card ${rAbs <= 0.04 ? 'success' : rAbs <= 0.08 ? 'warn' : 'danger'}`;
+
+  document.getElementById("valBreath").textContent = breathDisplay + "%";
+  document.getElementById("valBreath").style.color = breathVal >= 0.80 ? "#4A8F6B" : breathVal >= 0.70 ? "#C9A84C" : "#B83A2F";
+  document.getElementById("trendBreath").textContent = breathTrend;
+  document.getElementById("trendBreath").style.color = breathVal >= 0.80 ? "#4A8F6B" : breathVal >= 0.70 ? "#C9A84C" : "#B83A2F";
+  document.getElementById("cardBreath").className = `metric-card ${breathVal >= 0.80 ? 'success' : breathVal >= 0.70 ? 'warn' : 'danger'}`;
+}
+
+function updateProgress(elapsed) {
+  const pct = Math.min(100, (elapsed / segmentDuration) * 100);
+  progressFill.style.width = pct + "%";
+  timeCurrent.textContent = elapsed.toFixed(2) + "s";
+}
+
+function stopRecordingAndAnalyze() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+  }
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+  }
+  isRecording = false;
+  document.getElementById("recIndicator").style.display = "none";
+  document.getElementById("btnRecord").style.display = "inline-flex";
+  document.getElementById("btnStop").style.display = "none";
+  addLog("⏹️ 录音停止，准备分析...", "info");
+}
+
+function simulateAnalysisAfterRecord() {
+  addLog("🔍 正在分析演唱...", "info");
+  const diffs = [];
+  for (let i = 0; i < Math.min(studentPoints.length, teacherPoints.length); i++) {
+    const s = studentPoints[i];
+    const t = teacherPoints[i];
+    if (s && t) diffs.push(Math.abs(s.pitch - t.pitch) * 100);
+  }
+  const medianDiff = diffs.length > 0 ? diffs.reduce((a,b)=>a+b,0)/diffs.length : 50;
+  let score = 100;
+  if (medianDiff < 10) score = 100;
+  else if (medianDiff < 30) score = 95 - (medianDiff - 10) * 1.0;
+  else if (medianDiff < 50) score = 75 - (medianDiff - 30) * 1.0;
+  else if (medianDiff < 100) score = 55 - (medianDiff - 50) * 0.4;
+  else score = Math.max(0, 35 - (medianDiff - 100) * 0.2);
+
+  const dimensions = {
+    "音准": Math.round(score),
+    "节奏": Math.round(Math.max(0, Math.min(100, score * (0.9 + 0.1 * Math.random())))),
+    "气息": Math.round(Math.max(0, Math.min(100, score * (0.8 + 0.2 * Math.random())))),
+    "咬字": Math.round(Math.max(0, Math.min(100, score * (0.85 + 0.15 * Math.random())))),
+    "拖腔": Math.round(Math.max(0, Math.min(100, score * (0.7 + 0.3 * Math.random()))))
+  };
+
+  const box = document.getElementById('dimensionBox');
+  const list = document.getElementById('dimensionList');
+  box.classList.add('show');
+  list.innerHTML = Object.entries(dimensions).map(([name, val]) => {
+    const color = val >= 80 ? '#4A8F6B' : val >= 60 ? '#C9A84C' : '#B83A2F';
+    return `<div class="dimension-item"><div class="dim-label">${name}</div><div class="dim-bar-wrap"><div class="dim-bar" style="width:${val}%;background:${color}"></div></div><div class="dim-value" style="color:${color}">${val}</div></div>`;
+  }).join('');
+  addLog(`✅ 分析完成！综合评分: ${Math.round(score)} 分`, "success");
+}
+
+// ============================================================
+// 示范播放
+// ============================================================
+function playDemo() {
+  if (currentSegmentIdx < 0) { alert("请先选择一个练习段落"); return; }
+  if (isRecording) stopAll();
+  isPlaying = true;
+  const startTime = performance.now();
+  document.getElementById("btnPlayDemo").disabled = true;
+  document.getElementById("btnRecord").disabled = true;
+  document.getElementById("btnStop").style.display = "inline-flex";
+  addLog("▶️ 播放示范音频...", "info");
+
+  function demoLoop(now) {
+    if (!isPlaying) return;
+    const elapsed = (now - startTime) / 1000;
+    if (elapsed >= segmentDuration) {
+      stopAll();
+      addLog("示范播放完成", "success");
+      return;
+    }
+    const seg = PIECES[currentPiece].segments[currentSegmentIdx];
+    let widx = -1;
+    for (let i = 0; i < seg.lyrics.length; i++) {
+      if (elapsed >= seg.lyrics[i].start && elapsed < seg.lyrics[i].start + seg.lyrics[i].dur) {
+        widx = i; break;
+      }
+    }
+    if (widx !== currentWordIndex) {
+      currentWordIndex = widx;
+    }
+    syncCurrentTime = elapsed;
+    drawTimeline();
+    updateProgress(elapsed);
+    requestAnimationFrame(demoLoop);
+  }
+  requestAnimationFrame(demoLoop);
+}
+
+// ============================================================
+// 停止
+// ============================================================
+function stopAll() {
+  isPlaying = false;
+  isRecording = false;
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+  }
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+  }
+  if (coachingTimer) { clearTimeout(coachingTimer); coachingTimer = null; }
+  document.getElementById("btnPlayDemo").disabled = false;
+  document.getElementById("btnRecord").disabled = false;
+  document.getElementById("btnRecord").style.display = "inline-flex";
+  document.getElementById("btnStop").style.display = "none";
+  document.getElementById("recIndicator").style.display = "none";
+  progressFill.style.width = "0%";
+  timeCurrent.textContent = "0.00s";
+  document.getElementById("valPitch").textContent = "--";
+  document.getElementById("valPitch").style.color = "#0066B3";
+  document.getElementById("trendPitch").textContent = "等待开始…";
+  document.getElementById("trendPitch").style.color = "#8A7A6A";
+  document.getElementById("cardPitch").className = "metric-card";
+  document.getElementById("valRhythm").textContent = "--";
+  document.getElementById("valRhythm").style.color = "#C9A84C";
+  document.getElementById("trendRhythm").textContent = "等待开始…";
+  document.getElementById("trendRhythm").style.color = "#8A7A6A";
+  document.getElementById("cardRhythm").className = "metric-card";
+  document.getElementById("valBreath").textContent = "--";
+  document.getElementById("valBreath").style.color = "#4A8F6B";
+  document.getElementById("trendBreath").textContent = "等待开始…";
+  document.getElementById("trendBreath").style.color = "#8A7A6A";
+  document.getElementById("cardBreath").className = "metric-card";
+  drawTimeline();
+  addLog("⏹️ 已停止", "info");
+}
+
+function changePiece() {
+  currentPiece = document.getElementById("pieceSelect").value;
+  currentSegmentIdx = -1;
+  stopAll();
+  renderSegments();
+  segmentInfo.textContent = PIECES[currentPiece].title + " · 请选择段落";
+  // 清空教师提示
+  renderTeacherTips(null);
+  drawEmptyState();
+  addLog(`切换曲目: ${PIECES[currentPiece].title}`, "info");
+}
+
+// ============================================================
+// 窗口自适应
+// ============================================================
+window.addEventListener("resize", () => {
+  initCanvas();
+  if (teacherPoints.length) drawTimeline();
+  else drawEmptyState();
+});
+
+// ============================================================
+// 初始化
+// ============================================================
+function init() {
+  initCanvas();
+  drawEmptyState();
+  renderSegments();
+  renderTeacherTips(null);
+  addLog("🚀 智能陪练已加载，选择曲目和段落开始练习", "info");
+}
+init();
+</script>
+</body>
+</html>

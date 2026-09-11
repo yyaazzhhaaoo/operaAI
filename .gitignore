@@ -1,0 +1,25 @@
+# 凭据（含数据库明文口令，绝不能提交）
+.env
+
+# 虚拟环境
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# 工具本地配置（含本机权限白名单，因人而异）
+.claude/settings.local.json
+.superpowers/
+
+# 运行时产物
+uploads/
+__pycache__/
+*.py[cod]
+*.log
+
+# 系统
+.DS_Store
+.gstack/
