@@ -44,3 +44,14 @@ def teacher_required(fn):
         return fn(*args, **kwargs)
 
     return wrapper
+
+def student_required(fn):
+    """非教师则抛 403。必须叠在 login_required 内层使用。"""
+
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if session.get("role") != "student":
+            raise BusinessError(403, "需要学生权限")
+        return fn(*args, **kwargs)
+
+    return wrapper
