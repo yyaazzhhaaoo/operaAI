@@ -20,6 +20,13 @@ __pycache__/
 *.py[cod]
 *.log
 
+# 测试音频（33MB 的历史录音，公版可从 test_audio/README.md 里的直链重下；
+# 指向具体后缀而不是整个目录，是为了让 README.md 本身仍能进版本库）
+test_audio/*.wav
+test_audio/*.ogg
+test_audio/*.oga
+test_audio/*.mp3
+
 # 系统
 .DS_Store
 .gstack/

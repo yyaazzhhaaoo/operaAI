@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     # 宁可启动即报错，也不要静默用一个空密钥跑起来。
     secret_key: str
 
+    # 音频落盘根目录（《5-接口清单》B1：落盘 uploads/）。
+    # 默认项目根的 uploads/，与 app-d.py 演示上传用的是同一个目录——两边
+    # 曾经各写一份常量、各指一个地方，B2 因此在错误的目录里找文件而恒报 404。
+    # 部署时可改 .env 的 UPLOAD_DIR 指向数据盘。
+    upload_dir: Path = BASE_DIR / "uploads"
+
     # 会话 Cookie 的 Secure 属性。默认 False 是刻意的：本地 nginx 走 HTTP，
     # 置 True 后浏览器会静默丢弃 Cookie，表现为「登录返回成功、之后每个请求都 401」，
     # 排查起来很绕。生产上 HTTPS 就绪后在 .env 加 SESSION_COOKIE_SECURE=true。

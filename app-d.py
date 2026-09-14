@@ -251,7 +251,7 @@ def upload():
         return jsonify({"error": str(e)}), 500
 
 
-@demo_bp.route("/audio/<path:filename>")
+@demo_bp.route("/audio/demo/<path:filename>")
 def audio(filename):
     return send_from_directory(UPLOAD_DIR, filename)
 

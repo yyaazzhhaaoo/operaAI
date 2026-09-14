@@ -8,13 +8,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 完整业务文档（PRD、系统设计、接口清单、数据库设计等）在**父目录** `../艺校_docs/`。Flask + librosa 后端**父目录与本目录各有一份 `app-d.py`**，5 个路由基本一致，差异见「运行方式」。本目录**没有 README、package.json、构建脚本、git 仓库**，但**有** Python 依赖清单 `requirements.txt`、建库脚本 `schema.sql`/`seed.sql`，以及数据库接入包 `app/`。
 
-> **文档是需求真源，发现问题不改文档，只登记到根目录 `DOC_ISSUES.md`。** 目前已记录 8 条（接口前缀 `/api` vs 前端 `/api/v1`、前端调了文档里没有的接口、建库脚本的角色权限、seed 写死 id 且非幂等、`graph_nodes.ref_id` 注释与 DDL 不符、时区未约定、密码哈希算法变更等）。**动手实现接口前先看这份文件的第 1、2 条。**
+> **文档是需求真源，发现问题不改文档，只登记到根目录 `DOC_ISSUES.md`。** 目前已记录 12 条（接口前缀 `/api` vs 前端 `/api/v1`、前端调了文档里没有的接口、建库脚本的角色权限、seed 写死 id 且非幂等、`graph_nodes.ref_id` 注释与 DDL 不符、时区未约定、密码哈希算法变更、3.1 的 stage 与示例自相矛盾、3.2 结果契约的四处未定义等）。**动手实现接口前先看这份文件的第 1、2 条；实现 `/analyze` 相关接口前另见第 10、12 条。**
 
 ## 运行方式
 
 - **纯前端页面无需构建、无需安装依赖。** 绝大多数页面（除下述两个外）是纯静态 HTML，无任何后端请求，直接用浏览器双击打开即可。
 - 图表页依赖本地相对路径 `static/echarts.min.js`，file:// 下也能加载。
-- **例外 1 — `pitch_comparison.html`**：以**根绝对路径** `/static/wavesurfer.min.js` 引入 WaveSurfer（与其它页的相对路径不一致），file:// 下加载不到；且它调用 Flask 后端（端点 `/api/upload`、`/api/progress`、`/api/analyze`、`/api/audio`，基于 librosa 做真实音准对比与 DTW）。**该页仍按加前缀前的 `/upload`、`/progress`、`/analyze` 调用，尚未同步，跑起来会 404**。运行：起任一份 Flask 后端后用 HTTP 访问。父目录 `python3 ../app-d.py` 用 5000 端口（会被 macOS AirPlay 接收器占用），本目录 `python3 app-d.py` 用 8877 端口、无此冲突——建议用后者。
+- **例外 1 — `pitch_comparison.html`**：以**根绝对路径** `/static/wavesurfer.min.js` 引入 WaveSurfer（与其它页的相对路径不一致），file:// 下加载不到；且它调用 Flask 后端（端点 `/api/upload`、`/api/progress`、`/api/analyze`、`/api/audio`，基于 librosa 做真实音准对比与 DTW）。该页 `pitch_comparison.html:423` 定义 `const API = location.protocol + '//' + location.host + "/api"`，**调用是带 `/api` 前缀的，与后端一致**。运行：起任一份 Flask 后端后用 HTTP 访问。父目录 `python3 ../app-d.py` 用 5000 端口（会被 macOS AirPlay 接收器占用），本目录 `python3 app-d.py` 用 8877 端口、无此冲突——建议用后者。
+- **动那 4 条演示路由前先看这条**：它们挂在 `app-d.py` 的 `demo_bp` 上，与业务蓝图 `api_bp` 共用 `/api` 前缀，取音频路由是 **`GET /api/audio/demo/<path:filename>`**（两段）。《5-接口清单》B5 的 `GET /api/audio/<int:file_id>` 是单段且只吃数字，两者不重叠——**即便把演示路由回退成早先的单段形态 `/audio/<path:filename>`，B5 也只截数字路径，`/api/audio/xxx.wav` 仍归 `demo_bp`**（实测对照见 `app/api/audio_analyze.py` 末尾注释）。所以 B5 已可正常注册，它在 2026-09-14 实现了。
+- **但 `pitch_comparison.html` 的音频加载现在是坏的，且与 B5 无关**：`:423` 的 `API` 已含 `/api`，`:529` 又拼 `${API}${j.url}`，而 `url_for("demo.audio", ...)` 返回的也含 `/api` → 前缀重复，实测 404。该拼法自 `8af3787` 首次提交起就在。修它是一行（`${j.url}`），但那只是让这个演示页复活，不解决它的根本问题：它走 `demo_bp` 落盘、不写 `audio_files` 表，B5 查不到它上传的文件。该页去留见 `DOC_ISSUES.md` 第 11 条。
 - **例外 2 — `demo_library.html`**：内含对 `${API_BASE}/api/v1/demos/upload` 的真实上传调用，但 `API_BASE=""` 且当前后端未提供该端点——页面演示不受影响，上传会失败属预期。
 - 页内无 `localStorage`、无持久化；刷新即重置。
 
@@ -43,7 +45,7 @@ pip install -r requirements.txt
 
 | | `../app-d.py`（只读） | `app-d.py`（本目录） |
 |---|---|---|
-| 路由前缀 | 无前缀：`/upload`、`/audio/<filename>`、`/progress`、`/analyze` | **统一加 `/api`**：`/api/upload`、`/api/audio/<filename>`、`/api/progress`、`/api/analyze`（2026-09-11 起，对齐《5-接口清单》的 Base URL；旧的 4 条无前缀路径已移除，不留别名） |
+| 路由前缀 | 无前缀：`/upload`、`/audio/<filename>`、`/progress`、`/analyze` | **统一加 `/api`**：`/api/upload`、`/api/audio/demo/<filename>`、`/api/progress`、`/api/analyze`（2026-09-11 起对齐《5-接口清单》的 Base URL，旧的 4 条无前缀路径已移除，不留别名；取音频那条后来加了 `demo/` 一段，见下条） |
 | 监听端口 | 5000，**常被 macOS AirPlay 接收器占用** | 8877 |
 | 根路由 `/` | 返回 `index.html` 文件 | 查 `users` 表，按统一格式返回 `{"code":0,"message":"ok","data":[...]}`——**`data` 直接装数据本身，不外包一层**（根路由不在 `/api` 之下：它不是接口，没有任何前端调用它） |
 
