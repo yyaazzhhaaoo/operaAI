@@ -28,3 +28,13 @@ api_bp = Blueprint("api", __name__, url_prefix=API_PREFIX)
 # import 必须放在 api_bp 定义之后：各子模块要 `from app.api import api_bp`
 # 才能挂路由，放前面会循环导入。
 from . import auth  # noqa: E402,F401  ← 注册清单：新增模块在此加一行
+from . import audio_analyze  # noqa: E402,F401
+from . import demos_segments_annotations
+from . import practice
+from . import coach
+from . import homeworks
+from . import dashboard
+from . import students
+from . import graph
+from . import cat
+from . import health
