@@ -250,6 +250,73 @@ post_json "/api/auth/login" "{\"username\":\"stu002\",\"password\":\"$OLD_PW\"}"
 expect_status "原密码恢复可用 → 200" 200
 
 echo
+echo "── 6. 页面鉴权 ────────────────────────────────"
+# 干净的 cookie jar：第 4 段末尾 teacher01 已登出，但显式换一个匿名 jar，
+# 让「未登录」这个前提不依赖前面几段的收尾状态。
+# 静态资源只由 nginx 直供（nginx 配置里的 location /static/），Flask 侧没有
+# /static/ 路由——create_app() 用的是 Flask(__name__)，static_folder 指向
+# 并不存在的 app/static，所以直连 8877 时这里必然是 404 JSON「接口不存在」。
+# 因此这条断言只在经 nginx 访问时成立，用 NGINX=1 显式开启：
+#     NGINX=1 BASE=http://127.0.0.1:80 scripts/smoke_auth.sh
+# 直连 Flask 时跳过并打印一行，避免它看起来像是通过了。
+NGINX="${NGINX:-0}"
+JAR="$TD/anon.jar"
+rm -f "$JAR"
+
+req "$BASE/dashboard.html"
+expect_status "未登录 /dashboard.html → 302" 302
+expect_in     "302 指向登录页" "Location:/login.html" header
+
+req "$BASE/index.html"
+expect_status "未登录 /index.html → 302" 302
+
+req "$BASE/pitch_comparison.html"
+expect_status "未登录 /pitch_comparison.html → 302" 302
+
+req "$BASE/login.html"
+expect_status "登录页公开 → 200" 200
+expect_in     "登录页有用户名输入框" 'id="username"'
+expect_in     "登录页有密码输入框" 'id="password"'
+expect_in     "登录页提交到 A1 接口" "/api/auth/login"
+
+# 回归闸门：页面鉴权不得波及接口契约。这两条一旦失败，说明 401 被改成了
+# 302，A 组接口的所有消费方（前端 fetch 判断 r.ok）会当场失效。
+req "$BASE/api/auth/me"
+expect_status "未登录 /api/auth/me 仍是 401（非 302）" 401
+expect_code   "A3 code 仍为 401" 401
+
+# 静态资源不受影响
+if [ "$NGINX" = "1" ]; then
+  req "$BASE/static/echarts.min.js"
+  expect_status "静态资源无需登录 → 200" 200
+else
+  echo "  · 跳过「静态资源无需登录」——该断言只对 nginx 层成立，需 NGINX=1"
+fi
+
+# 登录后页面应放行
+JAR="$JAR_T"
+post_json "/api/auth/login" '{"username":"teacher01","password":"xiyun@2026"}'
+expect_status "重新登录 teacher01 → 200" 200
+
+req "$BASE/dashboard.html"
+expect_status "登录后 /dashboard.html → 200" 200
+expect_in     "返回的是看板页面正文" "班级看板"
+expect_in     "页面已注入登录脚本" "/api/auth/me"
+expect_in     "页面已注入登出脚本" "/api/auth/logout"
+
+req "$BASE/index.html"
+expect_status "登录后 /index.html → 200" 200
+
+req "$BASE/pitch_comparison.html"
+expect_status "登录后 /pitch_comparison.html → 200" 200
+
+# 登出后立刻失效
+req -X POST "$BASE/api/auth/logout"
+expect_status "登出 → 200" 200
+req "$BASE/dashboard.html"
+expect_status "登出后 /dashboard.html → 302" 302
+
+echo
 if [ "$FAIL" -eq 0 ]; then
   echo "$(green "全部通过")：$PASS 项"
   exit 0
