@@ -42,4 +42,10 @@ def create_app(config_overrides=None):
     from app.api import api_bp
 
     app.register_blueprint(api_bp)
+
+    # 页面路由：无前缀、不挂 api_bp，故不在 app/api/ 的注册清单里，
+    # 在此显式注册。与上面同样的顺序约束——import 必须在 register 之前。
+    from app.pages import page_bp
+
+    app.register_blueprint(page_bp)
     return app
