@@ -1410,7 +1410,7 @@
                     <div class="hint">点击选择音频文件<br><span style="color:var(--text-muted);font-size:11px">支持 wav / mp3 / flac</span></div>
                     <div class="file-name" id="fileName" style="display:none"></div>
                 </div>
-                <input type="file" id="fileInput" accept="audio/*" style="display:none" onchange="onFileSelect(event)">
+                <input type="file" id="fileInput" accept="audio/demo*" style="display:none" onchange="onFileSelect(event)">
             </div>
             <div class="modal-actions">
                 <button class="btn-secondary" onclick="hideUploadModal()">取消</button>
@@ -2090,5 +2090,76 @@
         fetchDemos();
     </script>
 
+<!-- ==== 登录用户条 + 登出（页面鉴权配套，见 docs/superpowers/specs/2026-09-15-page-auth-design.md）==== -->
+<!-- 页面已被服务端保护，能加载出来就说明会话有效。这段脚本不做守卫，
+     只负责两件事：把顶部栏写死的演示姓名换成真实登录用户；提供登出入口。
+     仅在「会话在页面打开后过期」与「后端不可达」两种边缘情况兜底跳转。 -->
+<style>
+  .logout-btn{background:none;border:1px solid var(--border-medium);color:var(--text-secondary);
+    font-size:12px;padding:3px 10px;border-radius:6px;cursor:pointer;font-family:inherit;margin-left:4px}
+  .logout-btn:hover{border-color:var(--danger);color:var(--danger)}
+  .logout-bar{position:fixed;top:16px;right:20px;z-index:60;display:flex;align-items:center;gap:10px;
+    background:var(--bg-secondary);border:1px solid var(--border-light);border-radius:10px;
+    padding:6px 12px;font-size:13px;color:var(--text-secondary);box-shadow:0 2px 10px rgba(0,0,0,.05)}
+</style>
+<script>
+(async () => {
+  async function logout() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch (e) { /* 网络失败也照样回登录页 */ }
+    location.replace('/login.html');
+  }
+
+  let user;
+  try {
+    const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
+    if (!r.ok) return location.replace('/login.html');   // 会话已失效
+    user = (await r.json()).data;
+  } catch (e) {
+    return location.replace('/login.html');              // 后端不可达
+  }
+  if (!user) return;
+
+  const isTeacher = user.role === 'teacher';
+  const roleText = isTeacher ? '教师' : '学生';
+
+  const btn = document.createElement('button');
+  btn.className = 'logout-btn';
+  btn.textContent = '登出';
+  btn.addEventListener('click', logout);
+
+  const navUser = document.querySelector('.nav-user');
+  if (navUser) {
+    // 有顶部栏的 10 个页面：复用这块区域，把写死的演示姓名换成真实登录用户。
+    // 全部用 textContent 填充，不用 innerHTML——display_name 来自数据库，
+    // 拼接进 HTML 会有注入风险。
+    const av = document.createElement('div');
+    av.className = 'avatar';
+    av.textContent = isTeacher ? '👩‍🏫' : '🎭';
+
+    const name = document.createElement('span');
+    name.textContent = user.display_name;
+
+    const sep = document.createElement('span');
+    sep.style.cssText = 'color:var(--text-muted);font-size:13px';
+    sep.textContent = '|';
+
+    const role = document.createElement('span');
+    role.style.cssText = 'color:var(--text-secondary);font-size:13px';
+    role.textContent = roleText;
+
+    navUser.replaceChildren(av, name, sep, role, btn);
+  } else {
+    // index.html / pitch_comparison.html 没有顶部栏，注入固定浮条
+    const bar = document.createElement('div');
+    bar.className = 'logout-bar';
+    const label = document.createElement('span');
+    label.textContent = user.display_name + ' · ' + roleText;
+    bar.append(label, btn);
+    document.body.appendChild(bar);
+  }
+})();
+</script>
 </body>
 </html>
