@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>戏韵AI · 登录</title>
+<style>
+/* ============================================================
+   宣纸配色 · 与 index.html / dashboard.html 同一套 token
+   ============================================================ */
+:root {
+  --bg-primary: #F5EDE4;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F0E8DC;
+  --bg-hover: #F5F0EA;
+  --bg-card-header: #F8F3EC;
+  --text-primary: #2D1F14;
+  --text-secondary: #5A4A3A;
+  --text-muted: #8A7A6A;
+  --text-light: #B0A090;
+  --border-light: #E8DDD0;
+  --border-medium: #D5C8B8;
+  --border-strong: #C0B0A0;
+  --primary: #0066B3;
+  --primary-hover: #0055A0;
+  --primary-glow: rgba(0, 102, 179, 0.30);
+  --primary-soft: rgba(0, 102, 179, 0.08);
+  --primary-border: rgba(0, 102, 179, 0.25);
+  --success: #4A8F6B;
+  --success-soft: rgba(74, 143, 107, 0.12);
+  --warning: #C9A84C;
+  --warning-soft: rgba(201, 168, 76, 0.12);
+  --danger: #B83A2F;
+  --danger-soft: rgba(184, 58, 47, 0.12);
+  --nav-gradient: linear-gradient(90deg, #F5EDE4, #E8DDD0 40%, #D5C8B8 50%, #E8DDD0 60%, #F5EDE4);
+  --progress-gradient: linear-gradient(90deg, #0066B3, #4A8AF4);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  padding: 40px 36px 36px;
+  box-shadow: 0 10px 40px rgba(45, 31, 20, 0.07);
+}
+
+/* ---- 品牌区（与 index.html 的 .hero 同款）---- */
+.brand { text-align: center; margin-bottom: 30px; }
+.brand h1 {
+  font-family: Georgia, "Songti SC", "STSong", serif;
+  font-size: 30px;
+  letter-spacing: 4px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.brand .seal {
+  display: inline-block;
+  background: var(--danger);
+  color: #FFF;
+  font-size: 12px;
+  letter-spacing: 2px;
+  padding: 2px 9px;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-left: 10px;
+  font-family: inherit;
+}
+.brand p { margin-top: 8px; color: var(--text-muted); font-size: 13.5px; }
+
+/* ---- 表单 ---- */
+.field { margin-bottom: 18px; }
+.field label {
+  display: block;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.field input {
+  width: 100%;
+  height: 42px;
+  padding: 0 13px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-medium);
+  border-radius: 9px;
+  outline: none;
+  transition: border-color .18s, box-shadow .18s;
+}
+.field input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.msg {
+  min-height: 21px;
+  font-size: 13px;
+  color: var(--danger);
+  margin-bottom: 12px;
+}
+
+button[type="submit"] {
+  width: 100%;
+  height: 44px;
+  font-size: 15.5px;
+  font-family: inherit;
+  letter-spacing: 2px;
+  color: #FFF;
+  background: var(--primary);
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background .18s;
+}
+button[type="submit"]:hover:not(:disabled) { background: var(--primary-hover); }
+button[type="submit"]:disabled { opacity: .6; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="brand">
+    <h1>戏韵AI<span class="seal">登录</span></h1>
+    <p>戏曲演唱教学 AI 辅助系统</p>
+  </div>
+
+  <form id="loginForm">
+    <div class="field">
+      <label for="username">用户名</label>
+      <input id="username" name="username" type="text"
+             autocomplete="username" autofocus required>
+    </div>
+    <div class="field">
+      <label for="password">密码</label>
+      <input id="password" name="password" type="password"
+             autocomplete="current-password" required>
+    </div>
+    <div class="msg" id="msg"></div>
+    <button type="submit" id="submitBtn">登 录</button>
+  </form>
+</div>
+
+<script>
+const form = document.getElementById('loginForm');
+const msgEl = document.getElementById('msg');
+const btn = document.getElementById('submitBtn');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  msgEl.textContent = '';
+  btn.disabled = true;
+  btn.textContent = '登录中…';
+
+  let body = null;
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        username: document.getElementById('username').value.trim(),
+        password: document.getElementById('password').value,
+      }),
+    });
+    body = await r.json().catch(() => null);
+  } catch (err) {
+    msgEl.textContent = '无法连接服务器';
+    btn.disabled = false;
+    btn.textContent = '登 录';
+    return;
+  }
+
+  if (body && body.code === 0) {
+    // replace 而非 href：避免用户按返回键退回登录表单
+    location.replace('/dashboard.html');
+    return;
+  }
+
+  // 失败文案由后端给（A1 已是中文：用户名或密码错误 / 账号已停用 / 参数错误）
+  msgEl.textContent = (body && body.message) || '登录失败，请稍后重试';
+  btn.disabled = false;
+  btn.textContent = '登 录';
+});
+</script>
+
+</body>
+</html>
