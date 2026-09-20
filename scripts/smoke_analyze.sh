@@ -134,7 +134,10 @@ expect_code   "B1 code=0" 0
 
 FILE_ID=$(jget data.file_id)
 if printf '%s' "$FILE_ID" | grep -qE '^[0-9]+$'; then
-  ok "B1 返回整数 data.file_id（=$FILE_ID）"
+  # ${FILE_ID} 而非 $FILE_ID：macOS 的 bash 3.2 在 UTF-8 locale 下会把紧跟的全角
+  # 「）」并进变量名（$FILE_ID）→ 变量 FILE_ID）），配合 set -u 报 unbound variable。
+  # 加花括号显式定界。其余三处同此（$TASK_ID / $STATUS / $BAD_STAGE）。
+  ok "B1 返回整数 data.file_id（=${FILE_ID}）"
 else
   bad "B1 应返回整数 data.file_id" "实际 data.file_id='$FILE_ID'；body=$BODY"
 fi
@@ -156,7 +159,7 @@ expect_code   "B2 code=0" 0
 
 TASK_ID=$(jget data.task_id)
 if printf '%s' "$TASK_ID" | grep -qE '^[0-9a-fA-F]{8,}$'; then
-  ok "B2 返回 data.task_id（=$TASK_ID）"
+  ok "B2 返回 data.task_id（=${TASK_ID}）"
 else
   bad "B2 应返回 data.task_id" "实际='$TASK_ID'；body=$BODY"
 fi
@@ -182,7 +185,7 @@ while [ "$n" -lt "$POLL_MAX" ]; do
   n=$((n + 1))
   req "$BASE/api/analyze/status/$TASK_ID"
   if [ "$STATUS" != "200" ]; then
-    bad "B3 轮询 → 200" "第 $n 轮实际 $STATUS；body=$BODY"
+    bad "B3 轮询 → 200" "第 $n 轮实际 ${STATUS}；body=$BODY"
     break
   fi
   ST=$(jget data.status)
@@ -212,7 +215,7 @@ expect_eq "B3 的 progress 单调不减" "$MONO" 1
 if [ "$STAGES_OK" = "1" ]; then
   ok "B3 的 stage 始终落在文档 3.1 枚举内"
 else
-  bad "B3 的 stage 落在文档 3.1 枚举内" "出现了枚举外的值「$BAD_STAGE」——见 DOC_ISSUES 第 10 条"
+  bad "B3 的 stage 落在文档 3.1 枚举内" "出现了枚举外的值「${BAD_STAGE}」——见 DOC_ISSUES 第 10 条"
 fi
 expect_eq "B3 终态 progress=100" "$PREV_PROGRESS" 100
 
