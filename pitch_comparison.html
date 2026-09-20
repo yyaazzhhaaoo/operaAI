@@ -433,6 +433,10 @@ let analysisData = null;
 let maxTime = 0;
 let pollTimer = null;
 
+// B3 的轮询参数
+const POLL_INTERVAL_MS = 1000;
+const POLL_TIMEOUT_MS = 10 * 60 * 1000;   // 实测单对 77–99s，留足余量
+
 // 播放状态
 let teacherPlaying = false;
 let studentPlaying = false;
@@ -447,6 +451,14 @@ function setStatus(role, text, isError) {
     const el = document.getElementById(role + 'Status');
     el.textContent = text;
     el.className = 'status ' + (isError ? 'err' : 'ok');
+}
+
+// 会话过期：B1–B5 全部挂了 @login_required，过期时后端回 401 + 统一信封。
+// 统一跳登录页，而不是把 401 的 JSON 当普通错误弹 alert ——那种提示对用户
+// 完全没有可操作性，他不知道要重新登录。
+function sessionExpired() {
+    alert('会话已过期，请重新登录');
+    location.replace('/login.html');
 }
 
 // ---------- 维度评分渲染 ----------
@@ -525,15 +537,20 @@ function initWave(containerId, fileInputId, role) {
             const form = new FormData();
             form.append('audio', file);
             const r = await fetch(`${API}/api/audio/upload`, { method: 'POST', body: form });
+            if (r.status === 401) return sessionExpired();
             if (!r.ok) {
                 const errText = await r.text();
                 throw new Error(`服务器 ${r.status}: ${errText}`);
             }
             const j = await r.json();
-            if (j.error) throw new Error(j.error);
+            // B1 返回 {file_id, url}。url 由后端 url_for 生成、指向 B5，
+            // 前端直接拿来喂 WaveSurfer，不自己拼路径。
             const audioUrl = `${API}${j.data.url}`;
             ws.load(audioUrl);
-            waves[role] = { ws, id: j.data.id,filePath:j.data.filePath, url: audioUrl };
+            // 只留 B2 需要的 audio_files.id 与播放地址。原先还存了 filePath，
+            // 那是上一轮同步迁移的遗留——B2 认的是数据库主键，不是磁盘路径，
+            // 且 B1 已不再返回它（见 DOC_ISSUES 第 14 条）。
+            waves[role] = { ws, id: j.data.file_id, url: audioUrl };
         } catch (err) {
             console.error(`[${role}] 上传/加载失败:`, err);
             setStatus(role, '' + err.message, true);
@@ -758,33 +775,119 @@ function closeProgress() {
     document.getElementById('progressModal').classList.remove('show');
 }
 
-function estimateProgressFromLogs(logs) {
-    const text = logs.map(l => l.msg).join(' ');
-    if (text.includes('分析完成')) return 100;
-    if (text.includes('评分:')) return 95;
-    if (text.includes('DTW 完成')) return 90;
-    if (text.includes('开始精细 DTW')) return 80;
-    if (text.includes('选择最佳八度')) return 75;
-    if (text.includes('八度偏移')) {
-        const matches = text.match(/八度偏移/g);
-        return 55 + (matches ? matches.length * 5 : 0);
+// ---------- 进度日志与轮询 ----------
+// 日志是「追加式」的：只在 stage/message 变化时写一行，不每轮刷 innerHTML。
+// 阶段取值见《5-接口清单》3.1：上传完成 / 人声分离 / 音高提取 /
+// 八度修正 / 时间对齐 / 评分计算。
+function appendLog(logsEl, msg, color) {
+    const t = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    const div = document.createElement('div');
+    div.className = 'log-line';
+    if (color) div.style.color = color;
+    // textContent 而非 innerHTML：msg 里含服务端给的 message，
+    // 拼接进 HTML 会有注入风险。
+    div.textContent = `[${t}] ${msg}`;
+    logsEl.appendChild(div);
+    logsEl.scrollTop = logsEl.scrollHeight;
+}
+
+function stopPolling() {
+    if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
     }
-    if (text.includes('八度归一化')) return 55;
-    if (text.includes('提取完成')) {
-        const matches = text.match(/提取完成/g);
-        return 30 + (matches ? matches.length * 15 : 0);
-    }
-    if (text.includes('提取音高')) return 25;
-    if (text.includes('检测到人声')) return 20;
-    if (text.includes('HPSS')) return 15;
-    if (text.includes('音频时长')) return 10;
-    if (text.includes('正在加载音频')) return 5;
-    return 2;
+}
+
+// 轮询 B3 直到 done/failed，resolve 终态那一帧的 status 数据。
+// 实测单对分析 77–99 秒，10 分钟留足余量；没有这道护栏，worker 挂掉时
+// 任务永远停在 queued，前端会无限轮询下去。
+function pollUntilSettled(taskId, logsEl, barEl) {
+    return new Promise((resolve, reject) => {
+        const startedAt = Date.now();
+        let lastLine = '';
+        pollTimer = setInterval(async () => {
+            if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+                stopPolling();
+                reject(new Error('分析超时（超过 10 分钟）——请确认 Celery worker 是否在运行'));
+                return;
+            }
+            try {
+                const r = await fetch(`${API}/api/analyze/status/${taskId}`);
+                if (r.status === 401) { stopPolling(); return sessionExpired(); }
+                if (!r.ok) return;          // 单次失败不终止，交给下一轮
+                const st = (await r.json()).data;
+
+                barEl.style.width = (st.progress || 0) + '%';
+                const line = st.stage + (st.message ? ' — ' + st.message : '');
+                if (line !== lastLine) {
+                    lastLine = line;
+                    appendLog(logsEl, line);
+                }
+                if (st.status === 'done' || st.status === 'failed') {
+                    stopPolling();
+                    resolve(st);
+                }
+            } catch (e) {
+                // 网络抖动：不终止轮询，下一轮重试
+            }
+        }, POLL_INTERVAL_MS);
+    });
+}
+
+// ---------- 结果契约转换（文档 3.2 → 绘图层形状） ----------
+// B4 回的是 3.2 契约 {overall, dimensions, timeline, regions, words}，
+// 而 drawTimeline/tooltip 消费的是 demo 时代的 aligned[]。这里做一层显式转换，
+// 而不是把绘图代码改成直接读 3.2 ——转换是纯数学、可单独验证，
+// 混进绘图函数里就变成「既要算坐标又要换契约」。
+//
+// 依据是后端 _pitch_pairs 的 docstring 记的两条自洽关系：
+//     student_pitch = ref_hz · 2^(s_cents/1200)
+//     deviation_cents = s_cents − t_cents
+// 于是 t_cents = 1200·log2(t_hz / ref_hz)，s_cents = t_cents + deviation。
+//
+// ref_hz 用后端给的：前端自己取教师中位 Hz 只能在抽稀后的 1500 点上估，
+// 与后端在全帧上算的有微差，会让教师曲线不精确过 0 音分那条参考线。
+//
+// 三条曲线等长同栅格（后端 _timeline 用同一个 stride 抽稀），可以按下标配对。
+function adaptResult(b4) {
+    const tl = b4.timeline;
+    const tHz = tl.teacher_pitch;      // [[t, hz], ...]
+    const sHz = tl.student_pitch;
+    const dev = tl.deviation_cents;    // [[t, cents], ...] 带符号
+    const toCents = (hz) => 1200 * Math.log2(hz / b4.ref_hz);
+
+    const aligned = tHz.map((p, i) => {
+        const t_cents = toCents(p[1]);
+        const d = dev[i][1];
+        return {
+            t_time: p[0],
+            t_cents: t_cents,
+            s_cents: t_cents + d,
+            t_f0: p[1],
+            s_f0: sHz[i][1],
+            // 取绝对值是必须的：demo 时代的 diff 是 abs(t_c − s_c)，
+            // 而 3.2 的 deviation_cents 是带符号的。不取绝对值，
+            // drawTimeline 里所有 `diff < 20 / < 50` 的判断对「偏低」恒为真，
+            // 偏低半音会比偏低一个全音看起来更准——着色整个反过来。
+            diff: Math.abs(d),
+        };
+    });
+
+    return {
+        aligned: aligned,
+        duration: tl.duration,
+        score: b4.overall,
+        dimensions: b4.dimensions,
+        octave_shift: b4.octave_shift,
+        teacher_onset: b4.teacher_onset,
+        student_onset: b4.student_onset,
+    };
 }
 
 // ---------- 分析主流程 ----------
+// 同步改异步：B2 提交拿 task_id → B3 每秒轮询进度 → done 后 B4 取结果。
+// 原来是一个请求挂 80–100 秒，另开一个 setInterval 读服务端日志文案猜进度。
 async function doAnalyze() {
-    console.log('[分析] 点击分析, waves:', waves);
     if (!waves.t || !waves.s) {
         alert('请先上传老师和学生的音频\n（确保两个文件都显示"上传成功"）');
         return;
@@ -793,95 +896,81 @@ async function doAnalyze() {
     btn.textContent = '分析中，请等待...';
     btn.disabled = true;
 
-    const jobKey = waves.t.id + '_' + waves.s.id;
     const modal = document.getElementById('progressModal');
     const logsEl = document.getElementById('progressLogs');
     const barEl = document.getElementById('progressBar');
 
     modal.classList.add('show');
-    logsEl.innerHTML = '<div class="log-line">正在启动分析...</div>';
-    barEl.style.width = '2%';
+    logsEl.innerHTML = '';
+    barEl.style.width = '0%';
     barEl.style.background = 'linear-gradient(90deg, #0066B3, #4A8AF4)';
-
-    let lastLen = 0;
-    pollTimer = setInterval(async () => {
-        try {
-            const r = await fetch(`${API}/api/progress?job=${jobKey}`);
-            const data = await r.json();
-            if (data.logs && data.logs.length > 0) {
-                if (data.logs.length !== lastLen) {
-                    logsEl.innerHTML = data.logs.map(l => {
-                        const t = new Date(l.time * 1000).toLocaleTimeString('zh-CN', {hour12:false});
-                        return `<div class="log-line">[${t}] ${l.msg}</div>`;
-                    }).join('');
-                    logsEl.scrollTop = logsEl.scrollHeight;
-                    lastLen = data.logs.length;
-                    const pct = estimateProgressFromLogs(data.logs);
-                    barEl.style.width = pct + '%';
-                }
-            }
-        } catch(e) {}
-    }, 400);
+    appendLog(logsEl, '正在提交分析任务...');
 
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 300000);
-        const r = await fetch(`${API}/api/analyze?t=${waves.t.filePath}&s=${waves.s.filePath}&job=${jobKey}`, {
-            signal: controller.signal
+        // ① B2：提交后立即返回 task_id，不阻塞
+        const r = await fetch(`${API}/api/analyze/submit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                teacher_audio_id: waves.t.id,
+                student_audio_id: waves.s.id,
+            }),
         });
-        clearTimeout(timeoutId);
-        if (!r.ok) {
-            const errText = await r.text();
-            throw new Error(`服务器 ${r.status}: ${errText}`);
+        if (r.status === 401) return sessionExpired();
+        if (!r.ok) throw new Error(`服务器 ${r.status}: ${await r.text()}`);
+        const taskId = (await r.json()).data.task_id;
+        console.log('[分析] 任务已提交:', taskId);
+
+        // ② B3：轮询到终态
+        const final = await pollUntilSettled(taskId, logsEl, barEl);
+        if (final.status === 'failed') {
+            // failed 时 message 是后端写给用户看的可读原因（见 run_analysis）
+            throw new Error(final.message || '分析失败');
         }
-        const data = await r.json();
-        console.log('[分析] 返回数据:', data);
-        if (data.error) throw new Error(data.error);
 
-        analysisData = data;
-        waves.t.onset = data.teacher_onset || 0;
-        waves.s.onset = data.student_onset || 0;
+        // ③ B4：取完整结果。只能在 done 之后调——未完成时后端回 409。
+        const rr = await fetch(`${API}/api/analyze/result/${taskId}`);
+        if (rr.status === 401) return sessionExpired();
+        if (!rr.ok) throw new Error(`服务器 ${rr.status}: ${await rr.text()}`);
+        const b4 = (await rr.json()).data;
+        console.log('[分析] B4 结果:', b4);
 
-        drawTimeline(data);
-        document.getElementById('scoreVal').textContent = data.score;
+        analysisData = adaptResult(b4);
+        // 同步播放的起点用后台检测出的开唱点，而不是文件开头——
+        // 否则每次都要先播几秒静音
+        waves.t.onset = b4.teacher_onset || 0;
+        waves.s.onset = b4.student_onset || 0;
+
+        drawTimeline(analysisData);
+        document.getElementById('scoreVal').textContent = analysisData.score;
         document.getElementById('scoreBox').classList.add('show');
 
-        const octaveInfo = data.octave_shift !== 0
-            ? `（💡 系统智能提示：检测到学生演唱整体 ${data.octave_shift > 0 ? '高' : '低'} ${Math.abs(data.octave_shift)} 个八度，已自动对齐进行对比，这不影响评分准确性，请放心观察下方曲线。）`
+        // 符号约定：后端 _best_octave 的判据是 `s_cents + shift * 1200`
+        // （analyze_service.py:483），所以 shift > 0 表示学生**原本唱得更低**，
+        // 要往上升八度才跟老师对得上。原 demo 在这里写的是 `> 0 ? '高' : '低'`，
+        // 方向反了 —— 两处一起改，见 Step 8 的说明。
+        const shift = b4.octave_shift || 0;
+        const octaveInfo = shift !== 0
+            ? `（💡 系统智能提示：检测到学生演唱整体${shift > 0 ? '低' : '高'} ${Math.abs(shift)} 个八度，已自动对齐进行对比，这不影响评分准确性，请放心观察下方曲线。）`
             : '';
         document.getElementById('scoreLabel').innerHTML =
             `音准评分（百分制）<br><span style="font-size:12px;color:var(--text-light)">${octaveInfo}</span>`;
 
-        if (data.dimensions) {
-            updateDimensions(data.dimensions);
-        } else {
-            const mock = {
-                "音准": data.score,
-                "节奏": Math.max(0, Math.min(100, data.score * (0.9 + 0.1 * Math.random()))),
-                "气息": Math.max(0, Math.min(100, data.score * (0.8 + 0.2 * Math.random()))),
-                "咬字": Math.max(0, Math.min(100, data.score * (0.85 + 0.15 * Math.random()))),
-                "拖腔": Math.max(0, Math.min(100, data.score * (0.7 + 0.3 * Math.random())))
-            };
-            updateDimensions(mock);
-        }
+        // B4 必返回 dimensions，不再需要兜底的 mock
+        updateDimensions(analysisData.dimensions);
 
         barEl.style.width = '100%';
-        logsEl.innerHTML += '<div class="log-line" style="color:#4A8F6B">分析完成！</div>';
-        logsEl.scrollTop = logsEl.scrollHeight;
+        appendLog(logsEl, '分析完成！', '#4A8F6B');
         setTimeout(() => closeProgress(), 1500);
 
     } catch (e) {
         console.error('[分析] 失败:', e);
         barEl.style.width = '100%';
         barEl.style.background = '#B83A2F';
-        logsEl.innerHTML += `<div class="log-line" style="color:#B83A2F">分析失败: ${e.message}</div>`;
-        logsEl.scrollTop = logsEl.scrollHeight;
+        appendLog(logsEl, '分析失败: ' + e.message, '#B83A2F');
         alert('分析失败: ' + e.message);
     } finally {
-        if (pollTimer) {
-            clearInterval(pollTimer);
-            pollTimer = null;
-        }
+        stopPolling();
         btn.textContent = '开始对比分析';
         btn.disabled = false;
     }
@@ -899,7 +988,9 @@ function drawTimeline(data) {
     const W = rect.width;
     const H = rect.height;
     const al = data.aligned;
-    maxTime = data.teacher.times[data.teacher.times.length - 1];
+    // B4 的 timeline.duration 就是这三条曲线共用栅格的末端，与原来取
+    // teacher.times 末位是同一个值；adaptResult 不再造 teacher.times 这个壳。
+    maxTime = data.duration;
     const tx = t => (t / maxTime) * W;
     const allCents = al.flatMap(a => [a.t_cents, a.s_cents]);
     const sorted = [...allCents].sort((a, b) => a - b);
@@ -1054,7 +1145,8 @@ function drawTimeline(data) {
         let studentDisplay = `${closest.s_f0.toFixed(1)} Hz`;
         if (octaveShift !== 0) {
             const rawFreq = closest.s_f0 / Math.pow(2, octaveShift);
-            const shiftText = octaveShift > 0 ? `高 ${Math.abs(octaveShift)} 个八度` : `低 ${Math.abs(octaveShift)} 个八度`;
+            // 同 Step 7：shift > 0 是学生原本唱得更低，不是更高。
+            const shiftText = octaveShift > 0 ? `低 ${Math.abs(octaveShift)} 个八度` : `高 ${Math.abs(octaveShift)} 个八度`;
             studentDisplay = `${closest.s_f0.toFixed(1)} Hz（原始 ${rawFreq.toFixed(1)} Hz，已自动修正 ${shiftText}）`;
         }
         tip.innerHTML = `
