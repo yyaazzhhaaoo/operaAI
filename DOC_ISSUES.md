@@ -169,7 +169,7 @@ stage ∈ 上传完成|人声分离|音高提取|八度修正|时间对齐|评�
 
 ---
 
-## 11. 3.1 标题声称「替代原阻塞式接口」，但该阻塞接口仍在前端使用
+## 11. 3.1 标题声称「替代原阻塞式接口」，但该阻塞接口仍在前端使用（2026-09-20 已解决，见文末更新）
 
 **涉及**：《5-接口清单-V1.0》3.1
 
@@ -184,6 +184,13 @@ stage ∈ 上传完成|人声分离|音高提取|八度修正|时间对齐|评�
 **2026-09-14 更新**：B5 已实现（`app/api/audio_analyze.py` 的 `audio_download` + `app/services/audio_service.py` 的 `get_playable`，见 `CLAUDE.md`）。重叠问题随之消解，且消解方式有两层：演示路由已挪到两段的 `/audio/demo/<path:filename>`；同时 B5 用的是 `<int:file_id>` 而非字面的 `<file_id>`，只吃数字，所以即便演示路由被回退成单段形态，`/api/audio/xxx.wav` 仍归 `demo_bp`（实测对照见 `audio_analyze.py` 末尾注释）。
 
 **本节议题仍未了结**：文档始终没有说明 `demo_bp` 这 4 条演示路由与 `pitch_comparison.html` 应何时下线、由谁迁移。该页现在**音频加载是坏的**（`pitch_comparison.html:423` 的 `API` 已含 `/api`，`:529` 又拼 `${API}${j.url}`，而 `url_for("demo.audio", ...)` 返回的也含 `/api`，前缀重复 → 404；该拼法自 `8af3787` 首次提交起就存在，与 B5 无关）。另外它走 `demo_bp` 落盘、不写 `audio_files` 表，B5 查不到它的文件，结果契约也与 3.2 不同，无法平滑切换。
+
+**2026-09-20 更新**：`pitch_comparison.html` 已迁到 B1/B2/B3/B4/B5，不再调用 `demo_bp` 的任何路由。本节记录的两个悬案随之解决：
+
+- **「音频加载是坏的」** —— 由 B1 返回 B5 的 `url`（`url_for("api.audio_download", ...)` 生成）解决。前端不再拼 `${API}${j.url}` 而是 `${API}${j.data.url}`，且 `url` 本身已含 `/api` 前缀，不再重复。
+- **「结果契约无法平滑切换」** —— 由前端新增的 `adaptResult()` 转换层解决。它把 3.2 契约的 `timeline` 三条曲线用 `t_cents = 1200·log2(t_hz/ref_hz)`、`s_cents = t_cents + deviation_cents` 还原成绘图函数认识的 `aligned[]`。契约不同构不再是障碍。
+
+**但 `demo_bp` 那 4 条演示路由保留未删**（这是本次的明确决策，不是遗漏），已无任何调用方，是后续的独立清理项。它们至今没有鉴权——删之前不要往上面加功能。
 
 ---
 
