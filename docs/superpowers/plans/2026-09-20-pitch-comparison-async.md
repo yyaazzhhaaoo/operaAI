@@ -382,7 +382,7 @@ Expected：`backend=401`（401 说明后端活着且未登录，是正常的）�
 scripts/smoke_analyze.sh
 ```
 
-Expected：退出码 1，末尾打印 `失败 7 项`。失败的必须是这 7 条：
+Expected：退出码 1，末尾打印 `失败 8 项`。失败的必须是这 8 条：
 
 ```
 ✗ B1 应返回整数 data.file_id
@@ -392,11 +392,14 @@ Expected：退出码 1，末尾打印 `失败 7 项`。失败的必须是这 7 �
 ✗ B4 含 teacher_onset（同步播放起点）
 ✗ B4 含 student_onset
 ✗ B4 含 ref_hz（音分基准）
+✗ ref_hz 落在 pyin 的可信基频范围内
 ```
 
-**其余断言必须全过**，特别是 `偏差与两条曲线自洽`、`偏差严格为 0`、`音准 = 100.0`、`overall = 92.6`、`regions 全绿`、`B3 的 stage 始终落在文档 3.1 枚举内`。
+最后一条与倒数第二条是同一个缺失字段引起的两条断言：`ref_hz` 不存在时，`isinstance(None, (int, float))` 为假，所以 `REF_HZ_PLAUSIBLE` 也是 0。**这是预期的，不要去「修」它**——两轮之后 `ref_hz` 一补上，两条会一起转绿。
 
-若这 7 条之外还有失败，**先停下来查清楚**——尤其是基准线那 4 条。它们失败意味着 `analyze_service` 已存在问题，与本次迁移无关，但也绝不能带着这个问题往下走。
+**其余断言必须全过**，特别是 `偏差与两条曲线自洽`、`偏差严格为 0`、`音准 = 100.0`、`overall = 92.6`、`regions 全绿`、`B1 的 data.url 指向 B5`、`B3 的 stage 始终落在文档 3.1 枚举内`。
+
+若这 8 条之外还有失败，**先停下来查清楚**——尤其是基准线那 4 条。它们失败意味着 `analyze_service` 已存在问题，与本次迁移无关，但也绝不能带着这个问题往下走。
 
 - [ ] **Step 5: Commit**
 
@@ -408,7 +411,8 @@ git commit -m "test: 新增 B 组音频/分析接口冒烟脚本
 并按 test_audio/README.md 的实测记录把「同轨对同轨 overall=92.6、
 偏差严格为 0、regions 全绿」立为流水线健康度基准线。
 
-当前 7 条失败，正是待迁移项（B1/B2 响应形状、B4 缺 4 个字段）。"
+当前 8 条失败，正是待迁移项（B1/B2 响应形状、B4 缺 4 个字段，其中
+ref_hz 一个字段占两条断言）。"
 ```
 
 ---
@@ -474,7 +478,7 @@ Expected：能看到 `t_vocal, t_onset = _load_vocal(...)`、`s_vocal, s_onset =
 scripts/smoke_analyze.sh
 ```
 
-Expected：退出码 1，失败项从 7 条降到 3 条——只剩 B1 的两条与 B2 的一条：
+Expected：退出码 1，失败项从 8 条降到 3 条——只剩 B1 的两条与 B2 的一条：
 
 ```
 ✗ B1 应返回整数 data.file_id
@@ -638,7 +642,7 @@ B1 改回 {file_id, url}、B2 改回 {task_id}（工作区此前为了迁就旧�
 新增 DOC_ISSUES 第 14 条（上表四个字段 + B1 的 url）与第 15 条
 （B2 未校验音频归属，可读到他人 private 录音的音高曲线，仅登记未修）。
 
-scripts/smoke_analyze.sh 由 7 条失败转为全绿。"
+scripts/smoke_analyze.sh 由 8 条失败转为全绿。"
 ```
 
 ---
