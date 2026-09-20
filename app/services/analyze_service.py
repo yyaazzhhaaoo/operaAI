@@ -289,6 +289,14 @@ def _analyze(task_id: str, t_path: Path, s_path: Path, lyrics: list | None) -> N
         # regions 由逐字结果合并而来（没有歌词时退回滑窗），所以必须在 words 之后。
         "regions": _regions(words, t_track.times, s_aligned - t_cents),
         "words": words,
+        # ↓↓↓ 文档 3.2 未定义这四个字段，但前端展示需要 → DOC_ISSUES 第 14 条。
+        # 尤其 octave_shift：student_pitch 已经是它修正之后的结果，不单独给出，
+        # 前端无从知道修正发生过（也就无法提示「学生整体低了八度」），
+        # 更无从还原学生原始音高。这四个值在上面的管线里都已经算好了。
+        "octave_shift": octave_shift,
+        "teacher_onset": round(float(t_onset), 3),
+        "student_onset": round(float(s_onset), 3),
+        "ref_hz": round(float(ref_hz), 2),
     }
 
     task_repo.update(

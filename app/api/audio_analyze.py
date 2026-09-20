@@ -50,8 +50,18 @@ def audio_upload():
         file=file,
     )
 
-    # {"id": uid, "url": url_for("demo.audio", filename=uid)}
-    return ok({"id": audio.id,"filePath":audio.file_path,"url":url_for("api.audio_download", file_id=audio.id)})
+    # 文档 B1 定义的返回是 {"file_id": ...}。额外给一个 url：前端要拿它喂给
+    # WaveSurfer 加载音频，由 url_for 生成能保证路径永远跟着 B5 的真实路由走，
+    # 前端就不必硬编码 /api/audio/<id>——硬编码路径与后端漂移正是 DOC_ISSUES
+    # 第 1 条记录的那类问题。多出的这个字段见 DOC_ISSUES 第 14 条。
+    #
+    # 刻意**不**返回 audio.file_path：那是服务端存储名，而 common/storage.py
+    # 的模块文档写明「不会把服务器目录结构泄漏到接口响应里」。B2 认的是
+    # audio_files.id（数据库主键），前端不需要也不该拿到存储路径。
+    return ok({
+        "file_id": audio.id,
+        "url": url_for("api.audio_download", file_id=audio.id),
+    })
 
 
 @api_bp.route("/analyze/submit", methods=["POST"])
@@ -60,7 +70,7 @@ def analyze_submit():
     """B2 异步提交分析，立即返回 task_id（3.1 模式一 / 模式二）。"""
     data = AnalyzeSubmitIn.model_validate(_payload())
     task_id = analyze_service.submit(get_db(), data)
-    return ok(task_id)
+    return ok({"task_id": task_id})
 
 
 @api_bp.route("/analyze/status/<task_id>", methods=["GET"])
@@ -118,6 +128,10 @@ def audio_download(file_id):
 #   `<file_id>`     → /api/audio/123、/x.wav、/abc、/14.wav 全部被 B5 抢走（演示页音频加载当场失效）
 #   `<int:file_id>` → 只有 /api/audio/123 归 B5，其余三条照旧落到 demo_bp
 #
-# 仍未了结的是 pitch_comparison.html 的去留：它走 demo_bp 落盘、不写 audio_files
-# 表，B5 查不到它的文件，且它的结果契约与 B4 的 3.2 契约不同，无法平滑切换。
-# 详见 DOC_ISSUES.md 第 11 条。
+# pitch_comparison.html 的去留已了结：该页 2026-09-20 已迁到 B1/B2/B3/B4/B5，
+# 不再调用 app-d.py 的 demo_bp。DOC_ISSUES 第 11 条记的两个悬案随之解决
+# ——「音频加载是坏的」由 B1 返回 B5 的 url 解决，「结果契约无法平滑切换」
+# 由前端新增的 adaptResult() 转换层解决。
+#
+# 但 demo_bp 那 4 条演示路由**保留未删**（本次的明确决策），已无任何调用方，
+# 是后续的独立清理项。
