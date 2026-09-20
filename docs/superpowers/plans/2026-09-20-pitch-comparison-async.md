@@ -597,7 +597,11 @@ Expected：退出码 0，末尾打印 `全部通过：N 项`，其中约 25 项�
 
 - [ ] **Step 9: 更新 `$AUDIO_DIR/README.md` 的 curl 示例**
 
-打开 `$HOME/Desktop/test_audio/README.md`（不在本仓库，是 gitignore 的素材目录）。在「怎么用」一节里，把 B1 上传那段注释：
+打开 `$HOME/Desktop/test_audio/README.md`。
+
+⚠️ **这个文件在仓库外，改动不会进版本库，也不要 `git add` 它。** 实测：仓库根目录下**没有** `test_audio/` 这个目录，`.gitignore` 里的 `test_audio/*.wav` 等几行是给「仓库内同名目录」写的规则，但素材实际落在 `~/Desktop/test_audio`，`git -C ~/Desktop/test_audio rev-parse` 会回 `fatal: not a git repository`。所以对它 `git add` 会当场报 `fatal: ... is outside repository`。改它是为了让本地素材文档与代码同步（这文件就是上一个项目调接口时的操作手册），改完即可，不提交。
+
+在「怎么用」一节里，把 B1 上传那段注释：
 
 ```
 # → {"code":0,...,"data":{"file_id":<N>}}，把 N 记下来
@@ -627,7 +631,7 @@ Expected：退出码 0，末尾打印 `全部通过：N 项`，其中约 25 项�
 - [ ] **Step 10: Commit**
 
 ```bash
-git add app/services/analyze_service.py app/api/audio_analyze.py DOC_ISSUES.md "$HOME/Desktop/test_audio/README.md"
+git add app/services/analyze_service.py app/api/audio_analyze.py DOC_ISSUES.md
 git commit -m "feat: B4 结果补前端展示必需字段，B1/B2 响应改回文档形状
 
 analyze_service._analyze 的 result 补 4 个字段：octave_shift、
@@ -642,7 +646,11 @@ B1 改回 {file_id, url}、B2 改回 {task_id}（工作区此前为了迁就旧�
 新增 DOC_ISSUES 第 14 条（上表四个字段 + B1 的 url）与第 15 条
 （B2 未校验音频归属，可读到他人 private 录音的音高曲线，仅登记未修）。
 
-scripts/smoke_analyze.sh 由 8 条失败转为全绿。"
+scripts/smoke_analyze.sh 由 8 条失败转为全绿。
+
+顺带同步了 ~/Desktop/test_audio/README.md 的 curl 示例。该文件在仓库外
+（仓库根目录并没有 test_audio/ 目录，素材实际放在桌面上），改动不进版本库，
+故不在本次提交内。"
 ```
 
 ---
