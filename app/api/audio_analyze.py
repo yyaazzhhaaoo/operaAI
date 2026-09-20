@@ -11,7 +11,7 @@
 不写 try/except（错误由 app/common/errors.py 的全局 handler 兜）。
 """
 
-from flask import request, send_file, session
+from flask import request, send_file, session, url_for
 
 from app.api import api_bp
 from app.common.decorators import current_user_id, login_required
@@ -49,7 +49,9 @@ def audio_upload():
         access=request.form.get("access", "private"),
         file=file,
     )
-    return ok({"file_id": audio.id})
+
+    # {"id": uid, "url": url_for("demo.audio", filename=uid)}
+    return ok({"id": audio.id,"filePath":audio.file_path,"url":url_for("api.audio_download", file_id=audio.id)})
 
 
 @api_bp.route("/analyze/submit", methods=["POST"])
@@ -58,7 +60,7 @@ def analyze_submit():
     """B2 异步提交分析，立即返回 task_id（3.1 模式一 / 模式二）。"""
     data = AnalyzeSubmitIn.model_validate(_payload())
     task_id = analyze_service.submit(get_db(), data)
-    return ok({"task_id": task_id})
+    return ok(task_id)
 
 
 @api_bp.route("/analyze/status/<task_id>", methods=["GET"])

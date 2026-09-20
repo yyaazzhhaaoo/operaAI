@@ -21,6 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **但 `pitch_comparison.html` 的音频加载现在是坏的，且与 B5 无关**：`:423` 的 `API` 已含 `/api`，`:529` 又拼 `${API}${j.url}`，而 `url_for("demo.audio", ...)` 返回的也含 `/api` → 前缀重复，实测 404。该拼法自 `8af3787` 首次提交起就在。修它是一行（`${j.url}`），但那只是让这个演示页复活，不解决它的根本问题：它走 `demo_bp` 落盘、不写 `audio_files` 表，B5 查不到它上传的文件。该页去留见 `DOC_ISSUES.md` 第 11 条。
 - **例外 2 — `demo_library.html`**：内含对 `${API_BASE}/api/v1/demos/upload` 的真实上传调用，但 `API_BASE=""` 且当前后端未提供该端点——页面演示不受影响，上传会失败属预期。
 - 页内无 `localStorage`、无持久化；刷新即重置。
+- **`POST /api/analyze/submit`（B2）必须另起一个 Celery worker，否则任务永远停在 `queued`。** Web 进程只把任务投进 redis 队列，真正跑 librosa 的是 worker 进程。在项目根目录、激活 venv 后：`celery -A app.worker:celery_app worker --loglevel=info --concurrency=2`。入口是 `app/worker.py`（`celery -A` 要的是模块级 Celery 实例，而 `create_app()` 只是个工厂，所以单独一个文件）。**`--concurrency` 按核数给，不要用 `--pool=gevent`**：librosa 提音高是纯 CPU 密集，gevent 池下面照样串行，还平白多一层调度开销——部署手册里的 gevent 是给 gunicorn 用的。broker 与任务状态都走 redis 但**分库**（broker 用 `.env` 的 `CELERY_BROKER_DB`，默认 0；任务状态用 `REDIS_DB`），连接串由 `app/config.py` 的 `celery_broker_url` 拼出。测试里想跳过 worker，用 `create_app({"CELERY": {"task_always_eager": True}})` 让任务在请求线程里同步跑完。
 
 ### Python 后端依赖
 

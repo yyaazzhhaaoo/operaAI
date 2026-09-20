@@ -8,6 +8,7 @@ from datetime import timedelta
 
 from flask import Flask
 
+from app.celery_utils import celery_init_app
 from app.common.errors import register_error_handlers
 from app.config import settings
 from app.db import init_app
@@ -20,6 +21,26 @@ def create_app(config_overrides=None):
     """
     app = Flask(__name__)
     app.config.from_mapping(
+        CELERY=dict(
+            # 连接串从 .env 出来（app/config.py 的 celery_broker_url），不再写死
+            # localhost:6379/0——项目 redis 是带口令的（REDIS_PASSWORD），写死的
+            # 串没有口令，worker 一连 broker 就是 NOAUTH。
+            broker_url=settings.celery_broker_url,
+            result_backend=settings.celery_broker_url,
+            # 结果不往 result backend 里写：B3/B4 的真源是 analyze_task_repo 写在
+            # redis 里的 analyze:task:<id> hash（文档 3.1 的 status/progress/stage
+            # 三件套，Celery 的 result 表达不了这套语义）。留着 backend 只是排查时
+            # 能翻一眼，默认不许它往里写。
+            task_ignore_result=True,
+            # 分析是分钟级长任务，两条一起配：
+            # acks_late 让 worker 被 kill 时消息重回队列重投，而不是随进程一起丢；
+            # prefetch=1 让一个 worker 一次只揽一个任务，避免它把队列全攥在手里、
+            # 旁边几个 worker 空转。
+            task_acks_late=True,
+            worker_prefetch_multiplier=1,
+            # Celery 6 会把这个默认值翻成 False，显式写死免得升级后行为漂移
+            broker_connection_retry_on_startup=True,
+        ),
         SECRET_KEY=settings.secret_key,
         PERMANENT_SESSION_LIFETIME=timedelta(days=7),   # 《6》第 3 节：会话 7 天
         SESSION_COOKIE_HTTPONLY=True,                   # 《6》第 3 节：HttpOnly
@@ -35,6 +56,10 @@ def create_app(config_overrides=None):
 
     init_app(app)                  # 请求结束关闭数据库会话，与 get_db() 配对
     register_error_handlers(app)
+    # 必须排在下面注册蓝图之前：注册蓝图会 import app/api/ 下的接口模块，
+    # 进而 import analyze_service 里的 @shared_task，那时 Celery 实例得已经在位。
+    # （shared_task 是延迟绑定的，顺序错了不会当场报错，只会让任务注册不上。）
+    celery_init_app(app)
 
     # import 必须在 register_blueprint 之前：这行会触发 app/api/__init__.py
     # 末尾的注册清单（`from . import auth`），业务路由到那时才挂到 api_bp 上。

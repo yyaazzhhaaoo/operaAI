@@ -420,7 +420,12 @@ button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 <div class="tooltip" id="tooltip"></div>
 
 <script>
-const API = location.protocol + '//' + location.host +":8877";
+// 后端地址留空 = 同源，走 nginx 的 /api 代理到 8877。
+// 不能写死成 location.host + ':8877'：页面在 80 端口由 nginx 提供，指向 8877 就是
+// 跨源请求，而跨源 fetch 默认 credentials:'same-origin' 不带 Cookie，后端 login_required
+// 只会看到空 session 并回 401「未登录」（且后端 CORS 回的是 *，补 credentials:'include'
+// 同样过不了）。页面其余请求（/api/auth/me、/api/auth/logout）本来就是相对路径。
+const API = '';
 console.log('[系统] API 地址:', API);
 
 const waves = {};
@@ -519,16 +524,16 @@ function initWave(containerId, fileInputId, role) {
         try {
             const form = new FormData();
             form.append('audio', file);
-            const r = await fetch(`${API}/api/upload`, { method: 'POST', body: form });
+            const r = await fetch(`${API}/api/audio/upload`, { method: 'POST', body: form });
             if (!r.ok) {
                 const errText = await r.text();
                 throw new Error(`服务器 ${r.status}: ${errText}`);
             }
             const j = await r.json();
             if (j.error) throw new Error(j.error);
-            const audioUrl = `${API}${j.url}`;
+            const audioUrl = `${API}${j.data.url}`;
             ws.load(audioUrl);
-            waves[role] = { ws, id: j.id, url: audioUrl };
+            waves[role] = { ws, id: j.data.id,filePath:j.data.filePath, url: audioUrl };
         } catch (err) {
             console.error(`[${role}] 上传/加载失败:`, err);
             setStatus(role, '' + err.message, true);
@@ -821,7 +826,7 @@ async function doAnalyze() {
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 300000);
-        const r = await fetch(`${API}/api/analyze?t=${waves.t.id}&s=${waves.s.id}&job=${jobKey}`, {
+        const r = await fetch(`${API}/api/analyze?t=${waves.t.filePath}&s=${waves.s.filePath}&job=${jobKey}`, {
             signal: controller.signal
         });
         clearTimeout(timeoutId);

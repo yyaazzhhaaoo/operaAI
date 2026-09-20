@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """B2–B4 分析任务的业务逻辑（《5-接口清单》3.1 协议 / 3.2 结果契约）。
 
-异步模型：B2 建任务后立刻返回 task_id，真正的算法跑在后台线程里，
-进度与结果落在 redis（analyze_task_repo），B3/B4 只读。
+异步模型：B2 建任务后立刻返回 task_id，真正的算法交给 Celery worker 在**另一个
+进程**里跑（worker 入口是 app/worker.py），进度与结果落在 redis
+（analyze_task_repo），B3/B4 只读。
 
-本层不引用 flask.session / flask.request。后台线程更要注意这一点——
-它没有请求上下文，拿不到 get_db()，所以线程里只传磁盘路径与纯数据、只用 redis。
-逐字歌词就是这么传的：submit() 在请求内读出来，线程只收一个 list。
+本层不引用 flask.session / flask.request。Celery 任务更要注意这一点——它跑在
+另一个进程里，请求上下文和数据库会话都不会跟过去，所以任务只收磁盘路径与纯数据、
+只用 redis。逐字歌词就是这么传的：submit() 在请求内读出来，任务只收一个 list。
 
 音高提取 / DTW / 评分的参考实现是 app-d.py 的 extract_pitch 与 /analyze
 （过渡用的演示实现，B1–B5 落地后整块删除）。这里刻意照搬它的参数与公式而
@@ -17,13 +18,13 @@ aligned/score，与文档 3.2 的 overall/dimensions/timeline/regions/words 不�
 
 import logging
 import math
-import threading
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 import librosa
 import numpy as np
+from celery import shared_task
 from fastdtw import fastdtw
 from scipy.spatial.distance import euclidean
 from sqlalchemy.orm import Session
@@ -90,7 +91,7 @@ REGION_GAP_SEC = 0.3        # 合并相邻同色字的时间上限（字与字�
 # ===== B2 提交 =====
 
 def submit(db: Session, data: AnalyzeSubmitIn) -> str:
-    """B2：解析出教师/学生两条音轨，建任务并起后台线程，立即返回 task_id。"""
+    """B2：解析出教师/学生两条音轨，建任务并投给 Celery，立即返回 task_id。"""
     student = _require_audio(db, data.student_audio_id, "学生录音")
 
     if data.teacher_audio_id is not None:
@@ -121,7 +122,7 @@ def submit(db: Session, data: AnalyzeSubmitIn) -> str:
         message="任务已创建，排队中",
         result=None,
     )
-    _spawn(task_id, t_path, s_path, lyrics)
+    _dispatch(task_id, t_path, s_path, lyrics)
     return task_id
 
 
@@ -180,35 +181,41 @@ def _require_file(audio: AudioFile) -> Path:
     return path
 
 
-# ===== 内部：后台执行 =====
+# ===== 内部：后台执行（Celery） =====
 
-def _spawn(task_id: str, t_path: Path, s_path: Path, lyrics: list | None) -> None:
-    """起后台线程跑分析。
+def _dispatch(task_id: str, t_path: Path, s_path: Path, lyrics: list | None) -> None:
+    """把分析任务投进 Celery 队列，立即返回。
 
-    daemon=True：进程退出时不等待分析跑完——任务状态在 redis 里，重启后
-    前端重新提交即可，没必要为了跑完一个分析卡住整个服务退出。
+    参数一律先转成纯数据：消息要序列化成 JSON 跨进程送给 worker，Path 不是
+    JSON 类型，ORM 对象更是完全过不去——所以这里传的是路径字符串，而不是
+    上面那几个 AudioFile。
 
-    多 worker 部署（gunicorn）时线程只活在收到请求的那个 worker 里，进程重启
-    就断了。真上线应换成 celery（依赖已在 requirements.txt 里，部署手册 2.3
-    也指定了 gunicorn + gevent + celery + redis）。
+    task_id 显式指定成我们自己的 id，不让 Celery 另生成一个：B3/B4 认的是 redis
+    里 analyze:task:<id> 这个键，两套 id 并存只会让排查时对不上号。
+
+    broker 连不上时这里会抛（kombu 的 OperationalError），由全局错误处理器
+    转成 500。此时 redis 里那条 status=queued 的记录没人会去改，1 小时后随
+    TTL 自然过期——比让前端拿着一个永远查不到终态的 task_id 干等要好。
     """
-    threading.Thread(
-        target=_run_analysis,
-        args=(task_id, t_path, s_path, lyrics),
-        daemon=True,
-        name=f"analyze-{task_id}",
-    ).start()
+    run_analysis.apply_async(
+        args=(task_id, str(t_path), str(s_path), lyrics),
+        task_id=task_id,
+    )
 
 
-def _run_analysis(task_id: str, t_path: Path, s_path: Path, lyrics: list | None) -> None:
-    """后台线程入口。
+@shared_task(name="analyze.run")
+def run_analysis(task_id: str, t_path: str, s_path: str, lyrics: list | None) -> None:
+    """Celery 任务体，worker 进程里的入口。
 
-    **任何异常都必须落成 failed 状态**。线程里抛出的异常没人接，若不在这里
-    兜住，任务会永远停在 queued，前端按 3.1 一直轮询也拿不到终态——比报错
-    更难排查。文档 3.1 也要求 failed 时 message 给用户可读原因。
+    **任何异常都必须落成 failed 状态**。任务抛出的异常若不在这里兜住，任务会
+    永远停在 queued，前端按 3.1 一直轮询也拿不到终态——比报错更难排查。文档 3.1
+    也要求 failed 时 message 给用户可读原因。
+
+    Celery 自己也会记一份失败，但那份在 worker 日志和 result backend 里，前端
+    看不到；B3 只能读到下面写进 redis 的这一份。两边都要有，别只留一边。
     """
     try:
-        _analyze(task_id, t_path, s_path, lyrics)
+        _analyze(task_id, Path(t_path), Path(s_path), lyrics)
     except Exception as exc:
         logger.exception("分析任务 %s 失败", task_id)
         # 可以透给用户的两种文案：BusinessError 的 message 本来就是写给用户看的
@@ -231,7 +238,7 @@ def _analyze(task_id: str, t_path: Path, s_path: Path, lyrics: list | None) -> N
 
     后五个阶段与文档 3.1 的 stage 取值一一对应，每进入一个上报一次进度
     （第一个「上传完成」由 submit() 建任务时上报）。任何一步失败都直接抛——
-    _run_analysis 会兜住并落成 failed。
+    run_analysis 会兜住并落成 failed。
 
     时间轴基准说明：比较的轴取**教师轨**。两条录音的绝对时长不同、开唱点也
     不同，DTW 对齐后学生帧被映射到教师帧上，于是 teacher_pitch / student_pitch /
@@ -303,7 +310,7 @@ def _enter_stage(task_id: str, stage: str, message: str) -> None:
     在阶段内部空转（下一个阶段才跳），取下界则每个阶段都有一次可见的推进。
 
     写 redis 失败不在这里兜：任务状态写不进去是致命问题（B3 将永远查不到
-    这个任务），应该让异常冒到 _run_analysis 去记日志，而不是装作没事继续跑。
+    这个任务），应该让异常冒到 run_analysis 去记日志，而不是装作没事继续跑。
     """
     task_repo.update(
         task_id,
