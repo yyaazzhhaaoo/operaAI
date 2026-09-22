@@ -111,3 +111,6 @@ typing-inspection==0.4.4    # pydantic
 # --- 其它 ---
 packaging==26.3
 typing_extensions==4.16.0
+
+# 示范库解析链路（Demucs）的 CPU-only 依赖。单独成文件的原因见该文件头部注释。
+-r requirements-demucs.txt

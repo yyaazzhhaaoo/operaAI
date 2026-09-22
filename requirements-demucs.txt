@@ -1,0 +1,25 @@
+# 示范库解析链路的三个依赖（Demucs 4.1.0 + CPU-only PyTorch）。
+#
+# 为什么单独一个文件而不是并进 requirements.txt：**不是**为了「避免全局改道」
+# —— pip 对 -r 引入的文件里的 --index-url / --extra-index-url 是**整次会话全局**
+# 生效的，所以主文件一旦 `-r` 了本文件，整次 `pip install -r requirements.txt`
+# 都会先走 SJTU、再走清华兜底；而且这两个选项行不带 sys_platform 标记，Mac 上
+# 同样生效（清华是 PyPI 全量镜像，Mac 因此也装得通）。真实的收益只有一条：
+# 主清单里不嵌入镜像 URL，换源或上内网时不必动主文件内容。
+# 另外部署手册 2.3 节的流程是 `pip install -r requirements.txt`，主文件必须
+# 保持「一条命令装完其余全部」——所以改成主文件里一行 `-r`。
+#
+# 为什么必须用 CPU 轮子：PyPI 上 linux 的 torch 默认是 CUDA 版，会拖进约 2.5GB
+# 的 nvidia-* 依赖。本项目部署目标是 4 核无 GPU 的机器，装它纯属浪费磁盘和内存。
+#
+# 为什么带 sys_platform 标记：PyTorch 自 2.2.2 起不再发布 macOS x86_64 轮子
+# （DOC_ISSUES 第 16 条），Mac 上必须整段跳过，否则 `pip install -r requirements.txt`
+# 在 Mac 上会直接失败——而现在 Mac 上应用是能正常启动的（vocal_service 惰性 import）。
+--index-url https://mirror.sjtu.edu.cn/pytorch-wheels/cpu/
+--extra-index-url https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 实测版本组合（2026-09-22 本机装通，若某个组合装不上就顺延到最近可用组合，
+# 并把最终组合写在这里）
+torch==2.14.0+cpu ; sys_platform == "linux"
+torchaudio==2.11.0+cpu ; sys_platform == "linux"
+demucs==4.1.0 ; sys_platform == "linux"

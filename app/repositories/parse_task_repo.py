@@ -13,6 +13,7 @@
 真正统一了再合并。
 
 任务一次性、1 小时后过期、从不按内容检索，所以同样用 redis hash 不建表。
+`parse:demo:` 前缀后面跟的是 demo_id，不是 Celery 的 task_id。
 """
 
 import json
@@ -28,8 +29,14 @@ def _client():
     return get_redis()
 
 
-def _key(task_id: str) -> str:
-    return f"{TASK_PREFIX}{task_id}"
+def _key(demo_id: int) -> str:
+    """键用 demo_id 而**不是** Celery 的 task_id。
+
+    一个 demo 同一时刻只有一个解析任务，前端也是按 demo_id 轮询；用 task_id
+    做键的话「重跑」会产生第二条记录，前端拿 demo_id 根本查不到新的那条。
+    task_id 仍然生成，只存进 hash 供日志追踪（与 B2 的 uuid4().hex[:12] 一致）。
+    """
+    return f"{TASK_PREFIX}{demo_id}"
 
 
 def _encode(value):
@@ -53,16 +60,16 @@ def _encode(value):
     return value
 
 
-def create(task_id: str, ttl: int = TASK_TTL, **fields) -> None:
+def create(demo_id: int, ttl: int = TASK_TTL, **fields) -> None:
     """整体写入（提交解析时建任务用）。"""
-    key = _key(task_id)
+    key = _key(demo_id)
     pipe = _client().pipeline()
     pipe.hset(key, mapping={k: _encode(v) for k, v in fields.items()})
     pipe.expire(key, ttl)
     pipe.execute()
 
 
-def update(task_id: str, ttl: int = TASK_TTL, **fields) -> None:
+def update(demo_id: int, ttl: int = TASK_TTL, **fields) -> None:
     """局部更新字段，并续期。
 
     续期是刻意的：解析要跑 8–15 分钟，若每阶段更新都不续期、而 TTL 又恰好
@@ -70,20 +77,20 @@ def update(task_id: str, ttl: int = TASK_TTL, **fields) -> None:
     """
     if not fields:
         return
-    key = _key(task_id)
+    key = _key(demo_id)
     pipe = _client().pipeline()
     pipe.hset(key, mapping={k: _encode(v) for k, v in fields.items()})
     pipe.expire(key, ttl)
     pipe.execute()
 
 
-def get(task_id: str) -> dict | None:
+def get(demo_id: int) -> dict | None:
     """读整个任务，把 progress 转回 int。
 
     读不到返回 None（任务不存在或已过期）。字段缺失或格式不对时给安全兜底值，
     不让一条脏数据把轮询接口打成 500。
     """
-    raw = _client().hgetall(_key(task_id))
+    raw = _client().hgetall(_key(demo_id))
     if not raw:
         return None
 

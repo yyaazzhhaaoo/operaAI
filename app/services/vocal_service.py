@@ -39,20 +39,46 @@ _threads_ready = False
 
 
 def _prepare_runtime():
-    """在 import torch 之前设好环境变量，并定下线程数。
+    """设好缓存目录环境变量，并定下线程数。
 
-    两件事都必须发生在 `import demucs` 之前：
+    两件事的时机要求不同：环境变量必须**早于首次下载权重**（HF 那一级还要求
+    早于 `import huggingface_hub`），线程数只需**早于首次推理**：
 
-    1. HF_HOME —— demucs 4.x 的权重从 HuggingFace Hub 拉，而 huggingface_hub
-       在 **import 期**就把缓存目录求值成了模块级常量。之后再改这个变量不会
-       生效，权重仍会落到 ~/.cache/huggingface。部署机上跑 worker 的账号
-       （常是 root 或独立服务账号）家目录可能是个小分区，落在那儿迟早撑爆。
+    1. HF_HOME / TORCH_HOME —— demucs 4.1.0 的 get_model 是**两级**路径：先走
+       HuggingFace Hub（huggingface_hub.hf_hub_download，缓存受 HF_HOME 控制），
+       失败才回退 legacy 远程仓库（torch.hub.load_state_dict_from_url，缓存受
+       TORCH_HOME 控制，见 demucs/pretrained.py 的 get_model）。两级的求值时机
+       不一样：huggingface_hub 在 **import 期**就把缓存目录读成模块级常量，
+       之后不再看环境变量；torch.hub 只在**首次下载时**才读 TORCH_HOME。缓存
+       不指到这里会落到 ~/.cache，而部署机上跑 worker 的账号（常是 root 或
+       独立服务账号）家目录可能是个小分区，落在那儿迟早撑爆。本机实测国际源
+       全部超时，所以实际命中的是回退路径——预置权重
+       （scripts/fetch_demucs_weights.sh）正是按 torch.hub 的缓存布局放的。
     2. 线程数 —— 见下。
     """
     global _threads_ready
 
     model_dir = Path(settings.demucs_model_dir)
     model_dir.mkdir(parents=True, exist_ok=True)
+
+    # 权重目录。**两个环境变量都设**：Step 4 探明 demucs 4.1.0 的 get_model 是
+    # **两级**路径——先试 HF Hub（huggingface_hub.hf_hub_download，缓存受
+    # HF_HOME 控制），失败才回退 legacy 的 torch.hub.load_state_dict_from_url
+    # （受 TORCH_HOME 控制）。两条路径的缓存根都得受控，所以两个都设：联网机器
+    # 命中 HF 那级，离线机器命中回退那级；预置权重
+    # （scripts/fetch_demucs_weights.sh）按 torch.hub 的布局放。
+    #
+    # 两级的**求值时机不一样**（已核 torch 2.14 与 huggingface_hub 源码）：
+    #   HF_HOME    → huggingface_hub/constants.py 在 **import 期**就把它读成模块级
+    #                常量，之后不再看环境变量 → 必须早于 `import huggingface_hub`
+    #   TORCH_HOME → torch/hub.py 只在**首次下载时**才读环境变量（模块级只有个
+    #                惰性占位 `_hub_dir = None`）→ 早设是为了统一，不是因为晚了会失效
+    # 两级都受控，理由分别是：`huggingface_hub` 的首次 import 与任何下载动作都晚于
+    # 本函数（`demucs.pretrained` 要到 `_get_model()` 里才导入）；torch 这边本模块
+    # 根本没有模块级 import（全部是函数内惰性 import，见文件头），`separate_vocal` 里
+    # 的 `import torch` 虽早于本函数的赋值，但 torch 2.14 不在 import 期读
+    # TORCH_HOME，即便它在赋值前被导入也不影响。
+    os.environ.setdefault("TORCH_HOME", str(model_dir))
     os.environ.setdefault("HF_HOME", str(model_dir))
 
     if _threads_ready:

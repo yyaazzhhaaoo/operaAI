@@ -38,3 +38,4 @@ from . import students
 from . import graph
 from . import cat
 from . import health
+from . import demo_library

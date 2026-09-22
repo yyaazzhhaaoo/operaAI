@@ -1283,7 +1283,7 @@
             <div class="page-header">
                 <div>
                     <h2>🎵 示范库管理</h2>
-                    <p>上传示范音频 → VocalParse 自动解析 → 存入基准库 · 动态难度校准</p>
+                    <p>上传示范音频 → 人声分离与唱段切分 → 存入基准库</p>
                 </div>
                 <button class="btn-primary" onclick="showUploadModal()">⬆️ 上传新示范</button>
             </div>
@@ -1293,7 +1293,7 @@
                 <div class="card-header">
                     <div class="card-title">
                         <div class="icon" style="background:rgba(0,102,179,0.10);color:var(--primary)">⚡</div>
-                        VocalParse 解析流程
+                        解析流程
                     </div>
                 </div>
                 <div class="parse-flow">
@@ -1301,11 +1301,9 @@
                     <span class="parse-arrow">→</span>
                     <div class="parse-step active">Demucs 分离</div>
                     <span class="parse-arrow">→</span>
-                    <div class="parse-step active">VocalParse 推理</div>
+                    <div class="parse-step active">唱段结构解析</div>
                     <span class="parse-arrow">→</span>
                     <div class="parse-step active">结构化输出</div>
-                    <span class="parse-arrow">→</span>
-                    <div class="parse-step active">Elo 难度校准</div>
                     <span class="parse-arrow">→</span>
                     <div class="parse-step active">存入基准库</div>
                 </div>
@@ -1320,7 +1318,7 @@
                             <div class="icon" style="background:rgba(139,92,246,0.10);color:#7C3AED">📚</div>
                             已入库示范
                         </div>
-                        <span style="font-size:12px;color:var(--text-muted)">共 5 首 · Elo 动态难度已校准</span>
+                        <span style="font-size:12px;color:var(--text-muted)">共 5 首</span>
                     </div>
                     <div class="demo-list" id="demoList"></div>
                 </div>
@@ -1353,6 +1351,12 @@
                         <div class="tech-grid" id="techGrid"></div>
                     </div>
 
+                    <!-- 唱段列表（真实解析产物；无分段时整块隐藏） -->
+                    <div style="margin-bottom:16px" id="segmentSection">
+                        <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:8px">🎼 唱段列表</div>
+                        <div class="version-list" id="segmentList"></div>
+                    </div>
+
                     <!-- 多版本管理 -->
                     <div style="margin-bottom:16px" id="versionSection">
                         <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:8px">📦 多版本管理</div>
@@ -1361,7 +1365,7 @@
 
                     <!-- 歌词时间线 -->
                     <div id="timelineSection">
-                        <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:8px">🎵 VocalParse 解析结果 · 歌词-音高-时值时间线</div>
+                        <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:8px">🎵 逐字歌词 · 音高-时值时间线</div>
                         <div class="lyrics-timeline" id="lyricsTimeline"></div>
                     </div>
                 </div>
@@ -1425,7 +1429,7 @@
             <div class="processing-header">
                 <span class="icon" id="processingIcon">⚡</span>
                 <h3 id="processingTitle">正在解析音频</h3>
-                <p id="processingSubtitle">VocalParse 智能分析引擎工作中</p>
+                <p id="processingSubtitle">人声分离与唱段切分引擎工作中</p>
             </div>
             <div class="processing-file">
                 <span class="file-icon">🎵</span>
@@ -1458,6 +1462,11 @@
 
     <script>
         const API_BASE = "";
+        // 当前登录用户 {id, username, display_name, role}。取数在页面末尾那段
+        // <script> 里（调 /api/auth/me），但两段脚本的顶层作用域是共享的，
+        // 所以这里声明、那边赋值。声明必须先于那段 IIFE 执行，故放在本段开头。
+        // 未登录或取数失败时保持 null——用之前务必判空。
+        let currentUser = null;
 		// ============================================================
 		// 模拟数据（后端 API 预留接口）
 		// ============================================================
@@ -1660,54 +1669,53 @@
 		  }
 		}
 
+        // 详情：DEMO_DATA 命中走原演示分支（4 条演示数据不变）；未命中调真接口，
+        // 把响应映射成 renderDetail 认识的对象。
+        //
+        // versions / techniques / timeline 一律给空数组：renderDetail 已有
+        // 「空则不渲染该区块」的分支（见 renderDetail 里三处 length 判断），
+        // 所以这三个空值会让「多版本管理」「技法维度」「逐字时间轴」自动隐藏
+        // ——这正是本轮要的：真实数据里没有这三样东西（没有 ASR、不写
+        // lyrics_json，第 20 条）。
         async function fetchDemoDetail(demoId) {
-		  try {
-			// 模拟网络延迟
+		  const mock = DEMO_DATA.find(d => d.id === demoId);
+		  if (mock) {
 			await new Promise(resolve => setTimeout(resolve, 200));
-			
-			const demo = DEMO_DATA.find(d => d.id === demoId);
-			if (!demo) throw new Error("未找到该示范");
-			
-			const versions = demo.versions || [];
-			const timeline = demo.parse_result?.timeline || [];
-			
-			renderDetail(demo, versions, timeline);
+			renderDetail(mock, mock.versions || [], mock.parse_result?.timeline || []);
+			return;
+		  }
+		  try {
+			const res = await fetch(`${API_BASE}/api/demo/library/${demoId}`);
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const body = await res.json();
+			const d = body.data;
+			renderDetail({
+			  id: d.id,
+			  title: d.title,
+			  role: d.role,
+			  banshi: d.banshi,
+			  bpm: 0,
+			  duration: d.duration,
+			  elo_difficulty: d.elo_difficulty,
+			  status: d.status,
+			  segments: d.segments || [],
+			  url: d.url,
+			  parse_result: null,
+			}, [], []);
 		  } catch (e) {
 			showToast("error", "加载详情失败", e.message);
 		  }
 		}
 
+        // 解析进度：真接口 GET /api/demo/library/<id>/parse/status
+        // 取不到（404 / 已过期）返回 null，由 startPolling 按超时收尾——
+        // 这里不能返回一个假对象，否则轮询永远不会停。
         async function fetchStatus(demoId) {
 		  try {
-			await new Promise(resolve => setTimeout(resolve, 200));
-			const demo = DEMO_DATA.find(d => d.id === demoId);
-			if (!demo) return null;
-			
-			// 模拟解析进度
-			const progressMap = {
-			  "demo_001": 100,
-			  "demo_002": 100,
-			  "demo_003": 100,
-			  "demo_004": 45
-			};
-			const statusMap = {
-			  "demo_001": "parsed",
-			  "demo_002": "parsed",
-			  "demo_003": "parsed",
-			  "demo_004": "parsing"
-			};
-			const msgMap = {
-			  "demo_001": "解析完成",
-			  "demo_002": "解析完成",
-			  "demo_003": "解析完成",
-			  "demo_004": "VocalParse 推理中..."
-			};
-			
-			return {
-			  status: statusMap[demoId] || "parsing",
-			  progress: progressMap[demoId] || 50,
-			  message: msgMap[demoId] || "处理中..."
-			};
+			const res = await fetch(`${API_BASE}/api/demo/library/${demoId}/parse/status`);
+			if (!res.ok) return null;
+			const body = await res.json();
+			return body.data || null;
 		  } catch (e) { return null; }
 		}
 
@@ -1782,22 +1790,34 @@
             const versionSectionEl = document.getElementById("versionSection");
             const timelineEl = document.getElementById("lyricsTimeline");
             const timelineSectionEl = document.getElementById("timelineSection");
+            const segmentListEl = document.getElementById("segmentList");
+            const segmentSectionEl = document.getElementById("segmentSection");
 
             if (titleEl) titleEl.textContent = demo.title || "未命名";
             if (metaEl) metaEl.innerHTML = `
-            <span>🎭 ${demo.role || "未知行当"}</span>
-            <span>🎵 ${demo.banshi || "未知板式"}</span>
+            <span>🎭 ${esc(demo.role || "未知行当")}</span>
+            <span>🎵 ${esc(demo.banshi || "未知板式")}</span>
             <span>⏱️ ${demo.bpm || 0} BPM</span>
             <span>📏 ${demo.duration ? demo.duration.toFixed(1) : "0.0"}秒</span>`;
 
-            const eloInfo = getEloLabel(demo.elo_difficulty);
+            // Elo 容错：真实数据的 elo_difficulty 是库默认值 1000（第 19 条：
+            // 文档只给了名称、没有算法与分值域，本轮不实现解析写值）。
+            // 原来的 `>= 0.85` / `>= 0.7` 阈值是按 0–1 归一化设计的，喂进 1000
+            // 会恒判「高难度」并显示成 1000.00，等于宣称一个算不出来的结论。
+            // 取不到有效值（null / 非有限数 / > 1）时显示「待校准」，难度条不渲染。
+            const eloRaw = demo.elo_difficulty;
+            const eloValid = typeof eloRaw === "number" && isFinite(eloRaw) && eloRaw >= 0 && eloRaw <= 1;
+            const eloColor = !eloValid ? "var(--text-muted)"
+                : (eloRaw >= 0.85 ? "var(--danger)" : (eloRaw >= 0.7 ? "var(--warning)" : "var(--success)"));
+            const eloBorder = !eloValid ? "var(--border-light)"
+                : (eloRaw >= 0.85 ? "rgba(184,58,47,0.25)" : (eloRaw >= 0.7 ? "rgba(201,168,76,0.25)" : "rgba(74,143,107,0.25)"));
             if (statsEl) statsEl.innerHTML = `
             <div class="detail-stat"><div class="val">${versions.length}</div><div class="lab">版本数</div></div>
             <div class="detail-stat"><div class="val">${demo.parse_result?.word_count || 0}</div><div class="lab">标注规则</div></div>
             <div class="detail-stat"><div class="val">${demo.parse_result?.word_count || 0}</div><div class="lab">解析字数</div></div>
             <div class="detail-stat"><div class="val">${demo.parse_result?.parse_time_sec || 0}s</div><div class="lab">解析耗时</div></div>
-            <div class="detail-stat" style="border-color:${demo.elo_difficulty >= 0.85 ? 'rgba(184,58,47,0.25)' : (demo.elo_difficulty >= 0.7 ? 'rgba(201,168,76,0.25)' : 'rgba(74,143,107,0.25)')}">
-              <div class="val" style="color:${demo.elo_difficulty >= 0.85 ? 'var(--danger)' : (demo.elo_difficulty >= 0.7 ? 'var(--warning)' : 'var(--success)')}">${demo.elo_difficulty.toFixed(2)}</div>
+            <div class="detail-stat" style="border-color:${eloBorder}">
+              <div class="val" style="color:${eloColor}">${eloValid ? eloRaw.toFixed(2) : "待校准"}</div>
               <div class="lab">动态难度(Elo)</div>
             </div>`;
 
@@ -1824,6 +1844,20 @@
                   ${v.is_current ? '<span class="version-badge current">当前默认</span>' : ''}
                 </div>`).join("");
                 } else { versionSectionEl.style.display = "none"; }
+            }
+
+            // 唱段列表：真实解析产物（第 20 条：没有逐字歌词，所以只有序号与时长）。
+            // segments 表没有起止时间列，做不了「点击定位到该段」，只显示时长。
+            if (segmentSectionEl) {
+                const segs = demo.segments || [];
+                if (segs.length && segmentListEl) {
+                    segmentSectionEl.style.display = "";
+                    segmentListEl.innerHTML = segs.map(s => `
+                <div class="version-item">
+                  <div class="version-name">${esc(s.title || ("第 " + s.seq + " 段"))}</div>
+                  <div class="version-meta">时长 ${Number(s.duration || 0).toFixed(1)}s</div>
+                </div>`).join("");
+                } else { segmentSectionEl.style.display = "none"; }
             }
 
             if (timelineSectionEl) {
@@ -1858,9 +1892,8 @@
             const steps = [
                 { label: "音频上传", t: 0 },
                 { label: "Demucs 分离", t: 20 },
-                { label: "VocalParse 推理", t: 50 },
+                { label: "唱段结构解析", t: 50 },
                 { label: "结构化输出", t: 80 },
-                { label: "Elo 难度校准", t: 90 },
                 { label: "存入基准库", t: 100 },
             ];
 
@@ -1915,9 +1948,8 @@
             const steps = [
                 { key: "upload", label: "音频上传", icon: "📤", t: 0 },
                 { key: "demucs", label: "Demucs 人声分离", icon: "🎚️", t: 20 },
-                { key: "vocalparse", label: "VocalParse 智能推理", icon: "🧠", t: 50 },
-                { key: "structure", label: "结构化输出", icon: "📊", t: 80 },
-                { key: "elo", label: "Elo 难度校准", icon: "📈", t: 90 },
+                { key: "structure", label: "唱段结构解析", icon: "🎼", t: 50 },
+                { key: "output", label: "结构化输出", icon: "📊", t: 80 },
                 { key: "save", label: "存入基准库", icon: "💾", t: 100 },
             ];
 
@@ -1953,7 +1985,7 @@
             } else {
                 if (iconEl) iconEl.textContent = "⚡";
                 if (titleEl) titleEl.textContent = "正在解析音频";
-                if (subtitleEl) subtitleEl.textContent = "VocalParse 智能分析引擎工作中";
+                if (subtitleEl) subtitleEl.textContent = "人声分离与唱段切分引擎工作中";
             }
         }
 
@@ -2016,19 +2048,37 @@
             const role = document.getElementById("uploadRole").value;
             const banshi = document.getElementById("uploadBanshi").value;
             const form = new FormData();
-            form.append("file", selectedFile);
+            form.append("audio", selectedFile);
             if (title) form.append("title", title);
             if (role) form.append("role", role);
             if (banshi) form.append("banshi", banshi);
+            // access 随登录角色定：教师传 public（示范音频，所有登录用户可听），
+            // 其余传 private。后端 save_upload() 只认这两个值，**非法值**才判 400
+            // 「access 只能是 public 或 private」；**缺省不传不会报错**——api 层是
+            // request.form.get("access", "private")，不传就是 private。所以「必须带」
+            // 的理由不是避免 400，而是：教师上传若不带，会静默降级成 private，
+            // 示范音频变成只有本人与教师能听，且不会有任何提示。
+            // currentUser 尚未取到时按 private 兜底——与后端 get_playable()
+            // 「取不到一律按 private 处理，宁可拒」的取向一致。
+            form.append("access",
+                currentUser && currentUser.role === "teacher" ? "public" : "private");
             const btn = document.getElementById("uploadBtn");
             btn.textContent = "上传中...";
             btn.disabled = true;
             try {
-                const res = await fetch(`${API_BASE}/api/v1/demos/upload`, { method: "POST", body: form });
+                const res = await fetch(`${API_BASE}/api/demo/library/upload`, { method: "POST", body: form });
                 if (!res.ok) throw new Error(await res.text());
-                const data = await res.json();
+                const body = await res.json();
+                // 后端是统一信封 {code,message,data}，真正的内容在 data 里。
+                // 原来读顶层 data.demo_id 拿到的是 undefined，整条
+                // 上传 → 详情 → 轮询的链路会带着 undefined 去请求
+                // /api/demo/library/undefined/parse/status（被 <int:demo_id> 挡成 404）。
+                const data = body.data || {};
+                if (!data.demo_id) throw new Error(body.message || "服务端未返回 demo_id");
                 hideUploadModal();
-                showToast("success", "上传成功", data.message);
+                // body.message 恒为 "ok"（信封顶层的固定文案），说不了任何事；
+                // 真正有意义的是 task_id —— 用户报障时能拿去 grep worker 日志。
+                showToast("success", "上传成功", `已提交解析任务 ${data.task_id || ""}`.trim());
 
                 processingFileName = selectedFile ? selectedFile.name : (title || "未命名文件");
                 showProcessingModal(processingFileName, data.demo_id);
@@ -2041,12 +2091,36 @@
                 btn.disabled = false; }
         }
 
+        // 轮询上限：3 秒 × 600 = 30 分钟。Demucs 跑全长素材约 8–15 分钟
+        // （`parse_service` 与 `parse_task_repo` 两处注释给的经验估计，
+        // 本轮未在真实素材上实测过），留一倍余量。
+        // 没有这个上限的话，任务若因为 worker 没带 -Q demucs 而永远停在 parsing，
+        // 定时器会一直转下去、弹窗永远关不掉（原来的实现就是这个毛病：
+        // mock 对未知 id 返回 null，`if (!st) return;` 让 setInterval
+        // 空转到天长地久）。
+        const POLL_MAX = 600;
         function startPolling(demoId) {
             if (pollTimer) clearInterval(pollTimer);
+            let ticks = 0;
             renderParseFlow("parsing", 0, "等待解析...");
             pollTimer = setInterval(async () => {
+                ticks += 1;
+                // 上限检查必须放在取状态**之前**、且与 st 取值无关：worker 没带
+                // -Q demucs 时每轮都拿到 truthy 的 parsing（redis TTL 过期后又
+                // 派生 truthy 的 unparsed），把检查放进 `if (!st)` 里等于在最常见
+                // 的卡死场景下完全不生效——表停不下来、弹窗永不自关。
+                if (ticks >= POLL_MAX) {
+                    clearInterval(pollTimer); pollTimer = null;
+                    renderParseFlow("error", 0, "解析超时，请查看服务器日志或重新上传");
+                    renderProcessingModal("error", 0, "解析超时，请查看服务器日志或重新上传");
+                    showToast("error", "解析超时", "解析超时，请查看服务器日志或重新上传");
+                    return;
+                }
                 const st = await fetchStatus(demoId);
-                if (!st) return;
+                if (!st) {
+                    // 404 / 已过期：这一轮不动作，等下一轮或上面的上限兜底
+                    return;
+                }
                 renderParseFlow(st.status, st.progress, st.message);
                 renderProcessingModal(st.status, st.progress, st.message);
                 if (st.status === "parsed" || st.status === "error") {
@@ -2119,6 +2193,8 @@
     return location.replace('/login.html');              // 后端不可达
   }
   if (!user) return;
+  // 交给第一段 <script> 里的函数（如 doUpload）读取；此处是唯一的赋值点。
+  currentUser = user;
 
   const isTeacher = user.role === 'teacher';
   const roleText = isTeacher ? '教师' : '学生';
