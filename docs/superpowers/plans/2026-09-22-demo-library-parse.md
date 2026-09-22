@@ -1265,14 +1265,20 @@ git commit -m "feat: 示范库上传/列表/详情/解析状态四条接口"
             renderParseFlow("parsing", 0, "等待解析...");
             pollTimer = setInterval(async () => {
                 ticks += 1;
-                const st = await fetchStatus(demoId);
-                if (!st) {
-                    // 404 / 已过期，或连续轮询超过上限 —— 一律按 error 收尾，停表
-                    if (ticks < POLL_MAX) return;
+                // 上限检查必须放在取状态**之前**、且与 st 取值无关：worker 没带
+                // -Q demucs 时每轮都拿到 truthy 的 parsing（redis TTL 过期后又
+                // 派生 truthy 的 unparsed），把检查放进 `if (!st)` 里等于在最常见
+                // 的卡死场景下完全不生效——表停不下来、弹窗永不自关。
+                if (ticks >= POLL_MAX) {
                     clearInterval(pollTimer); pollTimer = null;
                     renderParseFlow("error", 0, "解析超时，请查看服务器日志或重新上传");
                     renderProcessingModal("error", 0, "解析超时，请查看服务器日志或重新上传");
                     showToast("error", "解析超时", "解析超时，请查看服务器日志或重新上传");
+                    return;
+                }
+                const st = await fetchStatus(demoId);
+                if (!st) {
+                    // 404 / 已过期：这一轮不动作，等下一轮或上面的上限兜底
                     return;
                 }
                 renderParseFlow(st.status, st.progress, st.message);
