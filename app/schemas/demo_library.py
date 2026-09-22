@@ -40,7 +40,11 @@ class SegmentOut(BaseModel):
 
 
 class DemoLibraryDetailOut(BaseModel):
-    """详情。url 由 api 层的 url_for 生成，指向 B5。"""
+    """详情。url 由 api 层的 url_for 生成，指向 B5。
+
+    `elo_difficulty` 与列表模型同字段同语义——详情页的难度条要读它，所以这里也必须有；
+    库里是默认值 1000 时前端按「取不到有效值」显示「待校准」，不在本层过滤。
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -49,6 +53,7 @@ class DemoLibraryDetailOut(BaseModel):
     role: str | None = None
     banshi: str | None = None
     duration: float | None = None
+    elo_difficulty: float | None = None
     created_at: datetime | None = None
     status: str
     segments: list[SegmentOut] = []
