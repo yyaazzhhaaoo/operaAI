@@ -14,11 +14,17 @@ set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# 落盘位置。torch.hub 认 $TORCH_HOME/hub/checkpoints/<文件名>，HF Hub 认
-# $HF_HOME/hub/...；vocal_service._prepare_runtime() 把这两个环境变量都指向
-# models/demucs，所以这里放在 torch.hub 的布局下（最可能的取数路径）。
-DEST="${DEST:-$ROOT/models/demucs/hub/checkpoints}"
+# 落盘位置：demucs 的**本地模型仓库**布局，即 vocal_service 传给
+# get_model(name, repo=...) 的那个目录（见 app/config.py 的 demucs_repo_dir）。
+#
+# **不要改回 $TORCH_HOME/hub/checkpoints 那套**：那只对 get_model(name) 的回退
+# 分支有用，而那条路在离线机器上根本走不到——它得先从 HF 拿到 bag 描述文件
+# （htdemucs.yaml）才轮到读 .th，而 yaml 在本地缓存里没有位置。2026-09-22 实测：
+# 真离线机器上两条网络路径都不可达，光有 .th 永远起不来。另外 84MB 的权重放在
+# torch.hub 那层缓存里其实也不会被读到，等于白占一份磁盘。
+DEST="${DEST:-$ROOT/models/demucs/repo}"
 FILE="955717e8-8726e21a.th"
+BAG="htdemucs.yaml"
 SIZE=84141911
 SHA256_PREFIX=8726e21a
 URL="${URL:-https://www.modelscope.cn/api/v1/models/pengzhendong/uvr-demucs/repo?Revision=master&FilePath=v3_v4_repo%2F${FILE}}"
@@ -42,4 +48,13 @@ if [ "$got_hash" != "$SHA256_PREFIX" ]; then
   rm -f "$DEST/$FILE"; exit 1
 fi
 
+# bag 描述文件是 get_model(name, repo=...) 的入口：没有它，同一个目录里躺着的
+# .th 不会被认（LocalRepo 只提供签名，BagOnlyRepo 才认 htdemucs 这个名字）。
+# 内容是个定值，与上面钉死的 FILE 一一对应，所以**刻意不下载**——21 字节的常量
+# 比一次网络往返可靠，离线机器也免了第二个取数源。
+sig="${FILE%.th}"   # 955717e8-8726e21a
+sig="${sig%%-*}"    # 955717e8（官方文件的签名就是它）
+printf "models: ['%s']\n" "$sig" > "$DEST/$BAG"
+
 echo "✓ $DEST/$FILE  ($got_size 字节, sha256:$got_hash)"
+echo "✓ $DEST/$BAG   (models: ['$sig'])"

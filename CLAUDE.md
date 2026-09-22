@@ -79,6 +79,7 @@ PostgreSQL 跑在 Docker 容器 `docker_postgres`（`postgres:15.7`，端口 543
 `demo_library.html` 的「上传示范音频 → 解析 → 存入基准库」链路是**真的**在跑算法（`DOC_ISSUES.md` 第 16–20 条）：上传走 `POST /api/demo/library/upload`，任务投进 **`demucs` 专用队列**，worker 里用 Demucs（htdemucs）分离人声、按停顿切成唱段，结果落 `segments`（只有 `seq`/`title`/`duration`，**不写 `lyrics_json`**）、并把真实时长回填到 `audio_files.duration_sec`。前端 `fetchStatus` 每 3 秒轮询 `GET /api/demo/library/<id>/parse/status`。
 
 - 代码在 `app/services/parse_service.py`（任务生命周期 + 切分 + 管线）与 `app/services/vocal_service.py`（Demucs 封装，torch/demucs 全部**函数内惰性 import**，这样 Mac 上装不到 torch 也不影响应用启动）。
+- **权重必须放在 `models/demucs/repo/` 这一个目录里，且要放满两样**：`htdemucs.yaml`（bag 描述，内容只有一行 `models: ['955717e8']`）与它引用的 `955717e8-8726e21a.th`。加载走 demucs 自己的「本地模型仓库」机制（`get_model(name, repo=...)`，即 CLI 的 `--repo`），完全不联网；`scripts/fetch_demucs_weights.sh` 会一次把两样都落到位。**只放 `.th` 不够**——`get_model(name)` 那条路要先联网取 bag 描述文件才轮到读权重，而 `TORCH_HOME/hub/checkpoints` 那类缓存只认 `.th`，真离线机器上会卡在 huggingface.co 重试后失败。
 - 状态存 redis 的 `parse:demo:<demo_id>`（**键是 demo_id 不是 task_id**，一个 demo 同一时刻只有一个解析任务），TTL 3600 并每次更新续期。TTL 过期后 `parse_service.status` 按「`segments` 有行 → parsed，无行 → unparsed」派生。
 - 状态词表是 `parsing`/`parsed`/`error`（按前端，不是 B 组的 `queued`/`done`/`failed`）。
 - 详情页的列表（`fetchDemos`）**仍是 `DEMO_DATA` 演示数据**，只有轮询与详情接了真接口。

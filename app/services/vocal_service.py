@@ -109,9 +109,18 @@ def _get_model():
 
     from demucs.pretrained import get_model
 
-    # get_model 会在缓存缺失时联网下载。断网、或离线部署时权重没预置到位，
-    # 这里抛的是 requests / huggingface_hub 的网络异常，交给调用方落成 error。
-    _model = get_model(MODEL_NAME)
+    # 本地仓库优先：目录里有 <name>.yaml（bag 描述）+ 它引用的 <sig>-<校验和>.th
+    # 时，get_model(name, repo=...) 完全不碰网络——离线部署唯一走得通的路径。
+    # 另一种写法 get_model(name)（repo=None）先试 HF Hub、失败回退 AWS，两条都是
+    # 网络路径，且都拿不到 bag 描述文件（见 config.demucs_repo_dir 的说明）。
+    repo_dir = settings.demucs_repo_dir
+    if (repo_dir / f"{MODEL_NAME}.yaml").is_file():
+        _model = get_model(MODEL_NAME, repo=repo_dir)
+    else:
+        # 没预置本地仓库才走网络（联网机器首次运行会自己下）。断网、或离线部署
+        # 时权重没预置到位，这里抛的是 requests / huggingface_hub 的网络异常，
+        # 交给调用方落成 error。
+        _model = get_model(MODEL_NAME)
     _model.eval()
     return _model
 

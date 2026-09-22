@@ -36,11 +36,27 @@ class Settings(BaseSettings):
     # 先试 HuggingFace Hub（huggingface_hub.hf_hub_download，受 HF_HOME 控制），
     # 失败才回退 legacy 的 torch.hub.load_state_dict_from_url（受 TORCH_HOME 控制）。
     # 所以 vocal_service 把 HF_HOME 与 TORCH_HOME **都**接到这个目录：
-    # 联网机器命中的是 HF 那一级、离线机器命中回退那一级，两级缓存都不能散到 ~/.cache。
+    # HF 可达时命中第一级、HF 不可达但外网通时命中回退那一级，两级缓存都不能散到 ~/.cache。
     # 两级的求值时机不同：huggingface_hub 在 import 期就读 HF_HOME 成模块级常量
     # （必须早于 `import huggingface_hub`）；torch.hub 是首次下载时才读 TORCH_HOME。
     # 都设在 vocal_service._prepare_runtime() 里，早于任何下载。
+    #
+    # **但真离线机器两级都不可达**（2026-09-22 实测：先卡在 huggingface.co 重试
+    # 5 次、回退后 dl.fbaipublicfiles.com 同样不可达）。离线走的是下面的
+    # demucs_repo_dir，与这两个缓存目录无关。
     demucs_model_dir: Path = BASE_DIR / "models" / "demucs"
+
+    # demucs 的**本地模型仓库**目录，即它 `-n/--repo` 参数对应的那个「装着全部
+    # 预训练模型的文件夹」。放两样东西就能完全离线加载：`htdemucs.yaml`（bag
+    # 描述，内容只有一行 `models: ['955717e8']`）与它引用的 `955717e8-8726e21a.th`。
+    #
+    # **为什么非要有这个目录**：`get_model(name)` 在 repo=None 时只走上面那两级
+    # 网络路径；而 bag 描述文件（.yaml）在本地缓存里根本没有容身之处——torch.hub
+    # 认的缓存只放 .th，HF 缓存是另一套 models--*/snapshots 布局且以远端 commit
+    # 为目录名。所以「把权重预置进 TORCH_HOME/hub/checkpoints」这种办法在离线机器上
+    # 起不来：缺的不是权重，是那个 yaml。`get_model(name, repo=...)` 则完全不碰网络。
+    # 权重与校验见 scripts/fetch_demucs_weights.sh。
+    demucs_repo_dir: Path = BASE_DIR / "models" / "demucs" / "repo"
 
     # Demucs 推理的 torch 线程数。**必须与 worker 的 --concurrency 相乘不超过物理核数**，
     # 否则多个进程各开满线程会在同一批核上互相踩（demucs.cpp 的 PERFORMANCE.md
