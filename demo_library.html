@@ -1795,8 +1795,8 @@
 
             if (titleEl) titleEl.textContent = demo.title || "未命名";
             if (metaEl) metaEl.innerHTML = `
-            <span>🎭 ${demo.role || "未知行当"}</span>
-            <span>🎵 ${demo.banshi || "未知板式"}</span>
+            <span>🎭 ${esc(demo.role || "未知行当")}</span>
+            <span>🎵 ${esc(demo.banshi || "未知板式")}</span>
             <span>⏱️ ${demo.bpm || 0} BPM</span>
             <span>📏 ${demo.duration ? demo.duration.toFixed(1) : "0.0"}秒</span>`;
 
@@ -2092,12 +2092,12 @@
         }
 
         // 轮询上限：3 秒 × 600 = 30 分钟。Demucs 跑全长素材约 8–15 分钟
-        // （`parse_service` 与 `parse_task_repo` 两处注释给的经验估计，本轮未在
-        // 真实素材上实测过），留一倍余量。没有这个上限的话，任务若因为 worker
-        // 没带 -Q demucs 而
-        // 永远停在 parsing，定时器会一直转下去、弹窗永远关不掉（原来的实现
-        // 就是这个毛病：mock 对未知 id 返回 null，而 `if (!st) return;`
-        // 让 setInterval 空转到天长地久）。
+        // （`parse_service` 与 `parse_task_repo` 两处注释给的经验估计，
+        // 本轮未在真实素材上实测过），留一倍余量。
+        // 没有这个上限的话，任务若因为 worker 没带 -Q demucs 而永远停在 parsing，
+        // 定时器会一直转下去、弹窗永远关不掉（原来的实现就是这个毛病：
+        // mock 对未知 id 返回 null，`if (!st) return;` 让 setInterval
+        // 空转到天长地久）。
         const POLL_MAX = 600;
         function startPolling(demoId) {
             if (pollTimer) clearInterval(pollTimer);
@@ -2105,14 +2105,20 @@
             renderParseFlow("parsing", 0, "等待解析...");
             pollTimer = setInterval(async () => {
                 ticks += 1;
-                const st = await fetchStatus(demoId);
-                if (!st) {
-                    // 404 / 已过期，或连续轮询超过上限 —— 一律按 error 收尾，停表
-                    if (ticks < POLL_MAX) return;
+                // 上限检查必须放在取状态**之前**、且与 st 取值无关：worker 没带
+                // -Q demucs 时每轮都拿到 truthy 的 parsing（redis TTL 过期后又
+                // 派生 truthy 的 unparsed），把检查放进 `if (!st)` 里等于在最常见
+                // 的卡死场景下完全不生效——表停不下来、弹窗永不自关。
+                if (ticks >= POLL_MAX) {
                     clearInterval(pollTimer); pollTimer = null;
                     renderParseFlow("error", 0, "解析超时，请查看服务器日志或重新上传");
                     renderProcessingModal("error", 0, "解析超时，请查看服务器日志或重新上传");
                     showToast("error", "解析超时", "解析超时，请查看服务器日志或重新上传");
+                    return;
+                }
+                const st = await fetchStatus(demoId);
+                if (!st) {
+                    // 404 / 已过期：这一轮不动作，等下一轮或上面的上限兜底
                     return;
                 }
                 renderParseFlow(st.status, st.progress, st.message);
