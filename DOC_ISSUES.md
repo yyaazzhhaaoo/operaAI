@@ -356,16 +356,18 @@ stage ∈ 上传完成|人声分离|音高提取|八度修正|时间对齐|评�
 
 **问题**：`demo_library.html` 的解析进度弹窗是照着文档的**形状**做的（有 stage、有 progress、有 status），但取值是自己编的，与文档枚举对不上：
 
-| | 文档（3.1） | 前端（`demo_library.html`） |
+| | 文档（3.1） | 前端（`demo_library.html`，**登记这条问题时的快照**） |
 |---|---|---|
 | `stage` / 步骤 | 上传完成 \| 人声分离 \| 音高提取 \| 八度修正 \| 时间对齐 \| 评分计算 | 音频上传 \| Demucs 分离 \| VocalParse 推理 \| 结构化输出 \| Elo 难度校准 \| 存入基准库 |
 | `status` | `queued` \| `processing` \| `done` \| `failed` | `pending` \| `parsing` \| `parsed` \| `error` |
 
-步骤数组写死在两处：`demo_library.html:1863`（`renderParseFlow`）与 `:1920`（`renderProcessingModal`）。终止判定在 `:2064`：`st.status === "parsed" || st.status === "error"`。
+（表里前端两列都是**登记这条问题时的快照**。本次改动后前端是五步：音频上传 / Demucs 分离 / 唱段结构解析 / 结构化输出 / 存入基准库——相比快照去掉了 `VocalParse 推理` 与 `Elo 难度校准`、新增了 `唱段结构解析`。`status` 列不变；「与文档枚举零重合」的结论仍然成立。）
+
+步骤数组写死在两处：`renderParseFlow` 与 `renderProcessingModal` 各自的 `const steps`（在 `demo_library.html` 里 grep `const steps = [` 即达，两处）。终止判定在 `startPolling` 里：`st.status === "parsed" || st.status === "error"`。
 
 **影响**：两边取值集合**没有任何一个词重合**。后端若按文档发 `status="done"`，前端 `:2064` 的终止条件永远不成立 → 弹窗永不关闭、轮询永不停止，且接口一路 200、不报任何错。这与第 10 条是同一类错配（那个是 `DTW时间对齐` vs `时间对齐`），只是这次发生在示范库这条新链路上。
 
-**当前处理**：已按前端词表落地——状态存 redis，词表为 `parsing`/`parsed`/`error`（常量 `STATUS_*` 在 `app/services/parse_service.py` 顶部；TTL 过期后按 `segments` 有无行派生额外取值 `unparsed`）；两处步骤文案里的 Elo 一步已去掉（本次不实现）。**待文档方确认**：3.1 的枚举是否需要扩展出解析链路的一套取值——若要统一到文档词表，改前端 `:1863`/`:1920`/`:2064` 三处 + 后端状态常量即可，接口形状不变。
+**当前处理**：已按前端词表落地——状态存 redis，词表为 `parsing`/`parsed`/`error`（常量 `STATUS_*` 在 `app/services/parse_service.py` 顶部；TTL 过期后按 `segments` 有无行派生额外取值 `unparsed`）；两处步骤文案里的 Elo 一步已去掉（本次不实现）。**待文档方确认**：3.1 的枚举是否需要扩展出解析链路的一套取值——若要统一到文档词表，改前端上述两处 `const steps` 与 `startPolling` 的终止判定 + 后端状态常量即可，接口形状不变。
 
 ---
 

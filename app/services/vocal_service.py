@@ -73,9 +73,10 @@ def _prepare_runtime():
     #   TORCH_HOME → torch/hub.py 只在**首次下载时**才读环境变量（模块级只有个
     #                惰性占位 `_hub_dir = None`）→ 早设是为了统一，不是因为晚了会失效
     # 两级都受控，理由分别是：`huggingface_hub` 的首次 import 与任何下载动作都晚于
-    # 本函数（`demucs.pretrained` 要到 `_get_model()` 里才导入）；而本模块那句
-    # 模块级的 `import torch`（在 `_prepare_runtime()` 里也有一句，那一次在赋值之后）
-    # 虽然早于本函数调用，但 torch 2.14 不在 import 期读 TORCH_HOME，故无影响。
+    # 本函数（`demucs.pretrained` 要到 `_get_model()` 里才导入）；torch 这边本模块
+    # 根本没有模块级 import（全部是函数内惰性 import，见文件头），最早的 `import
+    # torch` 也在 `_prepare_runtime()` 的赋值**之后**，不可能更早；何况 torch 2.14
+    # 不在 import 期读 TORCH_HOME，即便它在赋值前被导入也不影响。
     os.environ.setdefault("TORCH_HOME", str(model_dir))
     os.environ.setdefault("HF_HOME", str(model_dir))
 
