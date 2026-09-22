@@ -41,7 +41,8 @@ _threads_ready = False
 def _prepare_runtime():
     """设好缓存目录环境变量，并定下线程数。
 
-    两件事都必须**早于首次下载权重**（HF 那一级还要求早于 `import huggingface_hub`）：
+    两件事的时机要求不同：环境变量必须**早于首次下载权重**（HF 那一级还要求
+    早于 `import huggingface_hub`），线程数只需**早于首次推理**：
 
     1. HF_HOME / TORCH_HOME —— demucs 4.1.0 的 get_model 是**两级**路径：先走
        HuggingFace Hub（huggingface_hub.hf_hub_download，缓存受 HF_HOME 控制），
@@ -74,9 +75,9 @@ def _prepare_runtime():
     #                惰性占位 `_hub_dir = None`）→ 早设是为了统一，不是因为晚了会失效
     # 两级都受控，理由分别是：`huggingface_hub` 的首次 import 与任何下载动作都晚于
     # 本函数（`demucs.pretrained` 要到 `_get_model()` 里才导入）；torch 这边本模块
-    # 根本没有模块级 import（全部是函数内惰性 import，见文件头），最早的 `import
-    # torch` 也在 `_prepare_runtime()` 的赋值**之后**，不可能更早；何况 torch 2.14
-    # 不在 import 期读 TORCH_HOME，即便它在赋值前被导入也不影响。
+    # 根本没有模块级 import（全部是函数内惰性 import，见文件头），`separate_vocal` 里
+    # 的 `import torch` 虽早于本函数的赋值，但 torch 2.14 不在 import 期读
+    # TORCH_HOME，即便它在赋值前被导入也不影响。
     os.environ.setdefault("TORCH_HOME", str(model_dir))
     os.environ.setdefault("HF_HOME", str(model_dir))
 

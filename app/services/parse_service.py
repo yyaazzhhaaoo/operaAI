@@ -174,7 +174,9 @@ def status(db: Session, demo_id: int) -> dict:
     派生这条路径是为 TTL 过期（1 小时）之后兜底：否则详情页会在上传 1 小时后
     显示成「没解析过」，而库里明明躺着分段。派生只可能给出 parsed / unparsed
     两种，且**不带真实的进度**——已经没有任务在跑了，这里给的 0 / 100 只是
-    让前端的进度条有个确定形状。
+    让前端的进度条有个确定形状。一个例外：任务还排在 demucs 队列里（未开工）
+    时并不会续期 redis 键，TTL 过期后它也会被派生成 unparsed（显示「尚未解析」）；
+    这会自愈——任务一开工 update() 就重建 redis 键，分段落库后状态自然变回 parsed。
 
     demo 不存在时抛 404：这条接口是按 demo_id 查的，调用方拿一个不存在的 id
     来问，答案是「没有这条示范曲目」而不是「它没解析过」。
@@ -242,7 +244,7 @@ def _require_demo(db: Session, demo_id: int) -> tuple[TeacherDemo, Path]:
 
     path = storage.resolve(audio.file_path)
     if not path.is_file():
-        raise BusinessError(404, f"音频文件已丢失：{audio.file_path}")
+        raise BusinessError(404, "音频文件已丢失")
     return demo, path
 
 
