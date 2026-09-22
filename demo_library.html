@@ -2053,8 +2053,11 @@
             if (role) form.append("role", role);
             if (banshi) form.append("banshi", banshi);
             // access 随登录角色定：教师传 public（示范音频，所有登录用户可听），
-            // 其余传 private。后端 audio_service.save_upload() 只认这两个值，
-            // 不传会被判 400「access 只能是 public 或 private」，所以必须带。
+            // 其余传 private。后端 save_upload() 只认这两个值，**非法值**才判 400
+            // 「access 只能是 public 或 private」；**缺省不传不会报错**——api 层是
+            // request.form.get("access", "private")，不传就是 private。所以「必须带」
+            // 的理由不是避免 400，而是：教师上传若不带，会静默降级成 private，
+            // 示范音频变成只有本人与教师能听，且不会有任何提示。
             // currentUser 尚未取到时按 private 兜底——与后端 get_playable()
             // 「取不到一律按 private 处理，宁可拒」的取向一致。
             form.append("access",
@@ -2088,8 +2091,10 @@
                 btn.disabled = false; }
         }
 
-        // 轮询上限：3 秒 × 600 = 30 分钟。Demucs 全长素材实测 8–15 分钟，
-        // 留一倍余量。没有这个上限的话，任务若因为 worker 没带 -Q demucs 而
+        // 轮询上限：3 秒 × 600 = 30 分钟。Demucs 跑全长素材约 8–15 分钟
+        // （`parse_service` 与 `parse_task_repo` 两处注释给的经验估计，本轮未在
+        // 真实素材上实测过），留一倍余量。没有这个上限的话，任务若因为 worker
+        // 没带 -Q demucs 而
         // 永远停在 parsing，定时器会一直转下去、弹窗永远关不掉（原来的实现
         // 就是这个毛病：mock 对未知 id 返回 null，而 `if (!st) return;`
         // 让 setInterval 空转到天长地久）。
