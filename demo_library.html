@@ -1641,26 +1641,25 @@
         let processingDemoId = null,
             processingFileName = "";
 
+        // 列表：真接口 GET /api/demo/library/list（统一信封）。
+        // 学生不发这个请求——接口挂 @teacher_required，学生调必 403，明知会被拒
+        // 就不发，直接按 currentUser.role 分支。
+        // 调用点在第二段 <script> 的 currentUser 赋值之后：本函数读角色，若在页面
+        // 加载时同步调它，currentUser 还是 null，教师会被误判成学生、列表永不加载。
         async function fetchDemos() {
+		  if (!currentUser || currentUser.role !== "teacher") {
+			const listEl = document.getElementById("demoList");
+			if (listEl) listEl.innerHTML =
+			  `<div style="padding:40px;text-align:center;color:var(--text-muted)">示范库仅教师可见</div>`;
+			return;
+		  }
 		  try {
-			// 模拟网络延迟
-			await new Promise(resolve => setTimeout(resolve, 300));
-			
-			// 直接从模拟数据中读取
-			const demos = DEMO_DATA.map(d => ({
-			  id: d.id,
-			  title: d.title,
-			  role: d.role,
-			  banshi: d.banshi,
-			  bpm: d.bpm,
-			  duration: d.duration,
-			  elo_difficulty: d.elo_difficulty,
-			  status: d.status,
-			  created_at: d.created_at,
-			  parse_result: d.parse_result
-			}));
-			
-			renderDemoList(demos);
+			const res = await fetch(`${API_BASE}/api/demo/library/list`);
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const body = await res.json();
+			// 后端就这 7 个字段（library_service.demo_library_list），直接透传：
+			// 没有 parse_result——那是详情页的东西，renderDemoList 不读它。
+			renderDemoList(body.data || []);
 		  } catch (e) {
 			showToast("error", "加载失败", `无法获取示范列表: ${e.message}`);
 			const listEl = document.getElementById("demoList");
@@ -1747,7 +1746,13 @@
                 return;
             }
             container.innerHTML = demos.map(d => {
-                const eloInfo = getEloLabel(d.elo_difficulty);
+                // Elo 容错：与详情页（renderDetail）同一套判定。库里的 elo_difficulty
+                // 当前是列默认值 1000，按 0–1 渲染会得到「Elo 1000.00」和
+                // width:100000% 的进度条；null 更糟——原先的 .toFixed 会抛 TypeError
+                // 打断整个 map，一条都渲染不出来。取不到有效值时显示「待校准」。
+                const eloRaw = d.elo_difficulty;
+                const eloValid = typeof eloRaw === "number" && isFinite(eloRaw) && eloRaw >= 0 && eloRaw <= 1;
+                const eloInfo = eloValid ? getEloLabel(eloRaw) : null;
                 const isActive = d.id === activeDemoId;
                 const dateStr = d.created_at ? d.created_at.slice(0, 10) : "";
                 return `
@@ -1765,11 +1770,13 @@
                     <span class="demo-tag ${d.status === 'parsed' ? 'parsed' : 'parsing'}">${d.status === 'parsed' ? '已解析' : '解析中'}</span>
                   </div>
                   <div class="demo-difficulty">
-                    <span class="diff-badge ${eloInfo.cls}">${eloInfo.text} · Elo ${d.elo_difficulty.toFixed(2)}</span>
+                    ${eloValid ? `
+                    <span class="diff-badge ${eloInfo.cls}">${eloInfo.text} · Elo ${eloRaw.toFixed(2)}</span>
                     <div class="diff-trend">
-                      <div class="trend-bar"><div class="trend-fill" style="width:${d.elo_difficulty * 100}%"></div></div>
-                      <span class="trend-text">班级平均 ${(d.elo_difficulty * 0.88).toFixed(2)}</span>
-                    </div>
+                      <div class="trend-bar"><div class="trend-fill" style="width:${eloRaw * 100}%"></div></div>
+                      <span class="trend-text">班级平均 ${(eloRaw * 0.88).toFixed(2)}</span>
+                    </div>` : `
+                    <span class="diff-badge" style="color:var(--text-muted)">待校准</span>`}
                   </div>
                 </div>
                 <div class="demo-actions">
@@ -2014,7 +2021,13 @@
 
         /* ========== 原有交互函数 ========== */
         async function selectDemo(id) {
-            activeDemoId = id;
+            // 真接口的 id 是数字，而 onclick="selectDemo('${d.id}')" 传进来的是字符串。
+            // 不规整就会有两处因类型不等而恒为 false：renderDemoList 的
+            // `d.id === activeDemoId`（选中高亮失效）与轮询收尾的
+            // `activeDemoId === demoId`（解析完成后详情不刷新，那边的 demoId 是数字）。
+            // mock 的 "demo_001" 转不成数字，走原路。
+            const n = Number(id);
+            activeDemoId = Number.isNaN(n) ? id : n;
             await fetchDemos();
             await fetchDemoDetail(id);
         }
@@ -2160,7 +2173,6 @@
             setTimeout(() => { if (toast.parentElement) toast.remove(); }, 6000);
         }
 
-        fetchDemos();
     </script>
 
 <!-- ==== 登录用户条 + 登出（页面鉴权配套，见 docs/superpowers/specs/2026-09-15-page-auth-design.md）==== -->
@@ -2195,6 +2207,10 @@
   if (!user) return;
   // 交给第一段 <script> 里的函数（如 doUpload）读取；此处是唯一的赋值点。
   currentUser = user;
+
+  // 列表要按角色分支，必须等 currentUser 就绪后才能拉——放在第一段 <script>
+  // 末尾同步调用的话，此刻它还是 null，教师会被 fetchDemos 误判成学生。
+  fetchDemos();
 
   const isTeacher = user.role === 'teacher';
   const roleText = isTeacher ? '教师' : '学生';
