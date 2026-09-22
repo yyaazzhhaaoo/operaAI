@@ -61,10 +61,16 @@ def _encode(value):
 
 
 def create(demo_id: int, ttl: int = TASK_TTL, **fields) -> None:
-    """整体写入（提交解析时建任务用）。"""
+    """整体写入（提交解析时建任务用）。
+
+    `demo_id` 由本函数自己写进记录（读侧 `get()` 会把它转回 int），调用方
+    **不要**再传 `demo_id=`：它同时是本函数的第一个位置参数，重传会当场撞成
+    `TypeError: create() got multiple values for argument 'demo_id'`，而不是
+    被 `**fields` 收下——静态评审看不出来，只有真跑才会露。
+    """
     key = _key(demo_id)
     pipe = _client().pipeline()
-    pipe.hset(key, mapping={k: _encode(v) for k, v in fields.items()})
+    pipe.hset(key, mapping={k: _encode(v) for k, v in {**fields, "demo_id": demo_id}.items()})
     pipe.expire(key, ttl)
     pipe.execute()
 
@@ -101,8 +107,11 @@ def get(demo_id: int) -> dict | None:
     except (TypeError, ValueError):
         task["progress"] = 0
 
-    # demo_id 也要转回 int：前端拿它跟列表里的 id 比。空串（未写入）保持 None，
-    # 不硬转 0——0 是个合法 id，会把「没写」和「id=0」混为一谈。
+    # demo_id 也要转回 int：它是记录自带的标识（create 从键参数写入），
+    # 手工读 redis 排障时不必再回头猜键名。`status()` 只回传 status/progress/
+    # stage/message 四个键，所以它不会流到前端去。
+    # 空串（未写入）保持 None，不硬转 0——0 是个合法 id，会把「没写」和
+    # 「id=0」混为一谈。
     raw_demo_id = task.get("demo_id")
     if raw_demo_id:
         try:

@@ -161,7 +161,8 @@ def submit(db: Session, demo: TeacherDemo) -> str:
         # 留空而不是硬塞一个 STAGE_*，否则 stage 与 progress 会互相矛盾。
         stage="",
         message="任务已创建，排队中",
-        demo_id=demo.id,
+        # 不传 demo_id：create 的第一个位置参数就叫这个名字，重传会撞成
+        # TypeError；记录里的那个字段由 create 从键参数写入（见其 docstring）。
         task_id=task_id,
     )
     _dispatch(demo.id, task_id)
