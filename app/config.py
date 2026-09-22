@@ -27,6 +27,22 @@ class Settings(BaseSettings):
     # 排查起来很绕。生产上 HTTPS 就绪后在 .env 加 SESSION_COOKIE_SECURE=true。
     session_cookie_secure: bool = False
 
+    # --- Demucs 人声分离（示范库解析链路）---
+    # 权重落盘目录。默认项目内，**刻意不落 ~/.cache/torch 或 ~/.cache/huggingface**：
+    # 部署机上跑 worker 的用户（root 或别的服务账号）家目录可能是个小分区，
+    # 而 htdemucs 权重约 80MB，且以后换模型只会更大。部署时改 .env 指到数据盘。
+    #
+    # 本项目用的是 demucs 4.1.0，权重从 HuggingFace Hub 拉，所以 vocal_service
+    # 会把这个值接到 HF_HOME 上——注意必须在 import demucs 之前设好，
+    # huggingface_hub 在 import 期就求值了。
+    demucs_model_dir: Path = BASE_DIR / "models" / "demucs"
+
+    # Demucs 推理的 torch 线程数。**必须与 worker 的 --concurrency 相乘不超过物理核数**，
+    # 否则多个进程各开满线程会在同一批核上互相踩（demucs.cpp 的 PERFORMANCE.md
+    # 明确写过这条）。默认 4 对应「4 核服务器 + concurrency=1」的部署定档
+    # （部署手册 1.1 节）。
+    demucs_threads: int = 4
+
     # --- Redis ---
     # Celery 的 broker 与任务状态共用一台实例，但**刻意分库**：broker 是待办
     # 队列，消息被 worker 取走即消费；而任务状态（analyze_task_repo 写的

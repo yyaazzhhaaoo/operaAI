@@ -29,12 +29,21 @@ def save_upload(
     is_teacher: bool,
     access: str,
     file: FileStorage,
+    commit: bool = True,
 ) -> AudioFile:
     """B1：落盘 + 写 audio_files 登记，返回记录。
 
     access 默认 private（学生录音）。public 是示范音频、所有登录用户可听，
     因此只允许教师设置——否则学生把自己的录音标成 public，就绕过了
     《6-登录与数据隔离方案》定的可听范围。
+
+    commit=False 时只 flush（audio.id 已经能拿到，audio_repo.create 内部
+    就是 flush），把提交交给调用方。示范曲目上传要走这条路：它紧接着还要建
+    teacher_demos 一行，两行必须同生共死，而这个接口里只能有一次 commit。
+
+    注意落盘在 flush 之前：回滚能撤掉 audio_files 那行，但撤不掉磁盘上已经
+    写好的文件（见 common/storage.py 的 save）。调用方不必为此补偿——留下
+    的是一个没有任何记录指向的孤儿文件，不会造成数据不一致。
     """
     if access not in (ACCESS_PUBLIC, ACCESS_PRIVATE):
         raise BusinessError(400, "access 只能是 public 或 private")
@@ -51,7 +60,8 @@ def save_upload(
         file_size=size,
         access=access,
     )
-    db.commit()
+    if commit:
+        db.commit()
     return audio
 
 
