@@ -32,9 +32,14 @@ class Settings(BaseSettings):
     # 部署机上跑 worker 的用户（root 或别的服务账号）家目录可能是个小分区，
     # 而 htdemucs 权重约 80MB，且以后换模型只会更大。部署时改 .env 指到数据盘。
     #
-    # 本项目用的是 demucs 4.1.0，权重从 HuggingFace Hub 拉，所以 vocal_service
-    # 会把这个值接到 HF_HOME 上——注意必须在 import demucs 之前设好，
-    # huggingface_hub 在 import 期就求值了。
+    # demucs 4.1.0 的 get_model 是**两级**取数路径（2026-09-22 实测确认）：
+    # 先试 HuggingFace Hub（huggingface_hub.hf_hub_download，受 HF_HOME 控制），
+    # 失败才回退 legacy 的 torch.hub.load_state_dict_from_url（受 TORCH_HOME 控制）。
+    # 所以 vocal_service 把 HF_HOME 与 TORCH_HOME **都**接到这个目录：
+    # 联网机器命中的是 HF 那一级、离线机器命中回退那一级，两级缓存都不能散到 ~/.cache。
+    # 两级的求值时机不同：huggingface_hub 在 import 期就读 HF_HOME 成模块级常量
+    # （必须早于 `import huggingface_hub`）；torch.hub 是首次下载时才读 TORCH_HOME。
+    # 都设在 vocal_service._prepare_runtime() 里，早于任何下载。
     demucs_model_dir: Path = BASE_DIR / "models" / "demucs"
 
     # Demucs 推理的 torch 线程数。**必须与 worker 的 --concurrency 相乘不超过物理核数**，

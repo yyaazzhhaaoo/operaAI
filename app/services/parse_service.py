@@ -247,7 +247,12 @@ def _require_demo(db: Session, demo_id: int) -> tuple[TeacherDemo, Path]:
 
 
 def _master_duration(path: Path) -> float | None:
-    """音频文件的真实全长（秒）。读文件头，不解码。
+    """音频文件的真实全长（秒）。多数格式只读元数据，不解码。
+
+    走 librosa.get_duration(path=...)：它先试 soundfile 的 sf.info()，对
+    wav/mp3/flac/ogg 只读文件头；soundfile 打不开的容器（m4a / aac / webm，
+    都在 storage.ALLOWED_EXT 里）会回退到 audioread，那条路径经 ffmpeg 把整个
+    文件解一遍（秒级到几十秒）。所以这里是「通常很便宜」而非「一定零成本」。
 
     读不出来返回 None 而不是 0.0：0 是个会写进 audio_files.duration_sec 的
     「合法」值，列表页会如实显示成 0.0 秒，等于用一个假数据掩盖了读取失败。

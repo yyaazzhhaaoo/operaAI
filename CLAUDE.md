@@ -21,10 +21,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **例外 2 — `demo_library.html`**：内含对 `${API_BASE}/api/v1/demos/upload` 的真实上传调用，但 `API_BASE=""` 且当前后端未提供该端点——页面演示不受影响，上传会失败属预期。
 - 页内无 `localStorage`、无持久化；刷新即重置。
 - **`POST /api/analyze/submit`（B2）必须另起一个 Celery worker，否则任务永远停在 `queued`。** Web 进程只把任务投进 redis 队列，真正跑 librosa 的是 worker 进程。在项目根目录、激活 venv 后：`celery -A app.worker:celery_app worker --loglevel=info --concurrency=2`。入口是 `app/worker.py`（`celery -A` 要的是模块级 Celery 实例，而 `create_app()` 只是个工厂，所以单独一个文件）。**`--concurrency` 按核数给，不要用 `--pool=gevent`**：librosa 提音高是纯 CPU 密集，gevent 池下面照样串行，还平白多一层调度开销——部署手册里的 gevent 是给 gunicorn 用的。broker 与任务状态都走 redis 但**分库**（broker 用 `.env` 的 `CELERY_BROKER_DB`，默认 0；任务状态用 `REDIS_DB`），连接串由 `app/config.py` 的 `celery_broker_url` 拼出。测试里想跳过 worker，用 `create_app({"CELERY": {"task_always_eager": True}})` 让任务在请求线程里同步跑完。
+- **示范库解析链路（`/api/demo/library/*`）必须另起一个带 `-Q demucs` 的 worker，否则解析任务永远停在 `parsing`。** 解析走的是专用队列（一次 8–15 分钟，与秒级的 B 组分析分开）：
+  `celery -A app.worker:celery_app worker -Q demucs --concurrency=1 --loglevel=info`
+  **不带 `-Q demucs` 的 worker 不消费这个队列**，症状是「上传成功、前端一直转圈、没有任何报错」。`--concurrency=1` 是因为 `torch.set_num_threads(4)`（`demucs_threads`）已经把 4 个核吃满（见 `app/config.py` 的注释），两处数值要一起看。
 
 ### Python 后端依赖
 
-依赖清单是 **`requirements.txt`**（64 个包全部 `==` 钉死：13 个直接依赖 + 51 个传递依赖，在 macOS Intel 上实测通过）。
+依赖清单是 **`requirements.txt`**（本文件自身钉死 64 个包，全部 `==`：13 个直接依赖 + 51 个传递依赖，在 macOS Intel 上实测通过；文件末尾一行 `-r` 另把 Demucs 的 CPU-only 三项带进来，见下条）。
+
+- **`requirements-demucs.txt`** 是示范库解析链路（Demucs）的 CPU-only 依赖，由 `requirements.txt` 末尾一行 `-r` 带进来。单独成文件**不是**为了避免全局改道——pip 对 `-r` 引入文件里的 `--index-url` 是整次会话全局生效的，且那两个选项行不带平台标记，Mac 上一样生效（清华是 PyPI 全量镜像，所以 Mac 也装得通）；真实的收益只是**主清单里不嵌入镜像 URL**，换源或上内网时不必动主文件。三行依赖都带 `; sys_platform == "linux"`——PyTorch 自 2.2.2 起不再发布 macOS x86_64 轮子，Mac 上必须整段跳过。权重（约 84MB，`models/` 已 gitignore）用 `scripts/fetch_demucs_weights.sh` 取，离线部署改为人工拷贝。相关背景见 `DOC_ISSUES.md` 第 16 条。
 
 **不要引入 `pyproject.toml`**：部署手册 `../艺校_docs/11-部署与运维手册-V1.0.docx` 2.3 节的流程就是 `pip install -r requirements.txt`，且本项目是应用而非可安装库，加打包元数据只会让手册与代码脱节。
 
@@ -68,6 +73,16 @@ PostgreSQL 跑在 Docker 容器 `docker_postgres`（`postgres:15.7`，端口 543
 - `scripts/check_db.py` 是模型与真库之间的一致性闸门：`python scripts/check_db.py` 逐表比对表集合、列名、类型、可空性、外键与自定义索引（当前 15 表 / 110 列 / 22 外键 / 2 索引），有任何差异就打印明细并以退出码 1 结束，可直接接进 CI。**改完 `schema.sql` 或 `app/models/` 后跑一遍。**
 - `app/response.py` 提供统一响应助手 `ok(data)` / `fail(code, message)`，对应文档的 `{"code":0,"message":"ok","data":{...}}`。错误码文档未定义，本项目约定 `code` 沿用 HTTP 语义（400/401/403/404/500）且与 HTTP 状态码一致——详见 `DOC_ISSUES.md` 第 9 条。`/api/audio/upload`（B1）与 `/api/analyze/submit`（B2）也已用它（2026-09-20 起）；`/api/analyze/result`（B4）回的是 `ok(analyze_service.result(...))`，同样是统一信封。仍返回裸字段的只剩 `app-d.py` `demo_bp` 上那 4 条演示路由——它们已无调用方，随 `demo_bp` 一起待删。
 - 后续业务接口的约定见《5-接口清单-V1.0》（Base URL `/api`，统一返回 `{"code","message","data"}`，共 49 个接口）与《6-登录与数据隔离方案-V1.0》（Flask 原生 Session、不做 JWT、`login_required`/`teacher_required` 装饰器）——**这两份文档描述的接口与认证尚未实现**。
+
+### 示范库解析链路（Demucs）
+
+`demo_library.html` 的「上传示范音频 → 解析 → 存入基准库」链路是**真的**在跑算法（`DOC_ISSUES.md` 第 16–20 条）：上传走 `POST /api/demo/library/upload`，任务投进 **`demucs` 专用队列**，worker 里用 Demucs（htdemucs）分离人声、按停顿切成唱段，结果落 `segments`（只有 `seq`/`title`/`duration`，**不写 `lyrics_json`**）、并把真实时长回填到 `audio_files.duration_sec`。前端 `fetchStatus` 每 3 秒轮询 `GET /api/demo/library/<id>/parse/status`。
+
+- 代码在 `app/services/parse_service.py`（任务生命周期 + 切分 + 管线）与 `app/services/vocal_service.py`（Demucs 封装，torch/demucs 全部**函数内惰性 import**，这样 Mac 上装不到 torch 也不影响应用启动）。
+- 状态存 redis 的 `parse:demo:<demo_id>`（**键是 demo_id 不是 task_id**，一个 demo 同一时刻只有一个解析任务），TTL 3600 并每次更新续期。TTL 过期后 `parse_service.status` 按「`segments` 有行 → parsed，无行 → unparsed」派生。
+- 状态词表是 `parsing`/`parsed`/`error`（按前端，不是 B 组的 `queued`/`done`/`failed`）。
+- 详情页的列表（`fetchDemos`）**仍是 `DEMO_DATA` 演示数据**，只有轮询与详情接了真接口。
+- `TOP_DB`（静音判定阈值）当前是 **30.0，未经真实素材标定**；调参改 `parse_service` 顶部那一个常量即可（越小切得越碎）。
 
 ## 架构：单文件自包含原型
 
