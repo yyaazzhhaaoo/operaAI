@@ -92,6 +92,12 @@ def demo_library_get(demo_id):
         "role": demo.role,
         "banshi": demo.banshi,
         "duration": demo.audio.duration_sec if demo.audio else None,
+        # 手工拼的 dict 必须逐个键写全：`from_attributes=True` 只让 pydantic 能从
+        # **对象属性**取值，对 dict 输入不生效——不在 dict 里的键一律落声明的默认值
+        # None，不会去 ORM 对象上找。漏掉这行的话详情接口的 elo_difficulty 恒为
+        # null，而列表接口（走 service 的行 dict）给的是真值，同一首曲子在两个接口
+        # 上会显示成两种难度。
+        "elo_difficulty": demo.elo_difficulty,
         "created_at": demo.created_at,
         "status": parse_service.status(db, demo_id)["status"],
         "segments": [
