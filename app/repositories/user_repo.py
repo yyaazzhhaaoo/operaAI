@@ -3,6 +3,7 @@
 
 写操作只 flush()、不 commit——事务边界在 service 层，理由见 CLAUDE.md。
 """
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -22,3 +23,6 @@ def update_password(db: Session, user: User, password_hash: str) -> None:
     """改密码哈希。只 flush，提交由 service 层负责。"""
     user.password_hash = password_hash
     db.flush()
+
+def get_by_role(db:Session,role:str) -> list[User]:
+    return list(db.scalars(select(User).where(User.role == role)).all())

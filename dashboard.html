@@ -329,12 +329,9 @@ body{
     <h1>戏韵AI · 老师工作台</h1>
     <span class="badge">班级看板</span>
   </div>
-  <div class="nav-user">
-    <div class="avatar">👩‍🏫</div>
-    <span>王慧芳</span>
-    <span style="color:var(--text-muted);font-size:13px">|</span>
-    <span style="color:var(--text-secondary);font-size:13px">中国戏曲学院</span>
-  </div>
+  <!-- 内容留空，由页尾脚本用 /api/auth/me 的结果填充。
+       写死的演示姓名会先渲染、再被接口结果替换，刷新时闪一下。 -->
+  <div class="nav-user"></div>
 </nav>
 
 <div class="layout">
@@ -377,33 +374,33 @@ body{
     <div class="stat-card">
       <div class="stat-icon" style="background:rgba(0,102,179,0.10)">👥</div>
       <div class="stat-info">
-        <div class="stat-value">24</div>
+        <div class="stat-value" id="stat-students"></div>
         <div class="stat-label">在班学生</div>
-        <div class="stat-change up">↑ 本周新增 2 人</div>
+        <div class="stat-change up" id="change-students"></div>
       </div>
     </div>
     <div class="stat-card">
       <div class="stat-icon" style="background:rgba(74,143,107,0.10)">🎵</div>
       <div class="stat-info">
-        <div class="stat-value">8</div>
+        <div class="stat-value" id="stat-library"></div>
         <div class="stat-label">示范曲目</div>
-        <div class="stat-change up">↑ 本周新增 2 首</div>
+        <div class="stat-change up" id="change-library"></div>
       </div>
     </div>
     <div class="stat-card">
       <div class="stat-icon" style="background:rgba(201,168,76,0.10)">🏷️</div>
       <div class="stat-info">
-        <div class="stat-value">156</div>
+        <div class="stat-value" id="stat-annotations"></div>
         <div class="stat-label">标注规则</div>
-        <div class="stat-change up">↑ 本周新增 12 条</div>
+        <div class="stat-change up" id="change-annotations"></div>
       </div>
     </div>
     <div class="stat-card">
       <div class="stat-icon" style="background:rgba(184,58,47,0.10)">📝</div>
       <div class="stat-info">
-        <div class="stat-value">7</div>
+        <div class="stat-value" id="stat-homeworks"></div>
         <div class="stat-label">待批改</div>
-        <div class="stat-change down">需尽快处理</div>
+        <div class="stat-change down" id="change-homeworks"></div>
       </div>
     </div>
   </div>
@@ -414,24 +411,17 @@ body{
       <div class="alert-header">
         <div class="alert-icon" style="background:rgba(184,58,47,0.10)">🔴</div>
         <div class="alert-title">掌握度骤降预警</div>
-        <div class="alert-count danger">2</div>
+        <div class="alert-count danger" hidden></div>
       </div>
-      <div class="alert-list">
-        <div class="alert-row"><span class="name">孙志远</span><span class="detail">拖腔 P(L) 0.45→0.28（-0.17）</span></div>
-        <div class="alert-row"><span class="name">刘思琪</span><span class="detail">音准控制 P(L) 0.62→0.48（-0.14）</span></div>
-      </div>
+      <div class="alert-list"></div>
     </div>
     <div class="alert-card warn">
       <div class="alert-header">
         <div class="alert-icon" style="background:rgba(201,168,76,0.10)">🟡</div>
         <div class="alert-title">连续未练习</div>
-        <div class="alert-count warn">3</div>
+        <div class="alert-count warn" hidden></div>
       </div>
-      <div class="alert-list">
-        <div class="alert-row"><span class="name">赵雨桐</span><span class="detail">已 3 天未提交练习</span></div>
-        <div class="alert-row"><span class="name">孙志远</span><span class="detail">已 2 天未提交练习</span></div>
-        <div class="alert-row"><span class="name">周明轩</span><span class="detail">已 2 天未提交练习</span></div>
-      </div>
+      <div class="alert-list"></div>
     </div>
     <div class="alert-card info">
       <div class="alert-header">
@@ -896,7 +886,7 @@ selectStudent("s01");
 
   const navUser = document.querySelector('.nav-user');
   if (navUser) {
-    // 有顶部栏的 10 个页面：复用这块区域，把写死的演示姓名换成真实登录用户。
+    // 这块区域在 HTML 里是空的（放写死的演示姓名会闪），由这里一次性填满。
     // 全部用 textContent 填充，不用 innerHTML——display_name 来自数据库，
     // 拼接进 HTML 会有注入风险。
     const av = document.createElement('div');
@@ -924,6 +914,118 @@ selectStudent("s01");
     bar.append(label, btn);
     document.body.appendChild(bar);
   }
+})();
+</script>
+
+<!-- 看板顶部接真接口：统计卡片（GET /api/dashboard/summary）与掌握度骤降预警
+     （GET /api/dashboard/alerts）。两个接口都挂 @teacher_required，学生打开本页
+     会拿到 403。
+     这些卡片在 HTML 里一律留空，真数据回来前不显示任何东西：原先写死的演示数字
+     会让刷新时先闪一屏假数据、再被接口结果覆盖。取不到数（403 / 后端不可达）时
+     退化成「—」+ 一行灰字提示，而不是回退到那些假数字。 -->
+<script>
+(async () => {
+  // [数值节点 id, 响应里的数值字段, 变化节点 id, 响应里的变化量字段, 单位]
+  const cards = [
+    ['stat-students',    'user_count',        'change-students',    'new_student_count',    '人'],
+    ['stat-library',     'library_count',     'change-library',     'new_library_count',    '首'],
+    ['stat-annotations', 'annotations_count', 'change-annotations', 'new_annotations_count', '条'],
+  ];
+
+  // 接口没给数时的降级形态：数值位写「—」，变化行整条收起
+  const degrade = () => {
+    for (const [valueId, , changeId] of cards) {
+      document.getElementById(valueId).textContent = '—';
+      document.getElementById(changeId).hidden = true;
+    }
+    document.getElementById('stat-homeworks').textContent = '—';
+    document.getElementById('change-homeworks').hidden = true;
+  };
+
+  let data = null;
+  try {
+    const r = await fetch('/api/dashboard/summary', { credentials: 'same-origin' });
+    if (r.ok) data = (await r.json()).data;
+  } catch (e) { /* 后端不可达，走下面的降级 */ }
+  if (!data) return degrade();
+
+  for (const [valueId, valueKey, changeId, deltaKey, unit] of cards) {
+    document.getElementById(valueId).textContent = data[valueKey];
+    const el = document.getElementById(changeId);
+    const delta = data[deltaKey];
+    el.textContent = '↑ 本周新增 ' + delta + ' ' + unit;
+    el.hidden = !(delta > 0);   // 0 时隐藏，空着比「新增 0 人」少些噪音
+  }
+
+  // 待批改：接口只给了积压总数，没有「本周新增」口径，所以文案固定，
+  // 仅按有无积压显示 / 隐藏。
+  document.getElementById('stat-homeworks').textContent = data.homeworks_count;
+  const hw = document.getElementById('change-homeworks');
+  hw.textContent = '需尽快处理';
+  hw.hidden = !(data.homeworks_count > 0);
+})();
+
+/* 预警区接真接口（GET /api/dashboard/alerts）。一次请求驱动两张卡片：
+   掌握度骤降（masteryDropAlert，.alert-card.danger）与连续未练习
+   （overduePracticeAlert，.alert-card.warn）。第三张「前置技法锁定」接口没给，
+   保持页面原有内容不动。
+   定位走 .alert-card.danger / .alert-card.warn 而非加 id：不改预警区标记。 */
+(async () => {
+  // 姓名与技法名来自数据库，用 textContent 填充而非拼 HTML（同顶部登录条的做法）
+  const makeRow = (name, detail) => {
+    const el = document.createElement('div');
+    el.className = 'alert-row';
+    const n = document.createElement('span');
+    n.className = 'name';
+    n.textContent = name;
+    const d = document.createElement('span');
+    d.className = 'detail';
+    d.textContent = detail;
+    el.append(n, d);
+    return el;
+  };
+
+  // rows 为空时退化成一行灰字说明（同 demo_library 的写法）
+  const fill = (selector, count, rows, hint) => {
+    const card = document.querySelector('.alert-section ' + selector);
+    if (!card) return;
+    const countEl = card.querySelector('.alert-count');
+    const listEl = card.querySelector('.alert-list');
+    countEl.textContent = count;
+    countEl.hidden = false;
+    if (rows.length > 0) return listEl.replaceChildren(...rows);
+    const el = document.createElement('div');
+    el.style.cssText = 'padding:6px 0;color:var(--text-muted);font-size:12px';
+    el.textContent = hint;
+    listEl.replaceChildren(el);
+  };
+
+  let data = null;
+  try {
+    const r = await fetch('/api/dashboard/alerts', { credentials: 'same-origin' });
+    if (r.ok) data = (await r.json()).data;
+  } catch (e) { /* 后端不可达，走下面的降级 */ }
+
+  // 取不到数时徽标给「—」而不是 0：0 的含义是「确实没有预警」，没拿到数不能冒充它
+  const cards = ['.alert-card.danger', '.alert-card.warn'];
+  if (!data) return cards.forEach(s => fill(s, '—', [], '加载失败，请刷新重试'));
+
+  // 单条取不到值就让那一位退化成「—」，不让它打断整张列表的渲染
+  const nums = (v, digits) => (typeof v === 'number' && isFinite(v)) ? v.toFixed(digits) : '—';
+  const list = key => Array.isArray(data[key]) ? data[key] : [];
+
+  // P(L) 统一保留两位
+  const drops = list('masteryDropAlert');
+  fill('.alert-card.danger', drops.length,
+    drops.map(a => makeRow(a.student_name,
+      `${a.skill} P(L) ${nums(a.previous, 2)}→${nums(a.latest, 2)}（${nums(a.diff, 2)}）`)),
+    '暂无预警');
+
+  // days_over 是「距最近一次练习的天数」，整数直接显示
+  const overdue = list('overduePracticeAlert');
+  fill('.alert-card.warn', overdue.length,
+    overdue.map(a => makeRow(a.student_name, `已 ${a.days_over} 天未提交练习`)),
+    '暂无预警');
 })();
 </script>
 </body>
