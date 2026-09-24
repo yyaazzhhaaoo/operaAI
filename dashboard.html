@@ -427,12 +427,11 @@ body{
       <div class="alert-header">
         <div class="alert-icon" style="background:rgba(0,102,179,0.10)">🔵</div>
         <div class="alert-title">前置技法锁定</div>
-        <div class="alert-count info">4</div>
+        <!-- 同上面两张卡：写死的演示数据会先渲染、再被接口结果覆盖，刷新时闪一下，
+             所以内容留空，由页尾脚本一次性填满 -->
+        <div class="alert-count info" hidden></div>
       </div>
-      <div class="alert-list">
-        <div class="alert-row"><span class="name">李小燕</span><span class="detail">气息支撑 0.51，拖腔练习已锁定</span></div>
-        <div class="alert-row"><span class="name">周明轩</span><span class="detail">音准感知 0.43，滑音练习已锁定</span></div>
-      </div>
+      <div class="alert-list"></div>
     </div>
   </div>
 
@@ -965,11 +964,11 @@ selectStudent("s01");
   hw.hidden = !(data.homeworks_count > 0);
 })();
 
-/* 预警区接真接口（GET /api/dashboard/alerts）。一次请求驱动两张卡片：
-   掌握度骤降（masteryDropAlert，.alert-card.danger）与连续未练习
-   （overduePracticeAlert，.alert-card.warn）。第三张「前置技法锁定」接口没给，
-   保持页面原有内容不动。
-   定位走 .alert-card.danger / .alert-card.warn 而非加 id：不改预警区标记。 */
+/* 预警区接真接口（GET /api/dashboard/alerts）。一次请求驱动全部三张卡片：
+   掌握度骤降（masteryDropAlert，.alert-card.danger）、连续未练习
+   （overduePracticeAlert，.alert-card.warn）、前置技法锁定
+   （prerequisiteLockAlert，.alert-card.info）。
+   定位走 .alert-card.danger / .warn / .info 而非加 id：不改预警区标记。 */
 (async () => {
   // 姓名与技法名来自数据库，用 textContent 填充而非拼 HTML（同顶部登录条的做法）
   const makeRow = (name, detail) => {
@@ -1007,12 +1006,13 @@ selectStudent("s01");
   } catch (e) { /* 后端不可达，走下面的降级 */ }
 
   // 取不到数时徽标给「—」而不是 0：0 的含义是「确实没有预警」，没拿到数不能冒充它
-  const cards = ['.alert-card.danger', '.alert-card.warn'];
+  const cards = ['.alert-card.danger', '.alert-card.warn', '.alert-card.info'];
   if (!data) return cards.forEach(s => fill(s, '—', [], '加载失败，请刷新重试'));
 
   // 单条取不到值就让那一位退化成「—」，不让它打断整张列表的渲染
   const nums = (v, digits) => (typeof v === 'number' && isFinite(v)) ? v.toFixed(digits) : '—';
   const list = key => Array.isArray(data[key]) ? data[key] : [];
+  const arr = v => Array.isArray(v) ? v : [];   // 嵌套数组字段同样容错
 
   // P(L) 统一保留两位
   const drops = list('masteryDropAlert');
@@ -1026,6 +1026,24 @@ selectStudent("s01");
   fill('.alert-card.warn', overdue.length,
     overdue.map(a => makeRow(a.student_name, `已 ${a.days_over} 天未提交练习`)),
     '暂无预警');
+
+  // 接口已按学生聚合过：一行 = 一个学生，prereqs 是没达标的前置技法，
+  // locked_skills 是被它锁住的下游技法。两者都是数组，全展开要 40+ 字，
+  // 在 1/3 宽的卡里折成两行、把另外两张卡一并撑高，所以只举第一个前置技法，
+  // 其余用条数带过
+  const locks = list('prerequisiteLockAlert');
+  fill('.alert-card.info', locks.length,
+    locks.map(a => {
+      const ps = arr(a.prereqs);
+      let head = '前置技法未达标';
+      if (ps.length) {
+        // 单个前置写「技法 0.50 未达标」，多个写「技法 0.42 等 3 项未达标」
+        head = `${ps[0].skill} ${nums(ps[0].mastery, 2)}` +
+               (ps.length > 1 ? ` 等 ${ps.length} 项` : ' ') + '未达标';
+      }
+      return makeRow(a.student_name, `${head} → 锁定 ${arr(a.locked_skills).length} 项`);
+    }),
+    '暂无锁定');
 })();
 </script>
 </body>

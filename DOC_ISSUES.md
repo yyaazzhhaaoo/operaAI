@@ -453,6 +453,39 @@ Demucs 分离 + librosa 提音高能给出的是 `pitch / note / time`（音高�
 
 ---
 
+## 21. `student_id` 列指向 `students.id` 而非 `users.id`，两套 id 极易混用
+
+`schema.sql` 里 `bkt_history` / `practice_records` / `submissions` 三张表的 `student_id`，外键都指向 **`students(id)`**（见《4-数据库设计-V1.1》）。DDL 本身没错、外键也建了，问题出在**列名**：`student_id` 与 `user_id` 语义太近，且 `students` 表只是 `users` 的角色扩展表（`students.user_id → users.id`），写代码时极易跳过中间这一跳，直接把 `student_id` 当 `users.id` 用。
+
+**为什么不会报错**：`students.id` 与 `users.id` 是两条独立序列，数值经常同量级、部分重合，所以错查往往"看起来正常"——取到的是另一个学生的名字，或者取不到返回 `NULL`。没有异常、没有日志，只有数据静默错位。
+
+实测映射（当前库，`students` 前两条是示例数据，真实学生从 48 起）：
+
+| `students.id` | `students.user_id` = `users.id` | `users.display_name` |
+|---|---|---|
+| 48 | 50 | 李小燕 |
+| 49 | 51 | 张博文 |
+| 50 | 52 | 刘思琪 |
+| 51 | 53 | 陈浩然 |
+| 52 | 54 | 赵雨桐 |
+| 53 | 55 | 周明轩 |
+| 54 | 56 | 吴佳怡 |
+| 55 | 57 | 孙志远 |
+
+**影响**：`/api/dashboard/alerts` 的三组预警都中招过——`student_id=50`（刘思琪）被当成 `users.id=50` 查出「李小燕」，同一份响应里 `student_id=48`（也是李小燕）与 `student_id=50` **显示成同一个人**。教师端按姓名找学生时会直接找错人。
+
+**当前处理**：已修三处，都改走 `students.user_id → users.id`：
+
+1. `app/services/dashboard_service.py` 的骤降预警（原 `user_repo.get_by_id(db, student_id)`）；
+2. `app/repositories/practice_records_repo.py` 的连续未练习（原 `.join(User, User.id == pr.student_id)`）；
+3. `app/services/dashboard_service.py` 的前置技法锁定（新增时即按正确路径写）。
+
+姓名统一走 `user_repo.get_student_names(db, ids)` 批量取（`students.id → students.user_id → users.id`），不要在业务代码里手写 join。
+
+**待文档方确认**：这是列命名带来的长期陷阱，**是否应在《4-数据库设计》里显式标注**「本列指向 `students.id`，取姓名需经 `students.user_id`」。不改 DDL，只加一句说明即可；若不标注，后续每接一个用到 `student_id` 的接口都要重踩一次。
+
+---
+
 ## 待核实
 
 - `CLAUDE.md` 记载《5-接口清单》共 49 个接口，但按 `方法 + 路径` 提取只得 43 条、按资源路径去重得 37 个。差异可能来自提取方式（表格结构、路径参数写法），也可能是文档自身统计有误，**尚未确认，不作为问题登记**。

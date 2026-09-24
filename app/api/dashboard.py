@@ -23,7 +23,7 @@ def dashboard_alerts():
 @login_required
 @teacher_required
 def dashboard_heatmap():
-    return ok()
+    return ok(dashboard_service.heatmap(get_db()))
 
 @api_bp.route("/dashboard/students",methods=["GET"])
 @login_required

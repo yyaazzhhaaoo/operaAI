@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import desc, select, func, extract
 from sqlalchemy.orm import Session, aliased
 
-from app.models import PracticeRecord, User
+from app.models import PracticeRecord, Student, User
 from app.schemas.dashboard import OverduePracticeAlert
 
 
@@ -27,7 +27,11 @@ def get_records(db:Session) -> list[OverduePracticeAlert]:
 
     stmt = (
         select(pr, days_over, User.display_name)          # 顺带查学生姓名
-        .join(User, User.id == pr.student_id)  # 关联学生表
+        # student_id 外键指向 students.id 而不是 users.id，姓名要多拐一次
+        # students.user_id → users.id，直接 join users 会取到另一个人的名字
+        # （见 DOC_ISSUES 第 21 条）
+        .join(Student, Student.id == pr.student_id)
+        .join(User, User.id == Student.user_id)
         .where(subq.c.rn == 1)
         .where(pr.created_at < two_days_ago)
         .order_by(desc(pr.created_at))
