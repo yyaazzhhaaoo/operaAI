@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import Date, cast, distinct, func, select, tuple_
 from sqlalchemy.orm import Session
 
 from app.models import Homework, Submission, TeacherDemo
@@ -54,3 +54,42 @@ def get_progress_rows(
         .order_by(Homework.deadline.desc().nulls_last(), Homework.id.desc())
     )
     return [tuple(row) for row in db.execute(stmt).all()]
+
+
+def get_submission_stats(db: Session, student_ids: list[int]) -> tuple[int, int, int]:
+    """全部作业的提交情况，(作业总数, 已提交组合数, 逾期提交组合数)。
+
+    供「班级畏难倾向指数」的第 5 个分量（设计第 3.5 节）。**不按周切**：
+    作业截止日不随周滚动，按周切分母会频繁为 0（当前库 3 份作业的截止日全在
+    2026-07/08），本周与上周共用同一个值。
+
+    组合 = (homework_id, student_id)，**去重**（表上没有唯一约束，重复提交时按条数
+    算会得出「6/5 人已提交」）。只统计 `student_ids` 里的在册学生，与分母同一份名单。
+
+    逾期 = `submitted_at` 的日期**晚于** `deadline`。deadline 为 NULL 的作业不会有
+    逾期（判不了就当没逾期，不猜）。逾期属于「已提交」，所以它**不是**「未提交」的
+    子集之外的东西——调用方算未提交率时要「未提交 + 逾期」，两项相加不会超过总数。
+
+    没有在册学生或库里没有作业时提前返回，避免空 `IN ()` 与无谓的查询。
+    """
+    hw_count = db.scalar(select(func.count()).select_from(Homework)) or 0
+    if not student_ids or hw_count == 0:
+        return hw_count, 0, 0
+
+    pair = tuple_(Submission.homework_id, Submission.student_id)
+    roster = Submission.student_id.in_(set(student_ids))
+
+    submitted = db.scalar(
+        select(func.count(distinct(pair))).where(roster)
+    ) or 0
+
+    late = db.scalar(
+        select(func.count(distinct(pair)))
+        .join(Homework, Homework.id == Submission.homework_id)
+        .where(roster)
+        .where(Submission.submitted_at.is_not(None))
+        .where(Homework.deadline.is_not(None))
+        .where(cast(Submission.submitted_at, Date) > Homework.deadline)
+    ) or 0
+
+    return hw_count, int(submitted), int(late)
