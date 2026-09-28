@@ -153,12 +153,12 @@ with SessionLocal() as db:
 "
 ```
 
-预期输出（已按真库核算）：
+预期输出（2026-09-28 实测）：
 - `本周中断行: []` —— 本周一就是今天，窗口内无记录
-- `上周中断行: [(11.0, 24.7), (19.0, 24.7), (23.0, 44.7), (21.0, 24.7)]` —— 4 条，顺序按 created_at 升序（11.0 是 09-23 那条 id=62，其余三条也是 09-23/09-21 的）
-- `上周重试行:` 6 条，其中 4 条 `segment_id` 非空且 `ai_score` 非空（85.7 / 78.9 / 87.4 / 71.3），另外 2 条（id=60、63）`segment_id` 非空但 `ai_score` 是 `None`，还有 2 条（id=65、68）`segment_id` 为 `None` 已被过滤
-  - 若打印出的条数与这个不符，**停下来核对**：先在 psql 里 `select id,student_id,segment_id,ai_score,created_at from practice_records order by created_at;` 看真值，不要改查询去迎合
-- `名单: 9`，`最后练习日` 是一个 6~7 项的字典（键是 `students.id`，值是 `datetime.date`）
+- `上周中断行: [(21.0, 24.7), (23.0, 44.7), (19.0, 24.7), (11.0, 24.7)]` —— 4 条，来自 id 67/66/64/62。这 4 条的 `created_at` 都是 `14:32`（同一秒），`order_by created_at` 对并列行不保证顺序，**排列顺序可以不同，集合必须一致**
+  - 若条数不符，**停下来核对**：先在 psql 里 `select id,student_id,segment_id,ai_score,created_at from practice_records order by created_at;` 看真值，不要改查询去迎合
+- `上周重试行:` **4 条** —— `(55,78,71.3)`、`(54,79,87.4)`、`(53,78,78.9)`、`(52,78,85.7)`。注意**不是 6 条**：`ai_score` 为 `None` 的那 4 条记录（id 60/63/65/68）`segment_id` **同时也是 NULL**，已被过滤，所以窗口内根本没有「有序段但没分数」的行
+- `名单: 9`，`最后练习日` 是 6 项的字典（键 `students.id` = 50~55，值是 `datetime.date`；9 名在册学生里有 3 名从未练过，**不在字典里**）
 
 - [ ] **Step 3: 提交**
 
