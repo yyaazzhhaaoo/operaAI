@@ -23,13 +23,17 @@ def dashboard_alerts():
 @login_required
 @teacher_required
 def dashboard_heatmap():
-    return ok(dashboard_service.heatmap(get_db()))
+    return ok(dashboard_service.heatmap(get_db()).model_dump())
 
 @api_bp.route("/dashboard/students",methods=["GET"])
 @login_required
 @teacher_required
 def dashboard_students():
-    return ok()
+    # mode="json"：这个响应里有 datetime（last_practice_at）。走默认的 model_dump()
+    # 会把 datetime 对象交给 Flask 的 jsonify，而它按 RFC-822（http_date）序列化，
+    # 出来是 "Mon, 21 Sep 2026 06:32:00 GMT" 这种串；mode="json" 出的是
+    # ISO-8601（"2026-09-21T14:32:00+08:00"），前端 new Date() 直接能解析。
+    return ok(dashboard_service.students(get_db()).model_dump(mode="json"))
 
 @api_bp.route("/students/<id>/recommendations",methods=["GET"])
 @login_required

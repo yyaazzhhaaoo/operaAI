@@ -223,7 +223,12 @@ body{
   background:var(--bg-secondary);border:1px solid var(--border-light);
 }
 .student-info{flex:1;min-width:0}
-.student-name{font-size:14px;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:6px}
+/* flex-wrap：接了 G2 之后一个学生最多能挂 3 个预警标签（骤降/未练习/锁定），
+   不换行的话标签会把姓名挤成竖排折行（「刘思/琪」）。允许换行后标签整体落到
+   第二行，姓名保住一行。 */
+.student-name{font-size:14px;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+/* 姓名与等级不许被压缩：它们是 flex 项，默认可收缩，会被宽标签压着折行 */
+.student-name-text{white-space:nowrap;flex-shrink:0}
 .student-meta{font-size:11px;color:var(--text-muted);margin-top:2px}
 .student-skills{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap}
 .skill-pill{
@@ -447,7 +452,9 @@ body{
         <span class="card-action" onclick="refreshBKT()">刷新数据 →</span>
       </div>
       <div id="heatmapChart"></div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--text-muted)">
+      <!-- 取不到数时顶替图表位，由页尾 loadHeatmap() 切换，见其注释 -->
+      <div id="heatmapHint" style="display:none;height:340px;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px"></div>
+      <div id="heatmapLegend" style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--text-muted)">
         <div style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;border-radius:2px;background:#4A8F6B"></span>已掌握 ≥0.85</div>
         <div style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;border-radius:2px;background:#0066B3"></span>学习中 0.60~0.85</div>
         <div style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;border-radius:2px;background:#C9A84C"></span>薄弱 0.40~0.60</div>
@@ -553,98 +560,49 @@ body{
 
 <script>
 // ============================================
-// 模拟数据（与之前一致）
+// 静态数据
 // ============================================
-const STUDENTS = [
-  {
-    id: "s01", name: "李小燕", level: "初级", avatar: "🎭", streak: 12, last: "2小时前", weekly: 5,
-    bkt: { "音准控制": 0.72, "气息支撑": 0.51, "滑音": 0.63, "拖腔": 0.28, "归韵咬字": 0.45, "节奏感知": 0.68 },
-    trends: { "音准控制": "up", "气息支撑": "flat", "滑音": "up", "拖腔": "flat", "归韵咬字": "up", "节奏感知": "up" },
-    alerts: [{ type: "info", text: "气息支撑 0.51，拖腔已锁定" }]
-  },
-  {
-    id: "s02", name: "张博文", level: "中级", avatar: "🎤", streak: 8, last: "30分钟前", weekly: 4,
-    bkt: { "音准控制": 0.85, "气息支撑": 0.78, "滑音": 0.82, "拖腔": 0.71, "归韵咬字": 0.80, "节奏感知": 0.88 },
-    trends: { "音准控制": "up", "气息支撑": "up", "滑音": "flat", "拖腔": "up", "归韵咬字": "up", "节奏感知": "flat" },
-    alerts: []
-  },
-  {
-    id: "s03", name: "刘思琪", level: "初级", avatar: "🎵", streak: 3, last: "5小时前", weekly: 2,
-    bkt: { "音准控制": 0.48, "气息支撑": 0.42, "滑音": 0.35, "拖腔": 0.22, "归韵咬字": 0.55, "节奏感知": 0.50 },
-    trends: { "音准控制": "down", "气息支撑": "down", "滑音": "flat", "拖腔": "down", "归韵咬字": "up", "节奏感知": "flat" },
-    alerts: [{ type: "danger", text: "音准控制骤降 -0.14" }]
-  },
-  {
-    id: "s04", name: "陈浩然", level: "高级", avatar: "🎶", streak: 21, last: "1小时前", weekly: 6,
-    bkt: { "音准控制": 0.94, "气息支撑": 0.91, "滑音": 0.88, "拖腔": 0.85, "归韵咬字": 0.90, "节奏感知": 0.87 },
-    trends: { "音准控制": "up", "气息支撑": "up", "滑音": "up", "拖腔": "up", "归韵咬字": "flat", "节奏感知": "up" },
-    alerts: []
-  },
-  {
-    id: "s05", name: "赵雨桐", level: "中级", avatar: "🎼", streak: 0, last: "昨天", weekly: 3,
-    bkt: { "音准控制": 0.76, "气息支撑": 0.68, "滑音": 0.72, "拖腔": 0.65, "归韵咬字": 0.78, "节奏感知": 0.82 },
-    trends: { "音准控制": "flat", "气息支撑": "down", "滑音": "flat", "拖腔": "down", "归韵咬字": "up", "节奏感知": "flat" },
-    alerts: [{ type: "warn", text: "已 3 天未练习" }]
-  },
-  {
-    id: "s06", name: "周明轩", level: "初级", avatar: "🎹", streak: 5, last: "3小时前", weekly: 3,
-    bkt: { "音准控制": 0.55, "气息支撑": 0.48, "滑音": 0.43, "拖腔": 0.30, "归韵咬字": 0.52, "节奏感知": 0.60 },
-    trends: { "音准控制": "up", "气息支撑": "up", "滑音": "flat", "拖腔": "flat", "归韵咬字": "up", "节奏感知": "up" },
-    alerts: [{ type: "info", text: "音准感知 0.43，滑音已锁定" }]
-  },
-  {
-    id: "s07", name: "吴佳怡", level: "中级", avatar: "🎸", streak: 15, last: "10分钟前", weekly: 5,
-    bkt: { "音准控制": 0.82, "气息支撑": 0.75, "滑音": 0.79, "拖腔": 0.68, "归韵咬字": 0.85, "节奏感知": 0.80 },
-    trends: { "音准控制": "up", "气息支撑": "up", "滑音": "up", "拖腔": "up", "归韵咬字": "flat", "节奏感知": "up" },
-    alerts: []
-  },
-  {
-    id: "s08", name: "孙志远", level: "初级", avatar: "🥁", streak: 1, last: "昨天", weekly: 1,
-    bkt: { "音准控制": 0.40, "气息支撑": 0.35, "滑音": 0.28, "拖腔": 0.28, "归韵咬字": 0.42, "节奏感知": 0.45 },
-    trends: { "音准控制": "down", "气息支撑": "down", "滑音": "down", "拖腔": "down", "归韵咬字": "flat", "节奏感知": "down" },
-    alerts: [{ type: "danger", text: "拖腔骤降 -0.17" }, { type: "warn", text: "已 2 天未练习" }]
-  }
-];
-
-const TECHNIQUES = ["音准控制", "气息支撑", "滑音", "拖腔", "归韵咬字", "节奏感知"];
+// 学生能力状态（mock STUDENTS）与技法表（mock TECHNIQUES）已随本次接线删除：
+// 列表改由 GET /api/dashboard/students 提供，技法列顺序也由该接口的 skills[] 给出，
+// 前端不再自己排一套。mock 留着只会让人误以为页面还在用它。
 
 const RECOMMENDATIONS = {
-  s01: [
+  48: [
     { title: "《穆桂英挂帅》· 辕门外三声炮（前四句）", difficulty: 0.62, reason: "难度略高于当前水平，适合挑战", status: "challenge" },
     { title: "《贵妃醉酒》· 海岛冰轮初转腾（慢板）", difficulty: 0.55, reason: "前置技法已达标，巩固音准", status: "match" },
     { title: "《霸王别姬》· 看大王在帐中", difficulty: 0.48, reason: "难度适中，强化气息支撑", status: "match" }
   ],
-  s02: [
+  49: [
     { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "难度匹配，重点练习拖腔", status: "match" },
     { title: "《红娘》· 叫张生隐藏在棋盘之下", difficulty: 0.78, reason: "花旦唱腔，拓展滑音技法", status: "challenge" },
     { title: "《空城计》· 我正在城楼观山景", difficulty: 0.65, reason: "老生唱腔，节奏感知训练", status: "match" }
   ],
-  s03: [
+  50: [
     { title: "气息基础短句 · 慢吸慢呼练习", difficulty: 0.35, reason: "前置技能补齐，先练气息", status: "match" },
     { title: "音准感知训练 · 单音模唱", difficulty: 0.30, reason: "音准控制薄弱，需基础训练", status: "match" },
     { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "拖腔依赖气息支撑，当前已锁定", status: "lock" }
   ],
-  s04: [
+  51: [
     { title: "《穆桂英挂帅》· 辕门外三声炮（全段）", difficulty: 0.85, reason: "高难度挑战，综合技法训练", status: "challenge" },
     { title: "《贵妃醉酒》· 海岛冰轮初转腾", difficulty: 0.78, reason: "四平调韵味处理", status: "match" },
     { title: "《霸王别姬》· 看大王在帐中", difficulty: 0.72, reason: "南梆子板式，情感表达", status: "match" }
   ],
-  s05: [
+  52: [
     { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "难度匹配，恢复练习", status: "match" },
     { title: "《贵妃醉酒》· 海岛冰轮初转腾", difficulty: 0.78, reason: "难度略高，适合挑战", status: "challenge" },
     { title: "气息基础短句", difficulty: 0.35, reason: "气息支撑下降，建议巩固", status: "match" }
   ],
-  s06: [
+  53: [
     { title: "音准感知训练 · 音阶模唱", difficulty: 0.40, reason: "音准感知 0.43，接近解锁滑音", status: "match" },
     { title: "《穆桂英挂帅》· 辕门外三声炮（前两句）", difficulty: 0.55, reason: "难度适中，音准控制训练", status: "match" },
     { title: "滑音专项练习 · 上滑音", difficulty: 0.50, reason: "前置技法未达标，已锁定", status: "lock" }
   ],
-  s07: [
+  54: [
     { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "难度匹配，拖腔可再精进", status: "match" },
     { title: "《红娘》· 叫张生隐藏在棋盘之下", difficulty: 0.78, reason: "花旦活泼唱腔，拓展风格", status: "challenge" },
     { title: "《空城计》· 我正在城楼观山景", difficulty: 0.82, reason: "老生慢板，气息长拖腔", status: "challenge" }
   ],
-  s08: [
+  55: [
     { title: "调门找音练习 · 慢速跟唱", difficulty: 0.25, reason: "整体音准偏低，需基础训练", status: "match" },
     { title: "气息基础短句", difficulty: 0.35, reason: "气息支撑 0.35，前置技能补齐", status: "match" },
     { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "多前置技法未达标，已锁定", status: "lock" }
@@ -673,31 +631,132 @@ function getTrendColor(trend) {
   return "#8A7A6A";
 }
 
+// ============================================
+// 学生能力状态列表（GET /api/dashboard/students，功能 5.6）
+// ============================================
+let studentRows = [];        // 接口返回的学生行。按 student_id 查，不靠下标
+let studentSkills = [];      // 接口给的技法列顺序，values / trends 按它对齐
+let alertByStudent = {};     // student_id -> [{type, text}]，来自 G2 /dashboard/alerts
+let selectedStudentId = null;
+
+function isNum(v) {
+  return typeof v === "number" && isFinite(v);
+}
+
+// 把 G2 的三类预警摊平成「按学生分组的标签」。三类正好对应页面上要显示的三件事：
+// 掌握度骤降（红）、连续未练习（黄）、前置技法锁定（蓝）。
+function buildAlerts(data) {
+  const out = {};
+  const push = (sid, type, text) => {
+    if (sid === null || sid === undefined) return;
+    (out[sid] = out[sid] || []).push({ type, text });
+  };
+  ((data && data.masteryDropAlert) || []).forEach(a => {
+    push(a.student_id, "danger", `${a.skill}骤降 ${a.diff}`);
+  });
+  ((data && data.overduePracticeAlert) || []).forEach(a => {
+    push(a.student_id, "warn", `已 ${a.days_over} 天未练习`);
+  });
+  ((data && data.prerequisiteLockAlert) || []).forEach(a => {
+    const p = (a.prereqs || [])[0];
+    if (!p) return;                    // 没有前置明细就拼不出文案，跳过这条
+    push(a.student_id, "info",
+         `${p.skill} ${Number(p.mastery).toFixed(2)}，${(a.locked_skills || []).join("/")}已锁定`);
+  });
+  return out;
+}
+
+// 「最近练习」转相对说法。接口给的是带 +08:00 的 ISO 串，new Date() 能正确解析；
+// 超过一周就给日期，免得出现「43天前」这种读不出信息的文案。
+function formatLastPractice(iso) {
+  if (!iso) return "未练习";
+  const t = new Date(iso);
+  if (isNaN(t.getTime())) return "未练习";
+  const mins = Math.floor((Date.now() - t.getTime()) / 60000);
+  if (mins < 1) return "刚刚";
+  if (mins < 60) return `${mins}分钟前`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}天前`;
+  return `${t.getMonth() + 1}月${t.getDate()}日`;
+}
+
+async function loadStudents() {
+  const container = document.getElementById("studentList");
+
+  let data = null;
+  let forbidden = false;
+  try {
+    const r = await fetch("/api/dashboard/students", { credentials: "same-origin" });
+    if (r.ok) data = (await r.json()).data;
+    else forbidden = r.status === 403;   // 接口挂 @teacher_required
+  } catch (e) { /* 后端不可达，走下面的降级 */ }
+
+  const rows = (data && data.students) || [];
+  if (rows.length === 0) {
+    // 三种空分开说：没权限（学生打开了班级看板）、没拿到数、拿到了但确实是空的。
+    // 403 归到「加载失败」里会让人一直刷新一个永远不会变的结果。
+    container.innerHTML = `<div style="padding:16px;font-size:13px;color:var(--text-muted)">${
+      forbidden ? "学生名单仅教师可见"
+                : (data ? "暂无学生" : "学生列表加载失败，请刷新重试")}</div>`;
+    document.getElementById("recommendPanel").style.display = "none";
+    return;
+  }
+
+  // 预警单独拉一次 G2：那一个接口挂了不该把整张列表拖没，降级成「谁都没有预警」。
+  // 页面**底部**还有一段独立脚本也在调这个接口驱动顶部三张预警卡，这里是第二次
+  // 请求。没合并是因为两者在不同的 <script> 块里、运行时机互不依赖，要共享就得
+  // 引入全局变量 + 时序约定，为一个 3.5KB 的读接口付这个代价不划算。
+  alertByStudent = {};
+  try {
+    const r = await fetch("/api/dashboard/alerts", { credentials: "same-origin" });
+    if (r.ok) alertByStudent = buildAlerts((await r.json()).data);
+  } catch (e) { /* 预警拿不到就当没有 */ }
+
+  studentRows = rows;
+  studentSkills = (data && data.skills) || [];
+  renderStudentList();
+
+  // 行序由接口定，不能再写死选中 48；刷新时保持当前选中的人，
+  // 选中的那个已经不在这批数据里（例如转班）才退回第一行
+  const keep = studentRows.some(s => String(s.student_id) === String(selectedStudentId))
+    ? selectedStudentId
+    : studentRows[0].student_id;
+  selectStudent(keep);
+}
+
 function renderStudentList() {
   const container = document.getElementById("studentList");
-  container.innerHTML = STUDENTS.map((s, idx) => {
-    const hasAlert = s.alerts.length > 0;
-    const alertHtml = s.alerts.map(a => {
+  container.innerHTML = studentRows.map(s => {
+    const alerts = alertByStudent[s.student_id] || [];
+    const hasAlert = alerts.length > 0;
+    const alertHtml = alerts.map(a => {
       const cls = a.type === "danger" ? "danger" : (a.type === "warn" ? "warn" : "info");
       return `<span class="alert-tag ${cls}">${a.text}</span>`;
     }).join("");
 
-    const topSkills = TECHNIQUES.slice(0, 3);
-    const skillsHtml = topSkills.map(t => {
-      const p = s.bkt[t];
+    // 只取前 3 个技法，与接接口前的观感一致
+    const skillsHtml = studentSkills.slice(0, 3).map((t, i) => {
+      const p = s.values ? s.values[i] : null;
+      // 该生该技法没测过时 values[i] 是 null，必须先判再用：直接 .toFixed() 会抛
+      // TypeError，而异常出在 map 里会把整张列表渲染成空白（不是只坏一格）
+      if (!isNum(p)) {
+        return `<div class="skill-pill"><span class="dot" style="background:#C9BFB2"></span><span class="name">${t}</span><span class="val" style="color:var(--text-muted)">未测</span></div>`;
+      }
       const color = getPLColor(p);
-      const arrow = getTrendArrow(s.trends[t]);
+      const arrow = getTrendArrow(s.trends ? s.trends[i] : null);
       return `<div class="skill-pill"><span class="dot" style="background:${color.text}"></span><span class="name">${t}</span><span class="val" style="color:${color.text}">${(p*100).toFixed(0)}% ${arrow}</span></div>`;
     }).join("");
 
-    const statusClass = hasAlert ? (s.alerts.some(a=>a.type==="danger") ? "status-danger" : "status-warning") : "status-active";
+    const statusClass = hasAlert ? (alerts.some(a=>a.type==="danger") ? "status-danger" : "status-warning") : "status-active";
 
     return `
-      <div class="student-item ${hasAlert ? 'warning' : ''}" data-id="${s.id}" onclick="selectStudent('${s.id}')">
-        <div class="student-avatar">${s.avatar}</div>
+      <div class="student-item ${hasAlert ? 'warning' : ''}" data-id="${s.student_id}" onclick="selectStudent('${s.student_id}')">
+        <div class="student-avatar">${s.avatar || "👤"}</div>
         <div class="student-info">
-          <div class="student-name">${s.name} <span style="font-size:11px;color:var(--text-muted);font-weight:400">· ${s.level}</span>${alertHtml}</div>
-          <div class="student-meta">最近练习: ${s.last} · 本周${s.weekly}次 · 连续${s.streak}天</div>
+          <div class="student-name"><span class="student-name-text">${s.student_name}</span><span class="student-name-text" style="font-size:11px;color:var(--text-muted);font-weight:400">· ${s.level || "—"}</span>${alertHtml}</div>
+          <div class="student-meta">最近练习: ${formatLastPractice(s.last_practice_at)} · 本周${s.week_practice_count}次 · 连续${s.streak_days}天</div>
           <div class="student-skills">${skillsHtml}</div>
         </div>
         <div class="student-status ${statusClass}"></div>
@@ -706,12 +765,58 @@ function renderStudentList() {
   }).join("");
 }
 
-function initHeatmap() {
-  const chart = echarts.init(document.getElementById("heatmapChart"));
-  const data = [];
-  STUDENTS.forEach((s, yIdx) => {
-    TECHNIQUES.forEach((t, xIdx) => {
-      data.push([xIdx, yIdx, s.bkt[t]]);
+// 热力图接真接口（GET /api/dashboard/heatmap）：x 轴技法列与 y 轴学生行都取自响应，
+// 前端不再自己排一套顺序，两边不会错位。
+// 取不到数时（403 / 后端不可达）把图表位让给一行灰字提示，不回退到 mock STUDENTS
+// ——那会先闪一屏假数据再被真数据覆盖。mock 现在只服务于右侧「学生能力状态」
+//（它的 G4 /api/dashboard/students 还是空壳）。
+let heatmapChart = null;
+let heatmapStudents = [];   // 索引即 y 轴行号，tooltip 与点击回调用它查当前行
+let heatmapSkills = [];     // 接口给的技法列，行内偏移量按它算
+
+async function loadHeatmap() {
+  const dom = document.getElementById("heatmapChart");
+  const hint = document.getElementById("heatmapHint");
+  const legend = document.getElementById("heatmapLegend");
+
+  let data = null;
+  try {
+    const r = await fetch("/api/dashboard/heatmap", { credentials: "same-origin" });
+    if (r.ok) data = (await r.json()).data;
+  } catch (e) { /* 后端不可达，走下面的降级 */ }
+
+  const students = (data && data.students) || [];
+  const skills = (data && data.skills) || [];
+  if (students.length === 0 || skills.length === 0) {
+    if (heatmapChart) { heatmapChart.dispose(); heatmapChart = null; }
+    dom.style.display = "none";
+    legend.style.display = "none";
+    hint.style.display = "flex";
+    // 两种空要分开说：没拿到数（403 / 后端不可达）与拿到了但确实是空的
+    hint.textContent = data ? "暂无掌握度数据" : "热力图加载失败，请刷新重试";
+    return;
+  }
+
+  dom.style.display = "";
+  legend.style.display = "flex";
+  hint.style.display = "none";
+  heatmapStudents = students;
+  heatmapSkills = skills;
+
+  if (!heatmapChart) {
+    heatmapChart = echarts.init(dom);
+    heatmapChart.on("click", function(params) {
+      const s = heatmapStudents[params.data[1]];
+      // 右侧列表是 mock、只有 8 人，跟接口的行不保证一一对应，找不到就不联动
+      if (s) selectStudent(s.student_id);
+    });
+    window.addEventListener("resize", () => { if (heatmapChart) heatmapChart.resize(); });
+  }
+
+  const cells = [];
+  students.forEach((s, yIdx) => {
+    skills.forEach((_, xIdx) => {
+      cells.push([xIdx, yIdx, s.values[xIdx]]);
     });
   });
 
@@ -723,26 +828,33 @@ function initHeatmap() {
       borderColor: "var(--border-light)",
       textStyle: { color: "var(--text-primary)", fontSize: 12 },
       formatter: function(p) {
-        const s = STUDENTS[p.data[1]];
-        const t = TECHNIQUES[p.data[0]];
+        const s = students[p.data[1]];
+        const t = skills[p.data[0]];
         const val = p.data[2];
+        const head = `<div style="font-weight:600;margin-bottom:4px">${s.student_name} · ${t}</div>`;
+        // bkt_history 里没有这个 (学生, 技法) 的记录，接口给的是 null，格子是空的
+        if (val === null || val === undefined) {
+          return head + `<div style="color:var(--text-muted);font-size:12px">暂无掌握度记录</div>`;
+        }
         const color = getPLColor(val);
-        return `<div style="font-weight:600;margin-bottom:4px">${s.name} · ${t}</div>
+        // 趋势要两条记录才算得出，只有一条时接口给 null——不能画成「→ 持平」
+        const trend = s.trends[p.data[0]];
+        return head + `
                 <div style="color:${color.text};font-size:16px;font-weight:700">P(L) = ${val.toFixed(2)}</div>
-                <div style="color:var(--text-muted);font-size:11px">状态: ${color.label} · 趋势: ${getTrendArrow(s.trends[t])}</div>`;
+                <div style="color:var(--text-muted);font-size:11px">状态: ${color.label} · 趋势: ${trend ? getTrendArrow(trend) : "—"}</div>`;
       }
     },
     grid: { left: 60, right: 10, top: 10, bottom: 30 },
     xAxis: {
       type: "category",
-      data: TECHNIQUES,
+      data: skills,
       axisLine: { lineStyle: { color: "var(--border-light)" } },
       axisLabel: { color: "var(--text-muted)", fontSize: 11 },
       splitLine: { show: false }
     },
     yAxis: {
       type: "category",
-      data: STUDENTS.map(s => s.name),
+      data: students.map(s => s.student_name),
       axisLine: { lineStyle: { color: "var(--border-light)" } },
       axisLabel: { color: "var(--text-muted)", fontSize: 11 },
       splitLine: { show: false }
@@ -763,13 +875,14 @@ function initHeatmap() {
     series: [{
       name: "掌握概率",
       type: "heatmap",
-      data: data,
+      data: cells,
       label: {
         show: true,
         color: "#fff",
         fontSize: 11,
         fontWeight: "bold",
-        formatter: p => p.data[2].toFixed(2)
+        // 空值格不写字：toFixed 在上面会抛 TypeError
+        formatter: p => (p.data[2] === null || p.data[2] === undefined) ? "" : p.data[2].toFixed(2)
       },
       itemStyle: {
         borderColor: "var(--bg-secondary)",
@@ -781,17 +894,10 @@ function initHeatmap() {
       }
     }]
   };
-  chart.setOption(option);
-
-  chart.on("click", function(params) {
-    const studentId = STUDENTS[params.data[1]].id;
-    selectStudent(studentId);
-  });
-
-  window.addEventListener("resize", () => chart.resize());
+  // 第二个参数 true = 不合并旧 option：点「刷新数据」后不会残留上一次的格子
+  heatmapChart.setOption(option, true);
+  heatmapChart.resize();   // 图表位从隐藏切回显示后 canvas 尺寸要重算
 }
-
-let selectedStudentId = null;
 
 function selectStudent(id) {
   selectedStudentId = id;
@@ -800,17 +906,28 @@ function selectStudent(id) {
   const el = document.querySelector(`.student-item[data-id="${id}"]`);
   if (el) el.classList.add("active");
 
-  const s = STUDENTS.find(x => x.id === id);
+  // id 有两个来源：onclick 传进来的字符串（"48"）与热力图点击传的数字（48），
+  // 统一按字符串比对，否则其中一条路径会静默匹配不上
+  const s = studentRows.find(x => String(x.student_id) === String(id));
   if (!s) return;
 
   const panel = document.getElementById("recommendPanel");
   panel.style.display = "block";
-  document.getElementById("recAvatar").textContent = s.avatar;
-  document.getElementById("recName").textContent = s.name;
-  document.getElementById("recLevel").textContent = `${s.level} · 综合掌握度 ${(Object.values(s.bkt).reduce((a,b)=>a+b,0)/6*100).toFixed(0)}%`;
+  document.getElementById("recAvatar").textContent = s.avatar || "👤";
+  document.getElementById("recName").textContent = s.student_name;
 
+  // 综合掌握度只对**测过的**技法求平均：一个技法都没测过（例如从没练过的学生）
+  // 不能除出 NaN，也不该拿 0 充数——0 是「完全未掌握」这个真实测量值，不是「没数据」
+  const measured = (s.values || []).filter(isNum);
+  const avg = measured.length
+    ? `${(measured.reduce((a, b) => a + b, 0) / measured.length * 100).toFixed(0)}%`
+    : "暂无数据";
+  document.getElementById("recLevel").textContent = `${s.level || "—"} · 综合掌握度 ${avg}`;
+
+  // 推荐路径（G5 GET /students/<id>/recommendations）尚未实现，这里仍用 mock；
+  // 该学生没有 mock 条目时给一行占位，不要让推荐区空着
   const recs = RECOMMENDATIONS[id] || [];
-  document.getElementById("recList").innerHTML = recs.map((r, i) => {
+  document.getElementById("recList").innerHTML = recs.length ? recs.map((r, i) => {
     const diffCls = r.status === "match" ? "match" : (r.status === "challenge" ? "challenge" : "lock");
     const diffText = r.status === "match" ? "难度匹配" : (r.status === "challenge" ? "挑战" : "已锁定");
     return `
@@ -823,26 +940,32 @@ function selectStudent(id) {
         <div class="rec-diff ${diffCls}">${diffText}</div>
       </div>
     `;
-  }).join("");
+  }).join("") : `<div style="font-size:12px;color:var(--text-muted);padding:4px 0">暂未生成推荐路径</div>`;
 
-  // 高亮热力图对应行
-  const chart = echarts.getInstanceByDom(document.getElementById("heatmapChart"));
-  if (chart) {
-    const yIdx = STUDENTS.findIndex(x => x.id === id);
-    chart.dispatchAction({ type: "highlight", seriesIndex: 0, dataIndex: yIdx * TECHNIQUES.length });
+  // 高亮热力图对应行。行号必须在接口返回的行序里找，不能用列表的下标
+  // ——接口会多出「张三」这类没有任何记录的学生，两边下标就错开了。
+  if (heatmapChart && heatmapSkills.length > 0) {
+    const yIdx = heatmapStudents.findIndex(x => String(x.student_id) === String(id));
+    if (yIdx >= 0) {
+      heatmapChart.dispatchAction({ type: "highlight", seriesIndex: 0, dataIndex: yIdx * heatmapSkills.length });
+    }
   }
 }
 
 function refreshBKT() {
-  alert("模拟数据刷新：BKT 状态已更新（实际将调用 /api/v1/students/bkt-state）");
+  // 两个都重拉：掌握度和练习统计是同一批数据的两个视角，只刷一个会出现
+  // 热力图已经更新、右侧列表还停在旧值的情况
+  loadHeatmap();      // GET /api/dashboard/heatmap
+  loadStudents();     // GET /api/dashboard/students + /api/dashboard/alerts
 }
 
 // ============================================
 // 初始化
 // ============================================
-renderStudentList();
-initHeatmap();
-selectStudent("s01");
+// 选中哪一行由 loadStudents 决定（接口的行序由后端定，前端不写死 id），
+// 所以这里不再调 selectStudent。
+loadHeatmap();
+loadStudents();
 </script>
 <!-- ==== 登录用户条 + 登出（页面鉴权配套，见 docs/superpowers/specs/2026-09-15-page-auth-design.md）==== -->
 <!-- 页面已被服务端保护，能加载出来就说明会话有效。这段脚本不做守卫，
