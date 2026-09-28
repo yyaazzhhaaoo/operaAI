@@ -206,6 +206,9 @@ body{
 /* 盖掉上面的 .piece-btn:hover，否则划过禁用按钮仍会变色、看着像可点 */
 .piece-btn:disabled:hover{border-color:var(--border-light);color:var(--text-secondary)}
 .piece-empty{font-size:13px;color:var(--text-muted);padding:8px 0}
+/* 分段比曲目低一层：字号小一点、上边距收紧，免得两行看着像同级 */
+#segmentSelector{margin-top:-6px}
+#segmentSelector .piece-btn{font-size:12px;padding:6px 12px}
 
 /* ===== 歌词网格 ===== */
 .lyrics-grid{
@@ -442,6 +445,8 @@ body{
 
   <!-- 曲目按钮由页末脚本从 GET /api/demos 渲染 -->
   <div class="piece-selector" id="pieceSelector"></div>
+  <!-- 唱段按钮由页末脚本从 GET /api/demos/<id>/segments 渲染 -->
+  <div class="piece-selector" id="segmentSelector"></div>
 
   <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px">
     <!-- 左侧：歌词网格 -->
@@ -758,8 +763,7 @@ function showToast(type, title, msg) {
 
 // ============================================
 // 曲目选择器（C1 GET /api/demos）
-// 歌词网格仍是上面的 LYRICS mock——换歌词要等 C2/C3
-// （/demos/<id>/segments、/segments/<id>）实现，本轮只把曲目列表接真。
+// 歌词网格仍是上面的 LYRICS mock——换歌词要等 C3（/segments/<id>）实现。
 // ============================================
 
 let demos = [];          // /api/demos 的原样结果（已按 id 升序）
@@ -780,6 +784,8 @@ async function fetchDemos() {
     // 不弹 toast、不打断页面：歌词网格仍是 mock，曲目列表拿不到
     // 不该让整个标注页不可用
     box.innerHTML = '<span class="piece-empty">曲目列表加载失败</span>';
+    // 分段区一并清空：曲目都没了，留着上一次的分段只会误导
+    document.getElementById("segmentSelector").innerHTML = "";
     return;
   }
 
@@ -817,12 +823,88 @@ function switchPiece(idx) {
   const d = demos[idx];
   if (!d) return;
   currentDemoIdx = idx;
-  document.querySelectorAll(".piece-btn").forEach((b, i) => {
+  // 必须限定在 #pieceSelector 内：加了分段选择器之后，裸的 ".piece-btn"
+  // 会把分段按钮也算进来，下标当场错位
+  document.querySelectorAll("#pieceSelector .piece-btn").forEach((b, i) => {
     b.classList.toggle("active", i === idx);
   });
+  // 换曲目的瞬间旧分段必须立刻消失，否则会在新分段到达前一直显示上一个曲目的分段
+  document.getElementById("segmentSelector").innerHTML = "";
+  // 不 await：高亮与 toast 不依赖分段结果，不该等它
+  fetchSegments(d.id);
   // 文案不能说「已加载新曲目数据」——歌词网格仍是 mock，那会让人以为
   // 网格跟着换了
-  showToast("info", "🎵 已选择曲目", `${d.title} · 歌词数据待接入（C2/C3 未实现）`);
+  showToast("info", "🎵 已选择曲目", `${d.title} · 歌词网格待接入（C3 未实现）`);
+}
+
+// ============================================
+// 分段选择器（C2 GET /api/demos/<id>/segments）
+// 歌词网格仍是上面的 LYRICS mock——换歌词要等 C3（/segments/<id>）实现。
+// ============================================
+
+let segments = [];       // 当前曲目的分段（按 seq 升序）
+let currentSegIdx = -1;  // 渲染顺序的下标，不是 segments.id
+let segReqToken = 0;     // 竞态守卫，见 fetchSegments
+
+async function fetchSegments(demoId) {
+  const box = document.getElementById("segmentSelector");
+  // 领号必须在 await 之前；await 之后再领就等于没领
+  const token = ++segReqToken;
+  let rows;
+  try {
+    const r = await fetch(`/api/demos/${demoId}/segments`, { credentials: 'same-origin' });
+    const body = await r.json();
+    if (!r.ok || body.code !== 0) throw new Error(body.message || String(r.status));
+    rows = body.data || [];
+  } catch (e) {
+    // 期间又切过曲目的话，这个失败属于上一个曲目，不该覆盖当前的状态
+    if (token !== segReqToken) return;
+    box.innerHTML = '<span class="piece-empty">分段加载失败</span>';
+    return;
+  }
+
+  // 判定必须在 await 之后：快速连点两个曲目时，先发的慢响应可能后到，
+  // 不能让它把后发的正确结果覆盖掉（分段会显示成上一个曲目的）
+  if (token !== segReqToken) return;
+
+  if (rows.length === 0) {
+    box.innerHTML = '<span class="piece-empty">该曲目暂无分段</span>';
+    return;
+  }
+
+  segments = rows;
+  currentSegIdx = -1;
+  box.innerHTML = "";
+  rows.forEach((s, i) => {
+    const btn = document.createElement("button");
+    btn.className = "piece-btn";
+    btn.textContent = segLabel(s);
+    btn.onclick = () => switchSegment(i);
+    box.appendChild(btn);
+  });
+
+  switchSegment(0);
+}
+
+function segLabel(s) {
+  // seq / title / duration 三列在 DDL 上均可空，缺哪个少显示哪个，
+  // 不要拼出「第 null 段 · nulls」这种
+  const parts = [];
+  if (s.seq !== null && s.seq !== undefined) parts.push(`第 ${s.seq} 段`);
+  if (s.title) parts.push(s.title);
+  if (typeof s.duration === 'number') parts.push(`${s.duration.toFixed(1)}s`);
+  return parts.join(" · ") || `片段 ${s.id}`;
+}
+
+function switchSegment(idx) {
+  const s = segments[idx];
+  if (!s) return;
+  currentSegIdx = idx;
+  document.querySelectorAll("#segmentSelector .piece-btn").forEach((b, i) => {
+    b.classList.toggle("active", i === idx);
+  });
+  // 同 switchPiece：不能说「已加载新唱段数据」，歌词网格仍是 mock
+  showToast("info", "🎵 已选择唱段", `${segLabel(s)} · 歌词网格待接入（C3 未实现）`);
 }
 
 renderLyrics();
