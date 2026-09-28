@@ -841,7 +841,18 @@ git commit -m "feat: 班级看板畏难指数卡片改渲染真值
 cd /Users/meiyazhao/Documents/lianshu/operaAI && .venv/bin/python scripts/check_db.py
 ```
 
-预期：通过（退出码 0）。本次没有改表结构，这一步是保险——若报出差异，说明动了不该动的模型，回退。
+**预期：报差异、退出码 1——这是既有漂移，不是本次引入的。** 实测输出：
+
+```
+比对范围：15 张表 / 103 列 / 22 个外键 / 2 个自定义索引
+结果：有差异 ✗
+  - 表集合不一致：真库独有={'demo_versions'} 模型独有=无
+  - teacher_demos 列名差异：真库独有={'parse_time_sec', 'parse_status', 'techniques_json'} 模型独有=无
+```
+
+`demo_versions` 与 `teacher_demos` 的那 3 列是 Demucs 示范库解析那次加进真库的，没同步回 `schema.sql` 与 `app/models/`。**判断依据**：`git diff --name-only main...HEAD` 里没有 `schema.sql` / `seed.sql` / `app/models/`，而 `check_db.py` 比的是模型与真库——两边模型相同，结果必然相同，所以 `main` 上跑也一样报错。
+
+**这一步的断言是「差异内容与上面逐字一致」，不是「退出码 0」。** 若出现了上面两行之外的差异项，才是动了不该动的模型，回退。本次**不去修**这个既有漂移（超出范围）。
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI && git status --short && git log --oneline -6
