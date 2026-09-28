@@ -1,10 +1,10 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
 from app.repositories import user_repo, library_repo, annotations_repo, homeworks_repo, bkt_history_repo, \
-    practice_records_repo, graph_repo
+    practice_records_repo, graph_repo, chat_repo
 from app.common.errors import BusinessError
 from app.models import BktHistory, GraphNode, TeacherDemo
 from app.schemas.dashboard import DashBoardSummary, MasteryDropAlert, AlertResponse, PrereqLockAlert, PrereqSkill, \
@@ -25,6 +25,34 @@ DIFF_CHALLENGE = 0.25
 # 对不上（图谱写「归韵」、页面写「归韵咬字」，见 DOC_ISSUES），拿它当列会少一半、
 # 还对不齐。技法维度变更时改这里这一处。
 SKILLS: tuple[str, ...] = ("音准控制", "气息支撑", "滑音", "拖腔", "归韵咬字", "节奏感知")
+
+# ---- 畏难倾向指数（功能 5.8）的实现口径 ----
+#
+# 依据：《班级看板--班级畏难倾向指数说明.md》（2026-09-28 新增，在 ../艺校_docs/）。
+# 文档给了 5 个分量名与加权求和的骨架，但**每个分量的判据都没规定**——下面的
+# 常量与 _fear_index 里的判定全是实现时定的，逐条列在设计文档第 3 节。
+
+# 5 个分量的权重。文档写「权重可根据教学经验设定（例如各占 20%）」，这里就取均等。
+# 某分量分母为 0 时**记 0 而不重新归一化权重**：权重一旦随缺失项浮动，周与周之间的
+# 指数就不再可比，趋势本身会失去意义。代价是「某分量长期没数据」会固定压低指数
+# （当前 chat_messages 里 role='user' 就有 0 条，压最多 0.2）。
+FEAR_WEIGHTS: tuple[float, ...] = (0.2, 0.2, 0.2, 0.2, 0.2)
+
+# 「练习中断」的代理阈值：录下来的时长不足唱段时长的这个比例就算没唱完。
+# practice_records 里没有「学生主动退出」的字段，只能拿时长近似。**未经真实素材
+# 标定**，与 parse_service.TOP_DB 同类性质；调参改这一个数（越小判得越宽松）。
+INTERRUPT_RATIO = 0.5
+
+# 「连续未练习」的天数门槛。文档写「连续多日不再提交」但没给天数，取 7 天——
+# 与「本周」同量级，整整一周没碰就算断练。
+IDLE_DAYS = 7
+
+# 「挫败关键词」词表。文档只举了「太难」「算了」「不会」三个加一个「等」，
+# 其余是实现时补的；只影响第 4 个分量，可按教学经验增删。
+FRUSTRATION_KEYWORDS: tuple[str, ...] = (
+    "太难", "好难", "不会", "学不会", "算了",
+    "放弃", "不想练", "听不懂", "做不到", "坚持不下去",
+)
 
 
 def summary(db:Session) -> DashBoardSummary:
@@ -373,16 +401,18 @@ def recommendations(db: Session, student_id: int) -> RecommendationResponse:
 
 
 def process_metrics(db: Session) -> ProcessMetrics:
-    """班级过程指标（功能 5.8）：本周人均练习时长与频次，附上周同口径值。
+    """班级过程指标（功能 5.8）：本周人均练习时长、人均练习频次、班级畏难倾向指数。
 
-    周期、分母、单位与 fear_index 的处理见 ProcessMetrics 的注释。
+    三项都附一份**上周同口径**值供前端算趋势，差值不在后端做——与 ProcessMetrics
+    里两个 avg_* 字段的分工一致。周期、分母、单位的说明见 ProcessMetrics 注释；
+    畏难指数的 5 个分量怎么算见 FEAR_WEIGHTS 附近的常量区与 `_fear_index`。
     """
     student_ids = [row[0] for row in user_repo.get_student_roster(db)]
 
     # 本周一。与 students() 里的 week_start 同一套算法，两个接口的「本周」必须同一天，
     # 否则同一页面上「本周练习 3 次」和「人均 0.2 次」会打架
-    this_week = _beijing_now().date()
-    this_week -= timedelta(days=this_week.weekday())
+    now = _beijing_now()
+    this_week = now.date() - timedelta(days=now.date().weekday())
     last_week = this_week - timedelta(days=7)
 
     totals = practice_records_repo.get_weekly_totals(db, student_ids)
@@ -392,6 +422,28 @@ def process_metrics(db: Session) -> ProcessMetrics:
     # 在册 0 人时给 0 而不是让 ZeroDivisionError 冒成 500：库是空的时候这个接口
     # 仍然应该能回 200，页面显示 0 比显示「加载失败」诚实
     n = len(student_ids) or 1
+
+    # 畏难指数的两个窗口，左闭右开：
+    #   本周 [本周一 00:00, 现在)、上周 [上周一 00:00, 本周一 00:00)
+    # 「连续未练习」的截至日取各窗口**已过完的最后一天**——本周是今天，上周是上周日，
+    # 两边都是「该周到头来还剩多少人没练」，口径对齐。
+    this_week_start = datetime.combine(this_week, time.min)
+    last_week_start = datetime.combine(last_week, time.min)
+    # 作业未提交率不按周切，两个窗口共用（见 _homework_skip_rate）
+    homework_rate = _homework_skip_rate(db, student_ids)
+
+    if student_ids:
+        fear = _fear_index(db, student_ids, this_week_start, now, now.date(), homework_rate)
+        fear_previous = _fear_index(
+            db, student_ids, last_week_start, this_week_start,
+            this_week - timedelta(days=1), homework_rate,
+        )
+    else:
+        # 没有在册学生就没有分母。回 None 而不是 0：0 会被读成「班级一点都不畏难」，
+        # 与「没有数据」是两回事（见 ProcessMetrics 的注释）。这是 fear_index 唯一
+        # 还会回 None 的场景。
+        fear = fear_previous = None
+
     return ProcessMetrics(
         week_start=this_week,
         student_count=len(student_ids),
@@ -399,7 +451,86 @@ def process_metrics(db: Session) -> ProcessMetrics:
         avg_duration_sec_last_week=prev_sec / n,
         avg_practice_count=cur_count / n,
         avg_practice_count_last_week=prev_count / n,
+        fear_index=fear,
+        fear_index_last_week=fear_previous,
     )
+
+
+def _homework_skip_rate(db: Session, student_ids: list[int]) -> float:
+    """作业未提交率 = (未提交的「作业×学生」组合 + 逾期提交的组合) / 全部组合。
+
+    逾期单独加一遍：它属于「提交了」，但文档把「逾期提交」和「未提交」并列为畏难
+    信号，所以要补进来。两项互不相交，相加不会超过总数。
+    """
+    hw_count, submitted, late = homeworks_repo.get_submission_stats(db, student_ids)
+    total = hw_count * len(student_ids)
+    if total == 0:
+        return 0.0
+    # max/min 是防御：正常取不到（submitted 是去重后的组合数，不会超过 total）
+    missing = max(total - submitted, 0)
+    return min((missing + late) / total, 1.0)
+
+
+def _fear_index(db: Session, student_ids: list[int], start: datetime, end: datetime,
+                as_of: date, homework_rate: float) -> float:
+    """一个窗口的班级畏难倾向指数（0~1，越高越畏难），5 个分量加权求和。
+
+    `[start, end)` 是该窗口；`as_of` 是「连续未练习」的截至日（本周=今天，
+    上周=上周日）。`homework_rate` 由调用方算好传进来——它不按周切，两个窗口同值。
+
+    每个分量各自归一化到 0~1 后乘固定权重。**分母为 0 的分量记 0、不重新归一化**
+    （理由见 FEAR_WEIGHTS 的注释）。
+    """
+    w = FEAR_WEIGHTS
+
+    # 1. 练习中断率：录下来的时长不足唱段时长的 INTERRUPT_RATIO 就算没唱完。
+    #    唱段时长或本次时长缺一不可，判不了的记录分子分母都不进。
+    rows = practice_records_repo.get_interrupt_rows(db, start, end)
+    interrupted = sum(1 for dur, seg_dur in rows if dur < INTERRUPT_RATIO * seg_dur)
+    interrupt_rate = interrupted / len(rows) if rows else 0.0
+
+    # 2. 重试放弃率：同一（学生,唱段）练了不止一遍，最后一遍没刷新自己的最好成绩。
+    #    ai_score 有缺值的组**整组弃用**——只拿到一半分数的组，算出来的「有没有提升」
+    #    不可信，不如不算。
+    scored: dict[tuple[int, int], list[tuple[datetime, float]]] = {}
+    unscored: set[tuple[int, int]] = set()
+    for sid, seg_id, score, at in practice_records_repo.get_retry_rows(db, start, end):
+        key = (sid, seg_id)
+        if score is None:
+            unscored.add(key)
+        else:
+            scored.setdefault(key, []).append((at, score))
+
+    retried = [g for k, g in scored.items() if k not in unscored and len(g) >= 2]
+    # 仓储层已按 created_at 升序返回；这里再排一次是按时间判「最后一次」的前提，
+    # 不依赖上游的顺序（上游改了排序这里也不会错）
+    for g in retried:
+        g.sort(key=lambda x: x[0])
+    given_up = sum(1 for g in retried if g[-1][1] <= max(s for _, s in g[:-1]))
+    retry_rate = given_up / len(retried) if retried else 0.0
+
+    # 3. 连续未练习率：截至 as_of，最后一次练习距今 ≥ IDLE_DAYS 天。
+    #    **从未练过的学生计入分子**——「一直没练」是畏难的最强信号，不是缺失值。
+    if student_ids:
+        last_days = practice_records_repo.get_last_practice_dates(db, student_ids, end)
+        idle = sum(
+            1 for sid in student_ids
+            if sid not in last_days or (as_of - last_days[sid]).days >= IDLE_DAYS
+        )
+        idle_rate = idle / len(student_ids)
+    else:
+        idle_rate = 0.0
+
+    # 4. 挫败关键词触发率：只算学生自己发的消息（理由见 chat_repo）。
+    #    当前真库 role='user' 有 0 条 → 这项恒 0。
+    hit, total_msg = chat_repo.count_user_messages(db, start, end, FRUSTRATION_KEYWORDS)
+    keyword_rate = hit / total_msg if total_msg else 0.0
+
+    return (w[0] * interrupt_rate
+            + w[1] * retry_rate
+            + w[2] * idle_rate
+            + w[3] * keyword_rate
+            + w[4] * homework_rate)
 
 
 def homework_progress(db: Session) -> HomeworkProgressResponse:

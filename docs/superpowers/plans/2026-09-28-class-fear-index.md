@@ -628,7 +628,9 @@ with SessionLocal() as db:
 "
 ```
 
-预期：`空名单: 0.0`（`_fear_index` 对空名单不抛异常；回 `None` 的判断在 `process_metrics` 里，因为那是「响应字段」层面的语义，不是计算层面的）。**不出现 `ZeroDivisionError`。**
+预期：`空名单: 0.21296`（= `0.2 × (中断率 0.25 + 作业 0.8148)`，窗口传的是**上周**，里面有 4 条有序段的记录，中断率不是 0）。**关键是「不抛异常、不出现 `ZeroDivisionError`」，具体数值不是断言点。**
+
+回 `None` 的判断在 `process_metrics` 里而不是 `_fear_index` 里：那是「响应字段」层面的语义（没有分母就没有这个指标），不是计算层面的——`_fear_index` 对空名单算出一个「只含与名单无关的分量」的值是合理的，反正 `process_metrics` 不会用它。
 
 - [ ] **Step 8: 提交**
 

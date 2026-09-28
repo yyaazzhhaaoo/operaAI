@@ -174,18 +174,20 @@ class HomeworkProgressResponse(BaseModel):
 class ProcessMetrics(BaseModel):
     """班级过程指标（功能 5.8）。
 
-    文档（《1-PRD》5.8、《3-功能清单》5.8、《5-接口清单》G6）对它的全部描述只有
-    「练习时长/频次/畏难指数」三个词，周期、分母、单位、公式都没有。以下口径是
-    本次实现定死的：
+    三个指标的口径都是本次实现定死的（《1-PRD》5.8、《3-功能清单》5.8、
+    《5-接口清单》G6 只给了指标名）：
 
     - 窗口：**本周**（周一起算，北京日期），与 StudentAbility.week_practice_count 同口径；
-      另带一份上周同口径值，供前端算趋势箭头。不返回差值本身——减法前端做。
-    - 分母：**全体在册学生数**，含本周没练过的。所以两个指标都是「人均」语义：
+      每个指标都另带一份上周同口径值，供前端算趋势箭头。不返回差值本身——减法前端做。
+    - 分母：**全体在册学生数**，含本周没练过的。所以两个 avg_* 都是「人均」语义：
       avg_duration_sec 是「人均本周练了多少秒」，不是「单次平均时长」。
     - 单位：时长一律**秒**，与 practice_records.duration_sec 同单位，前端显示分钟自行 /60。
-      库里存的是秒（当前实测 11-34），页面文案写「分」需要换算。
-    - fear_index **恒为 None**：文档没有定义畏难指数的算法，不编公式（见 DOC_ISSUES）。
-      前端应显示「待定义」而不是把 None 当 0。
+
+    fear_index 的算法来自 2026-09-28 新增的《班级看板--班级畏难倾向指数说明.md》：
+    5 个分量各自归一化到 0~1 后按固定权重（各 0.2）加权求和，范围 0~1，越高越畏难。
+    分量的具体判据文档没写，实现口径见 dashboard_service 的 FEAR_WEIGHTS 常量区与
+    `_fear_index`，以及 docs/superpowers/specs/2026-09-28-class-fear-index-design.md。
+    趋势由前端相减得出，与两个 avg_* 同构。
     """
     model_config = ConfigDict(from_attributes=True)
     week_start: date                      # 本周周一，供前端显示统计口径
@@ -194,4 +196,7 @@ class ProcessMetrics(BaseModel):
     avg_duration_sec_last_week: float     # 上周同口径，算趋势用
     avg_practice_count: float             # 本周人均练习次数
     avg_practice_count_last_week: float   # 上周同口径，算趋势用
-    fear_index: float | None = None       # 文档未定义，恒 None
+    # 本周班级畏难倾向指数，0~1。**唯一回 None 的场景是在册学生数为 0**——那时
+    # 没有分母也没有数据，0 会被读成「一点都不畏难」，与「没有数据」是两回事。
+    fear_index: float | None
+    fear_index_last_week: float | None    # 上周同口径，算趋势用；与 fear_index 同时为 None
