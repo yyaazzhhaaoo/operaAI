@@ -913,17 +913,34 @@ async function loadRecommendations(id) {
 // ============================================
 // 班级过程指标（GET /api/dashboard/process-metrics，功能 5.8）
 // ============================================
-// 三个坑，改这段前先看：
+// 四个坑，改这段前先看：
 // (1) 接口的时长是**秒**（与 practice_records.duration_sec 同单位），卡片文案是「分」，所以 /60；
 // (2) 接口的「平均」是**人均**（分母 = 全体在册学生，含本周没练过的），不是单次平均；
-// (3) 畏难指数文档没有定义算法，接口恒回 null，必须显示「待定义」——绝不能当 0 用，
-//     那会读成「班级一点都不畏难」，与「没有数据」是两回事。
+// (3) 畏难指数现在有真值了（算法见 ../艺校_docs/班级看板--班级畏难倾向指数说明.md），
+//     但**在册学生为 0 时接口仍回 null**。null 必须显示「暂无数据」，绝不能当 0 用——
+//     那会读成「班级一点都不畏难」，与「没有数据」是两回事；
+// (4) 畏难指数**越高越糟**，趋势箭头的颜色要反着来（上升标红），不能让 fmtTrend 用默认映射。
 // 趋势由前端相减得出：接口一并给上周同口径值，不在后端算差值。
-function fmtTrend(delta, unit, digits) {
-  if (Math.abs(delta) < 1e-9) return { cls: "", text: `持平（${unit}）` };
+// invert：给「越高越糟」的指标用（目前只有畏难指数）。默认映射是升=绿、降=红，
+// 对练习时长/频次成立，对畏难指数恰好相反，所以要能把两个 class 对调。
+function fmtTrend(delta, unit, digits, invert) {
+  const suffix = unit ? ` ${unit}` : "";
+  if (Math.abs(delta) < 1e-9) return { cls: "", text: unit ? `持平（${unit}）` : "持平" };
   const up = delta > 0;
-  return { cls: up ? "up" : "down", text: `${up ? "↑ +" : "↓ "}${delta.toFixed(digits)} ${unit}` };
+  const cls = invert ? (up ? "down" : "up") : (up ? "up" : "down");
+  return { cls, text: `${up ? "↑ +" : "↓ "}${delta.toFixed(digits)}${suffix}` };
 }
+
+// 畏难指数的等级档位，出自说明文档第五节的四档表。边界值（0.20/0.40/0.60）归入
+// **偏高**那一档，所以判定用左闭右开（v < max），与文档的「0 ~ 0.20 / 0.20 ~ 0.40」
+// 写法一致而不产生重叠。
+const FEAR_LEVELS = [
+  { max: 0.20, text: "保持节奏" },
+  { max: 0.40, text: "需关注" },
+  { max: 0.60, text: "需调整难度" },
+  { max: Infinity, text: "需立即干预" },
+];
+const fearLevel = v => FEAR_LEVELS.find(l => v < l.max).text;
 
 async function loadProcessMetrics() {
   let data = null;
@@ -955,10 +972,21 @@ async function loadProcessMetrics() {
       fmtTrend(data.avg_practice_count - data.avg_practice_count_last_week, "次", 1));
 
   const fear = data.fear_index;
-  const noFear = fear === null || fear === undefined;
-  set("metricFear", "metricFearTrend",
-      noFear ? "待定义" : Number(fear).toFixed(2),
-      noFear ? { cls: "", text: "文档未定义算法" } : null);
+  if (fear === null || fear === undefined) {
+    // 只有在册学生为 0 才会走到这里。显示「暂无数据」而不是 0.00，也不是反过来
+    // 把它当成「不畏难」（见本段顶部注释第 3 条）。
+    set("metricFear", "metricFearTrend", "—", { cls: "", text: "暂无数据（在册学生为 0）" });
+  } else {
+    const prev = data.fear_index_last_week;
+    // 上周值也缺时不显示趋势，等级照显示——等级只依赖本周值
+    const trend = (prev === null || prev === undefined)
+      ? null
+      : fmtTrend(fear - prev, "", 2, true);
+    set("metricFear", "metricFearTrend", Number(fear).toFixed(2), {
+      cls: trend ? trend.cls : "",
+      text: `${trend ? trend.text + " · " : ""}${fearLevel(fear)}`,
+    });
+  }
 }
 
 // ============================================

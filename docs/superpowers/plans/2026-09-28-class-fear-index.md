@@ -760,10 +760,13 @@ const fearLevel = v => FEAR_LEVELS.find(l => v < l.max).text;
 - [ ] **Step 5: 静态检查页面没有语法错误**
 
 ```bash
-cd /Users/meiyazhao/Documents/lianshu/operaAI && node --check <(sed -n '/^<script>$/,/^<\/script>$/p' dashboard.html | sed '1d;$d') && echo "语法 OK"
+cd /Users/meiyazhao/Documents/lianshu/operaAI && awk '/^<script>$/{f=1;next} /^<\/script>$/{f=0;next} f' dashboard.html > /tmp/dash.js && node --check /tmp/dash.js && echo "语法 OK"
 ```
 
 预期：`语法 OK`。若报 `SyntaxError`，说明 JS 改坏了，先修再往下。
+
+**不要用 `sed -n '/^<script>$/,/^<\/script>$/p'`**：本页有 3 个内联 `<script>` 块（`:533`、`:1090`、`:1156`），sed 的区间会把它们连同中间的 `</script>` 一起抽出来，必然报 `Unexpected token '<'` 的假阳性。awk 的开关写法才会逐块跳过标签本身。
+
 （`node` 不存在时跳过这一步，改到 Step 6 的页面上用浏览器控制台看报错。）
 
 - [ ] **Step 6: 起服务、真实登录、看页面**
@@ -784,10 +787,12 @@ curl -s -b /tmp/ck.txt http://127.0.0.1:8877/api/dashboard/process-metrics
 预期：第二条返回 `{"code":0,"message":"ok","data":{...}}`，`data.fear_index` 是一个 **0~1 之间的小数**（不再是 `null`），`data.fear_index_last_week` 同样存在且是小数。把这两个数与 Task 3 Step 5 打印的值核对一致。
 
 然后用浏览器（**必须走 `/browse` 技能**，不要用 chrome MCP 工具）打开 `http://localhost/index.html`，用 `teacher01 / xiyun@2026` 登录，看「班级过程指标」区第三张卡片：
-- 数值是两位小数（如 `0.28`），**不是**「待定义」
-- 下方一行是 `↑ +0.xx · 需关注` 或 `持平 · 保持节奏` 之类（趋势 + 等级）
-- 趋势**上升时颜色是红的**（`.metric-trend.down` 用 `--danger`），下降时是绿的——这是本次特意反过来的
-- 同一行的「本周平均练习时长」卡片显示 `0.0`、趋势 `↓ -18.3 分`（本周 0 条记录，上周人均 18.3 秒）；「平均练习频次」趋势 `↓ -0.9 次`。**这两个数字与本次改动无关，是改动前就有的现状**
+实测（2026-09-28，`dashboard.html` 的真实 DOM）：
+- 畏难卡片：`0.27`，趋势行 `↓ -0.03 · 需关注`，`getComputedStyle` 是 `rgb(74, 143, 107)`（= `--success` 绿），class `metric-trend up`。**下降标绿正是 invert 生效的证据**——若没生效这里会是红色 `rgb(184, 58, 47)`
+- 「本周平均练习时长(分)」卡片：`0.0`，趋势 `↓ -0.3 分`（本周 0 条记录，上周人均 18.33 **秒** → 换算成分钟是 0.31 分，所以差值是 -0.3 **分**，不是 -18.3）
+- 「平均练习频次(次/周)」卡片：`0.0`，趋势 `↓ -0.9 次`
+- 控制台 `$B console --errors` 无任何报错；热力图 canvas、学生能力状态 9 项、作业进度 3 项都正常渲染
+- **这两个平均指标与本次改动无关，是改动前就有的现状**
 
 - [ ] **Step 7: 提交**
 
