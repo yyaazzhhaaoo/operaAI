@@ -114,3 +114,19 @@ def demo_library_add(
     library_repo.add_library(db, demo)
     db.commit()
     return demo
+
+
+def demo_segments(db: Session, demo_id: int) -> list[Segment]:
+    """某曲目的分段列表（按 seq 升序）。曲目不存在抛 404。供 C2。
+
+    不复用同一文件里的 demo_library_get：它一次返回 (demo, segments)，其 docstring
+    解释了为什么要一起取（避免「demo 存在但分段刚好被重跑清空」的不一致组合）——
+    C2 只要分段，那个理由不成立；而且它的 404 文案是「示范曲目不存在」，会把示范库
+    管理的措辞泄漏给陪练/标注场景（同 C1 不返回 status 的理由，spec 4.1）。
+
+    「曲目存在但没有分段」返回空列表、不抛 404：那是正常状态，不是错误（spec 3.3）。
+    库里 demo 15/19 就是这个状态。
+    """
+    if library_repo.get_demo(db, demo_id) is None:
+        raise BusinessError(404, "曲目不存在")
+    return library_repo.list_segments(db, demo_id)
