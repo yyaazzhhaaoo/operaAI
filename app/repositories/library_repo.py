@@ -4,7 +4,7 @@
 写操作只 flush()、不 commit——事务边界在 service 层，理由见 CLAUDE.md。
 """
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.models import TeacherDemo
@@ -75,6 +75,32 @@ def replace_segments(db: Session, demo_id: int, segments: list[dict]) -> None:
         for s in segments
     ])
     db.flush()
+
+
+def get_demo_list(db: Session) -> list[tuple[TeacherDemo, int]]:
+    """全部曲目 + 各自的分段数，按 id 升序。供 C1 `GET /api/demos`。
+
+    outerjoin 而非 join：没解析出分段的曲目也要出现在列表里（spec 3.3），
+    join 会把它们整条丢掉。
+
+    计数写 count(Segment.id) 而非 count(*)：outerjoin 未命中时 segments 侧
+    全是 NULL，count(*) 会数成 1，count(Segment.id) 才是 0。
+
+    一条 SQL 查完，不做 N+1。注意这与 demo_library_list 的取舍不同——那边逐行
+    查一次 redis（状态在 redis 里），这里没有那个约束。
+
+    返回 (TeacherDemo, 分段数) 二元组而不是往模型上挂个临时属性：分段数不是
+    模型上的列，挂上去会让「哪些字段来自库、哪些是算出来的」变得看不出来。
+
+    duration 不在这里取——它挂在 audio_files 上，由 service 层经 demo.audio
+    关系惰性加载（逐行一次查询，曲目量级是几十条，够用；真到几百条再改 joinedload）。
+    """
+    return list(db.execute(
+        select(TeacherDemo, func.count(Segment.id))
+        .outerjoin(Segment, Segment.demo_id == TeacherDemo.id)
+        .group_by(TeacherDemo.id)
+        .order_by(TeacherDemo.id)
+    ).all())
 
 
 def update_audio_duration(db: Session, demo_id: int, duration_sec: float) -> None:

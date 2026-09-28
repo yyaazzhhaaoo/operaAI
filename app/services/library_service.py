@@ -13,6 +13,36 @@ from app.repositories import library_repo
 from app.services import parse_service
 
 
+def demo_list(db: Session) -> list[dict]:
+    """C1 曲目列表（陪练选曲 + 作业布置用）。
+
+    duration 取自 audio_files.duration_sec（经 demo.audio 惰性加载）——
+    teacher_demos 自己没有时长列。曲目无音频、或音频未回填时长时为 None。
+
+    elo_difficulty 如实返回，**不做 0–1 兜底**：库里有未标定的列默认值 1000，
+    那是「数据没标定」不是「取不到值」，后端悄悄改成 None 或夹到 1.0 会让调用方
+    分不清两者（spec 3.2、DOC_ISSUES 第 19 条）。判定留给前端。
+
+    不过滤 segment_count = 0 的曲目（spec 3.3）：标注页要置灰展示「还没解析」、
+    陪练选曲要直接跳过，两个场景诉求不同，接口保持中立。
+
+    返回 dict 而不是 ORM 对象：已经把分段数与 audio 摊平进来了，再让 api 层去
+    ORM 上拼一遍等于把同一件事写两处（与 demo_library_list 同风格）。
+    """
+    return [
+        {
+            "id": demo.id,
+            "title": demo.title,
+            "role": demo.role,
+            "banshi": demo.banshi,
+            "duration": demo.audio.duration_sec if demo.audio else None,
+            "elo_difficulty": demo.elo_difficulty,
+            "segment_count": segment_count,
+        }
+        for demo, segment_count in library_repo.get_demo_list(db)
+    ]
+
+
 def demo_library_list(db: Session) -> list[dict]:
     """列表用的行：把 audio_files.duration_sec 与解析状态摊平进来。
 
