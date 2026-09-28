@@ -4,7 +4,7 @@ from app.api import api_bp
 from app.common.decorators import login_required, teacher_required
 from app.db import get_db
 from app.response import ok
-from app.schemas.demo import DemoListOut, DemoSegmentOut
+from app.schemas.demo import DemoListOut, DemoSegmentOut, SegmentDetailOut
 from app.services import library_service
 
 
@@ -36,10 +36,21 @@ def demos_segments(demo_id):
     rows = library_service.demo_segments(get_db(), demo_id)
     return ok([DemoSegmentOut.model_validate(r).model_dump(mode="json") for r in rows])
 
-@api_bp.route("/segments/<id>",methods=["GET"])
+@api_bp.route("/segments/<int:segment_id>", methods=["GET"])
 @login_required
-def segments(id):
-    return ok(id);
+def segments(segment_id):
+    """C3 段落详情，含逐字歌词。
+
+    `<int:segment_id>` 同 C2：非数字路径在**路由层**就 404，不进视图。
+
+    权限只要求登录（文档 C3 的权限列就是「登录」）：学生端陪练要看歌词，
+    加 @teacher_required 会堵死学生端。注意 C4–C7 才是教师专属。
+
+    唱段存在但还没歌词时回 200 + lyrics: []，不是 404——解析产出的新段落
+    lyrics_json 就是 NULL（DOC_ISSUES 第 20 条），那是常态。
+    """
+    data = library_service.segment_detail(get_db(), segment_id)
+    return ok(SegmentDetailOut.model_validate(data).model_dump(mode="json"))
 
 @api_bp.route("/segments/<id>/annotations",methods=["GET"])
 @login_required

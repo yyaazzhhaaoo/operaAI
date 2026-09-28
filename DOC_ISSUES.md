@@ -664,7 +664,7 @@ Demucs 分离 + librosa 提音高能给出的是 `pitch / note / time`（音高�
 
 ---
 
-## 27. 分段列表（C2）只有一句话描述；`lyrics_json` 存在三种互不兼容的形状
+## 27. 分段列表（C2）只有一句话描述；`lyrics_json` 的字段名/词表/标点全未定义（C3 已定口径，待文档方追认）
 
 **涉及**：《5-接口清单》2.3 节 C2、C3 / `app/api/demos_segments_annotations.py` / `app/services/library_service.py` / `annotation.html`
 
@@ -684,31 +684,37 @@ C2 在文档里的**全部**内容是「`GET /api/demos/<id>/segments` ｜ 登�
 
 与第 26（C1）、22、24、25 条同源：接口清单只给一句「说明」，没有响应契约。
 
-### 27.2 `lyrics_json` 的三种形状（做 C3 前必须先定）
+### 27.2 `lyrics_json` 的形状与词表（C3 已定）
 
-`segments.lyrics_json` 在库里**不是 NULL**——全表 11 行都有内容。第 20 条写的「该列恒 NULL」指的是**解析链路不写它**（`app/repositories/library_repo.py` 的 `replace_segments` 确实传 `None`），但 `seed.sql` 与后来人工录入的行都有值。
+**更正**：本节初版写「库里没有标点条目」，与库不符——seg 78 有 8 条标点。下文为准。
 
-现有三种形状，字段名与取值都对不上：
+`segments.lyrics_json` 在库里**不是 NULL**——全表 11 行都有内容。第 20 条写的「该列恒 NULL」只对**解析产出**的行成立（`app/repositories/library_repo.py` 的 `replace_segments` 确实传 `None`）；`seed.sql` 与后来人工录入的行都有值。
 
-| 形状 | 样例 | 出现在 |
+**库内形状**是 `[{word, midi?, start, end, note?, tip?}]`（`app/models/demo.py` 的注释同此）。所谓「三种形状」的差别不在字段名（名字一致），而在**哪些键存在**（142 条，2026-09-28 实测）：
+
+| 条数 | 键集合 | 出现在 |
 |---|---|---|
-| A 带 `note` | `{"word":"辕","midi":64,"start":0,"end":0.234,"note":"NOTE_8"}` | seg 78/79/80 |
-| B 带 `tip` | `{"word":"辕","midi":64,"start":0,"end":0.4,"tip":"起音稳，气息下沉…"}` | seg 102–108 |
-| 种子 | `{"word":"海","midi":57,"start":0,"end":1.2,"note":"half","tip":"起音轻…"}` | seg 1 |
+| 8 | `word, start, end` | seg 78 的标点。**直接没有 `midi`/`note` 键**，不是 `null` |
+| 66 | `word, midi, start, end, note` | seg 78–80 |
+| 34 | `word, midi, start, end, tip` | seg 102–108（33 条）+ seg 1（1 条） |
+| 34 | `word, midi, start, end, note, tip` | seg 1 |
 
-而前端 `annotation.html` 的 `LYRICS` mock 要的是**第四套**：`{char, pitch, note, start, duration}`，`note` 取值 `"8"/"4"/"2"/"16"/"1"`。也就是说 C3 落地时要同时处理：
+`midi` 缺失 8 条（全是标点）；`start`/`end` **无一缺失**。
 
-1. 字段名映射：`word`→`char`、`midi`→`pitch`、`end - start`→`duration`
-2. `note` 的**三套词表**：`NOTE_8` / `half` / `"8"` 要归一（`NOTE_DOT_16` 这种附点音符在 mock 里没有对应档）
-3. 标点：mock 里有 `{char:"，", pitch:null, ...}` 这样的整行空值，库里没有标点条目
-4. `tip` 是 shape A 没有的，前端 `renderLyrics` 目前也不渲染它
+**C3 定下的四件事**：
+
+1. **字段名：库不动，接口层改名。** 出参用 `char/pitch/start/duration/note/tip`（`word→char`、`midi→pitch`、`end-start→duration`），前端零改动。库里 142 条已一致用 `word/midi/start/end`，没有改库的理由。
+2. **`note` 词表统一成 `NOTE_*`**，已落到数据层：`half→NOTE_2`、`quarter→NOTE_4`（原本只有 seg 1 的两条），`seed.sql` 与真库同步改掉。分数串（`"8"`）是**前端显示词**，接口不做这层映射——`NOTE_8` 是领域取值，`"8"` 是 UI 措辞，两件事（同第 26 条对 `elo_difficulty` 的处置）。
+3. **标点以「无 `midi` 键」表示**。接口层必须把它补成**显式 `null`**：前端 `renderLyrics` 靠 `pitch === null` 加 `.punct` 类并跳过 `onclick`，而 `undefined === null` 为 `false`，漏补会让标点渲染成一个带音高、可点击的坏格子。
+4. **`tip` 与 `note` 正交**（seg 1 两者都有），不是二选一，接口两个都返回。附点（`NOTE_DOT_16` 等 12 条，全在 seg 79/80）**前端加档显示**，乐理信息不丢。
+
+**仍未解**：解析链路给不出「字」，人工录入是唯一路径（第 20 条）。库里现有歌词全是人工/种子数据，C3 只是把已有的读出来。
 
 **待文档方确认**：
 
-1. `lyrics_json` 的权威形状是哪一种？A / B / 种子三选一，还是重定一个新 schema？`note` 用 `NOTE_8` 还是 `"8"` 还是 `half`？
-2. 标点符号要不要进 `lyrics_json`（影响前端的分句逻辑，`renderLyrics` 现在靠 `["，","。"].includes(...)` 换行）？
-3. `tip`（唱前提示，功能 2.4）与 `note` 能否共存？
-4. 第 20 条那个更根本的问题仍未解：**解析链路给不出「字」**，人工录入是唯一路径。库里现有的歌词全是人工/种子数据。
+1. `[{word, midi?, start, end, note?, tip?}]` 这个形状是否作为权威 schema 定下来？`NOTE_*` 那 8 个基本档 + 3 个附点够不够覆盖戏谱的时值？
+2. 标点要不要一直用「缺 `midi` 键」表示，还是显式写 `"midi": null`？两者前端都吃，但显式更不容易被下一个录入者漏掉。
+3. 只有 seg 78 有标点、其余唱段会渲染成一整行不断句。断句是否该由录入时补标点解决，还是另设行界字段？
 
 另见第 19、20、26 条。
 
