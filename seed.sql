@@ -31,8 +31,8 @@ INSERT INTO students (user_id, level) VALUES (2, '初学'), (3, '初学');
 -- 示范曲目与分段（示例，正式数据由《数据准备清单》交付后替换）
 INSERT INTO teacher_demos (title, role, banshi) VALUES ('贵妃醉酒·选段', '旦', '四平调');
 INSERT INTO segments (demo_id, seq, title, lyrics_json, duration) VALUES (1, 1, '第一段',
-'[{"word":"海","midi":57,"start":0.00,"end":1.20,"note":"half","tip":"起音轻，气息下沉"},
-  {"word":"岛","midi":55,"start":1.20,"end":1.80,"note":"quarter","tip":"归韵收净"}]'::jsonb, 30.5);
+'[{"word":"海","midi":57,"start":0.00,"end":1.20,"note":"NOTE_2","tip":"起音轻，气息下沉"},
+  {"word":"岛","midi":55,"start":1.20,"end":1.80,"note":"NOTE_4","tip":"归韵收净"}]'::jsonb, 30.5);
 
 -- 摸底题库占位（正式题目待教师录制）
 INSERT INTO cat_questions (seq, segment_id, focus_dims) VALUES (1, 1, '["音准","气息"]');
