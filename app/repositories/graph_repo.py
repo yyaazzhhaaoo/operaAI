@@ -9,6 +9,39 @@ from sqlalchemy.orm import Session, aliased
 from app.models import GraphEdge, GraphNode
 
 
+def get_segment_nodes(db: Session) -> list[GraphNode]:
+    """全部唱段节点。推荐（功能 5.7）拿它当候选集。"""
+    return list(db.scalars(
+        select(GraphNode).where(GraphNode.node_type == "segment").order_by(GraphNode.id)
+    ).all())
+
+
+def get_segment_skill_map(db: Session) -> dict[int, list[str]]:
+    """唱段节点 id -> 它 contains 的全部技法名。
+
+    只认 segment --contains--> skill 这一个方向：opera --> segment 与 prereq
+    都不是「练这个唱段要用到哪些技法」，混进来会得出离谱的需求技法集合。
+    """
+    src = aliased(GraphNode, name="seg")
+    tgt = aliased(GraphNode, name="sk")
+    stmt = (
+        select(src.id, tgt.label)
+        .select_from(GraphEdge)
+        .join(src, GraphEdge.source_id == src.id)
+        .join(tgt, GraphEdge.target_id == tgt.id)
+        .where(
+            GraphEdge.edge_type == "contains",
+            src.node_type == "segment",
+            tgt.node_type == "skill",
+        )
+        .order_by(src.id, tgt.label)
+    )
+    out: dict[int, list[str]] = {}
+    for node_id, label in db.execute(stmt).all():
+        out.setdefault(node_id, []).append(label)
+    return out
+
+
 def get_prereq_edges(db: Session) -> list[tuple[str, float, str]]:
     """全部前置关系，每项是 (前置技法名, 该技法的达标线, 下游技法名)。
 

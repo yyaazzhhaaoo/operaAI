@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -102,3 +102,96 @@ class StudentAbilityResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     skills: list[str]                     # 技法列顺序，与 HeatmapResponse.skills 同源
     students: list[StudentAbility]
+
+
+class RecommendationItem(BaseModel):
+    """一条推荐唱段（功能 5.7）。
+
+    status 三档与页面既有的三色标签一一对应，取值只能是：
+      match      难度与学生当前水平相当
+      challenge  难度略高于当前水平，够得着
+      lock       该唱段所需技法的前置技法未达标，暂不推荐
+    判定口径见 dashboard_service.recommendations 的注释。
+    """
+    model_config = ConfigDict(from_attributes=True)
+    segment_id: int          # graph_nodes.id（唱段节点），不是 segments.id
+    demo_id: int             # 曲目 id，点进去要用
+    title: str               # 曲目标题
+    difficulty: float        # elo_difficulty，已归一到 0-1
+    status: str              # match / challenge / lock
+    reason: str              # 一句话理由，直接展示
+
+
+class RecommendationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    student_id: int
+    recommendations: list[RecommendationItem]   # 不足 3 条是正常的，可能为空
+
+
+class HomeworkProgressItem(BaseModel):
+    """作业进度列表的一行（功能 5.9）。
+
+    文档（《1-PRD》5.9、《3-功能清单》5.9、《5-接口清单》G7）的全部描述是
+    「作业进度列表 — 提交完成度及状态」，**没有定义状态有哪些档、怎么判**。
+    以下口径是本次实现定死的，对齐页面既有的三个标签样式：
+
+    - grading 批改中：**有提交且存在未终审的提交**（`submissions.status != 'reviewed'`）。
+      优先级最高——截止没截止都要批，这是唯一需要教师动手的一档；
+    - closed 已截止：`homeworks.status == 'closed'`（教师显式关闭）**或**截止日已过；
+      截止当天算最后一天，仍可提交，不判已过；
+    - ongoing 进行中：其余（未关闭且未到截止日）。
+
+    「已截止」同时认 `status` 与 `deadline` 两个来源：种子数据里就有 `status='open'`
+    但 deadline 早已过期的作业（教师忘了关），只看 status 会把它显示成「进行中」。
+    """
+    model_config = ConfigDict(from_attributes=True)
+    homework_id: int
+    title: str
+    deadline: date | None                 # 档案没填为 None，页面不显示截止
+    demo_title: str | None                # 曲目名；作业没挂曲目为 None
+    demo_role: str | None                 # 行当（青衣…）
+    demo_banshi: str | None               # 板式（西皮流水…）
+    submitted_count: int                  # 已提交**人数**（按学生去重）
+    progress: float                       # 提交完成度 0-1，分子分母见下
+    pending_review_count: int             # 待批（未终审）条数，为 0 说明不用批
+    status: str                           # grading / closed / ongoing
+
+
+class HomeworkProgressResponse(BaseModel):
+    """作业进度列表（功能 5.9）。
+
+    student_count 是**完成度的分母**，与 ProcessMetrics.student_count 同源（同一份
+    在册名单），放在响应级而不是每行——一份作业一个分母，行内重复没有意义。
+
+    不过滤、不截断：返回**全部**作业，由页面自己决定展示几条（看板卡片放不下时
+    页面上还有「管理作业 →」入口），接口层不替调用方做取舍。
+    """
+    model_config = ConfigDict(from_attributes=True)
+    student_count: int                    # 分母，可能为 0
+    homeworks: list[HomeworkProgressItem]
+
+
+class ProcessMetrics(BaseModel):
+    """班级过程指标（功能 5.8）。
+
+    文档（《1-PRD》5.8、《3-功能清单》5.8、《5-接口清单》G6）对它的全部描述只有
+    「练习时长/频次/畏难指数」三个词，周期、分母、单位、公式都没有。以下口径是
+    本次实现定死的：
+
+    - 窗口：**本周**（周一起算，北京日期），与 StudentAbility.week_practice_count 同口径；
+      另带一份上周同口径值，供前端算趋势箭头。不返回差值本身——减法前端做。
+    - 分母：**全体在册学生数**，含本周没练过的。所以两个指标都是「人均」语义：
+      avg_duration_sec 是「人均本周练了多少秒」，不是「单次平均时长」。
+    - 单位：时长一律**秒**，与 practice_records.duration_sec 同单位，前端显示分钟自行 /60。
+      库里存的是秒（当前实测 11-34），页面文案写「分」需要换算。
+    - fear_index **恒为 None**：文档没有定义畏难指数的算法，不编公式（见 DOC_ISSUES）。
+      前端应显示「待定义」而不是把 None 当 0。
+    """
+    model_config = ConfigDict(from_attributes=True)
+    week_start: date                      # 本周周一，供前端显示统计口径
+    student_count: int                    # 分母，可能为 0
+    avg_duration_sec: float               # 本周人均练习时长（秒）
+    avg_duration_sec_last_week: float     # 上周同口径，算趋势用
+    avg_practice_count: float             # 本周人均练习次数
+    avg_practice_count_last_week: float   # 上周同口径，算趋势用
+    fear_index: float | None = None       # 文档未定义，恒 None

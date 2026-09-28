@@ -500,19 +500,19 @@ body{
       </div>
       <div class="metric-grid">
         <div class="metric-card">
-          <div class="metric-val" style="color:var(--primary)">18.5</div>
+          <div class="metric-val" id="metricDuration" style="color:var(--primary)">—</div>
           <div class="metric-label">本周平均练习时长(分)</div>
-          <div class="metric-trend up">↑ +2.3 分</div>
+          <div class="metric-trend" id="metricDurationTrend"></div>
         </div>
         <div class="metric-card">
-          <div class="metric-val" style="color:var(--warning)">4.2</div>
+          <div class="metric-val" id="metricCount" style="color:var(--warning)">—</div>
           <div class="metric-label">平均练习频次(次/周)</div>
-          <div class="metric-trend up">↑ +0.5 次</div>
+          <div class="metric-trend" id="metricCountTrend"></div>
         </div>
         <div class="metric-card">
-          <div class="metric-val" style="color:var(--danger)">0.31</div>
+          <div class="metric-val" id="metricFear" style="color:var(--danger)">—</div>
           <div class="metric-label">班级畏难倾向指数</div>
-          <div class="metric-trend down">↑ +0.04 需关注</div>
+          <div class="metric-trend" id="metricFearTrend"></div>
         </div>
       </div>
     </div>
@@ -522,37 +522,9 @@ body{
           <div class="icon" style="background:rgba(201,168,76,0.10);color:var(--warning)">📚</div>
           作业进度
         </div>
-        <span class="card-action" onclick="location.href='homework.html'">管理作业 →</span>
+        <span class="card-action" id="hwManageLink" onclick="location.href='homework.html'">管理作业 →</span>
       </div>
-      <div class="hw-list">
-        <div class="hw-item">
-          <div class="hw-title">《穆桂英挂帅》· 辕门外三声炮</div>
-          <div class="hw-meta"><span>📅 截止: 2026-08-02</span><span>🎵 王老师标准版</span><span>👥 18/24 人已提交</span></div>
-          <div class="hw-progress">
-            <div class="hw-bar"><div class="hw-bar-fill" style="width:75%;background:var(--progress-gradient)"></div></div>
-            <span class="hw-bar-text">提交 75%</span>
-            <span class="hw-status grading">批改中</span>
-          </div>
-        </div>
-        <div class="hw-item">
-          <div class="hw-title">《贵妃醉酒》· 海岛冰轮初转腾</div>
-          <div class="hw-meta"><span>📅 截止: 2026-08-05</span><span>🎵 王老师标准版</span><span>👥 12/24 人已提交</span></div>
-          <div class="hw-progress">
-            <div class="hw-bar"><div class="hw-bar-fill" style="width:50%;background:var(--progress-gradient)"></div></div>
-            <span class="hw-bar-text">提交 50%</span>
-            <span class="hw-status ongoing">进行中</span>
-          </div>
-        </div>
-        <div class="hw-item">
-          <div class="hw-title">《霸王别姬》· 看大王在帐中</div>
-          <div class="hw-meta"><span>📅 截止: 2026-07-28</span><span>🎵 王老师标准版</span><span>👥 24/24 人已提交</span></div>
-          <div class="hw-progress">
-            <div class="hw-bar"><div class="hw-bar-fill" style="width:100%;background:var(--progress-gradient)"></div></div>
-            <span class="hw-bar-text">提交 100%</span>
-            <span class="hw-status closed">已截止</span>
-          </div>
-        </div>
-      </div>
+      <div class="hw-list" id="hwList"></div>
     </div>
   </div>
 </main>
@@ -562,52 +534,10 @@ body{
 // ============================================
 // 静态数据
 // ============================================
-// 学生能力状态（mock STUDENTS）与技法表（mock TECHNIQUES）已随本次接线删除：
-// 列表改由 GET /api/dashboard/students 提供，技法列顺序也由该接口的 skills[] 给出，
-// 前端不再自己排一套。mock 留着只会让人误以为页面还在用它。
-
-const RECOMMENDATIONS = {
-  48: [
-    { title: "《穆桂英挂帅》· 辕门外三声炮（前四句）", difficulty: 0.62, reason: "难度略高于当前水平，适合挑战", status: "challenge" },
-    { title: "《贵妃醉酒》· 海岛冰轮初转腾（慢板）", difficulty: 0.55, reason: "前置技法已达标，巩固音准", status: "match" },
-    { title: "《霸王别姬》· 看大王在帐中", difficulty: 0.48, reason: "难度适中，强化气息支撑", status: "match" }
-  ],
-  49: [
-    { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "难度匹配，重点练习拖腔", status: "match" },
-    { title: "《红娘》· 叫张生隐藏在棋盘之下", difficulty: 0.78, reason: "花旦唱腔，拓展滑音技法", status: "challenge" },
-    { title: "《空城计》· 我正在城楼观山景", difficulty: 0.65, reason: "老生唱腔，节奏感知训练", status: "match" }
-  ],
-  50: [
-    { title: "气息基础短句 · 慢吸慢呼练习", difficulty: 0.35, reason: "前置技能补齐，先练气息", status: "match" },
-    { title: "音准感知训练 · 单音模唱", difficulty: 0.30, reason: "音准控制薄弱，需基础训练", status: "match" },
-    { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "拖腔依赖气息支撑，当前已锁定", status: "lock" }
-  ],
-  51: [
-    { title: "《穆桂英挂帅》· 辕门外三声炮（全段）", difficulty: 0.85, reason: "高难度挑战，综合技法训练", status: "challenge" },
-    { title: "《贵妃醉酒》· 海岛冰轮初转腾", difficulty: 0.78, reason: "四平调韵味处理", status: "match" },
-    { title: "《霸王别姬》· 看大王在帐中", difficulty: 0.72, reason: "南梆子板式，情感表达", status: "match" }
-  ],
-  52: [
-    { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "难度匹配，恢复练习", status: "match" },
-    { title: "《贵妃醉酒》· 海岛冰轮初转腾", difficulty: 0.78, reason: "难度略高，适合挑战", status: "challenge" },
-    { title: "气息基础短句", difficulty: 0.35, reason: "气息支撑下降，建议巩固", status: "match" }
-  ],
-  53: [
-    { title: "音准感知训练 · 音阶模唱", difficulty: 0.40, reason: "音准感知 0.43，接近解锁滑音", status: "match" },
-    { title: "《穆桂英挂帅》· 辕门外三声炮（前两句）", difficulty: 0.55, reason: "难度适中，音准控制训练", status: "match" },
-    { title: "滑音专项练习 · 上滑音", difficulty: 0.50, reason: "前置技法未达标，已锁定", status: "lock" }
-  ],
-  54: [
-    { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "难度匹配，拖腔可再精进", status: "match" },
-    { title: "《红娘》· 叫张生隐藏在棋盘之下", difficulty: 0.78, reason: "花旦活泼唱腔，拓展风格", status: "challenge" },
-    { title: "《空城计》· 我正在城楼观山景", difficulty: 0.82, reason: "老生慢板，气息长拖腔", status: "challenge" }
-  ],
-  55: [
-    { title: "调门找音练习 · 慢速跟唱", difficulty: 0.25, reason: "整体音准偏低，需基础训练", status: "match" },
-    { title: "气息基础短句", difficulty: 0.35, reason: "气息支撑 0.35，前置技能补齐", status: "match" },
-    { title: "《穆桂英挂帅》· 辕门外三声炮", difficulty: 0.72, reason: "多前置技法未达标，已锁定", status: "lock" }
-  ]
-};
+// 本页已无 mock 数据：学生能力状态（原 mock STUDENTS / TECHNIQUES）走
+// GET /api/dashboard/students，技法列顺序由该接口的 skills[] 给出；
+// 推荐曲目（原 mock RECOMMENDATIONS）走 GET /api/students/<id>/recommendations，
+// 两个接口都是真链路，见下面的 selectStudent / loadRecommendations。
 
 // ============================================
 // 渲染函数
@@ -767,9 +697,8 @@ function renderStudentList() {
 
 // 热力图接真接口（GET /api/dashboard/heatmap）：x 轴技法列与 y 轴学生行都取自响应，
 // 前端不再自己排一套顺序，两边不会错位。
-// 取不到数时（403 / 后端不可达）把图表位让给一行灰字提示，不回退到 mock STUDENTS
-// ——那会先闪一屏假数据再被真数据覆盖。mock 现在只服务于右侧「学生能力状态」
-//（它的 G4 /api/dashboard/students 还是空壳）。
+// 取不到数时（403 / 后端不可达）把图表位让给一行灰字提示，不回退到 mock
+// ——那会先闪一屏假数据再被真数据覆盖。本页已无 mock，见文件顶部注释。
 let heatmapChart = null;
 let heatmapStudents = [];   // 索引即 y 轴行号，tooltip 与点击回调用它查当前行
 let heatmapSkills = [];     // 接口给的技法列，行内偏移量按它算
@@ -924,23 +853,9 @@ function selectStudent(id) {
     : "暂无数据";
   document.getElementById("recLevel").textContent = `${s.level || "—"} · 综合掌握度 ${avg}`;
 
-  // 推荐路径（G5 GET /students/<id>/recommendations）尚未实现，这里仍用 mock；
-  // 该学生没有 mock 条目时给一行占位，不要让推荐区空着
-  const recs = RECOMMENDATIONS[id] || [];
-  document.getElementById("recList").innerHTML = recs.length ? recs.map((r, i) => {
-    const diffCls = r.status === "match" ? "match" : (r.status === "challenge" ? "challenge" : "lock");
-    const diffText = r.status === "match" ? "难度匹配" : (r.status === "challenge" ? "挑战" : "已锁定");
-    return `
-      <div class="rec-item">
-        <div class="rec-rank ${i===0?'top':''}">${i+1}</div>
-        <div class="rec-info">
-          <div class="rec-title">${r.title}</div>
-          <div class="rec-reason">${r.reason}</div>
-        </div>
-        <div class="rec-diff ${diffCls}">${diffText}</div>
-      </div>
-    `;
-  }).join("") : `<div style="font-size:12px;color:var(--text-muted);padding:4px 0">暂未生成推荐路径</div>`;
+  // 推荐路径（G5 GET /students/<id>/recommendations）单独拉一次，不并进上面的
+  // 学生列表请求：它挂了只该让推荐区显示失败，不该把姓名/等级也一起拖没。
+  loadRecommendations(id);
 
   // 高亮热力图对应行。行号必须在接口返回的行序里找，不能用列表的下标
   // ——接口会多出「张三」这类没有任何记录的学生，两边下标就错开了。
@@ -952,11 +867,174 @@ function selectStudent(id) {
   }
 }
 
+// 推荐路径（G5）。后端按「BKT 掌握度 × 依赖图谱」给 Top3，不足 3 条是常态
+// （现有数据下大多数学生只有 2 条，还会出现 0 条），四种情况分开说，不要都显示成
+// 「暂无推荐」：该生确实没推荐 / 拿不到数 / 请求失败，用户要能区分。
+async function loadRecommendations(id) {
+  const listEl = document.getElementById("recList");
+  listEl.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:4px 0">推荐加载中…</div>`;
+
+  let data = null;
+  try {
+    const r = await fetch(`/api/students/${id}/recommendations`, { credentials: "same-origin" });
+    if (r.ok) data = (await r.json()).data;
+  } catch (e) { /* 落到下面的失败文案 */ }
+
+  // 竞态：连点几个学生时先发的请求可能后回来。选中项已经不是自己了就丢掉结果，
+  // 否则会把上一个学生的推荐画到当前学生名下。
+  if (String(selectedStudentId) !== String(id)) return;
+
+  const recs = (data && data.recommendations) || [];
+  if (!data) {
+    listEl.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:4px 0">推荐加载失败，请刷新重试</div>`;
+    return;
+  }
+  if (recs.length === 0) {
+    listEl.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:4px 0">暂无推荐曲目（该生已测技法不足以匹配现有曲目）</div>`;
+    return;
+  }
+
+  listEl.innerHTML = recs.map((r, i) => {
+    const diffCls = r.status === "match" ? "match" : (r.status === "challenge" ? "challenge" : "lock");
+    const diffText = r.status === "match" ? "难度匹配" : (r.status === "challenge" ? "挑战" : "已锁定");
+    return `
+      <div class="rec-item">
+        <div class="rec-rank ${i===0?'top':''}">${i+1}</div>
+        <div class="rec-info">
+          <div class="rec-title">${r.title} <span style="color:var(--text-muted);font-weight:400">· 难度 ${Number(r.difficulty).toFixed(2)}</span></div>
+          <div class="rec-reason">${r.reason}</div>
+        </div>
+        <div class="rec-diff ${diffCls}">${diffText}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+// ============================================
+// 班级过程指标（GET /api/dashboard/process-metrics，功能 5.8）
+// ============================================
+// 三个坑，改这段前先看：
+// (1) 接口的时长是**秒**（与 practice_records.duration_sec 同单位），卡片文案是「分」，所以 /60；
+// (2) 接口的「平均」是**人均**（分母 = 全体在册学生，含本周没练过的），不是单次平均；
+// (3) 畏难指数文档没有定义算法，接口恒回 null，必须显示「待定义」——绝不能当 0 用，
+//     那会读成「班级一点都不畏难」，与「没有数据」是两回事。
+// 趋势由前端相减得出：接口一并给上周同口径值，不在后端算差值。
+function fmtTrend(delta, unit, digits) {
+  if (Math.abs(delta) < 1e-9) return { cls: "", text: `持平（${unit}）` };
+  const up = delta > 0;
+  return { cls: up ? "up" : "down", text: `${up ? "↑ +" : "↓ "}${delta.toFixed(digits)} ${unit}` };
+}
+
+async function loadProcessMetrics() {
+  let data = null;
+  try {
+    const r = await fetch("/api/dashboard/process-metrics", { credentials: "same-origin" });
+    if (r.ok) data = (await r.json()).data;
+  } catch (e) { /* 落到下面的失败态 */ }
+
+  const set = (valId, trendId, valText, trend) => {
+    document.getElementById(valId).textContent = valText;
+    const el = document.getElementById(trendId);
+    el.className = trend ? `metric-trend ${trend.cls}` : "metric-trend";
+    el.textContent = trend ? trend.text : "";
+  };
+
+  if (!data) {
+    // 全写成「—」而不是留着上一轮的旧值：拿不到数和值为 0 必须看得出区别
+    set("metricDuration", "metricDurationTrend", "—", { cls: "", text: "加载失败，请刷新重试" });
+    set("metricCount", "metricCountTrend", "—", null);
+    set("metricFear", "metricFearTrend", "—", null);
+    return;
+  }
+
+  const curMin = data.avg_duration_sec / 60;
+  const prevMin = data.avg_duration_sec_last_week / 60;
+  set("metricDuration", "metricDurationTrend", curMin.toFixed(1), fmtTrend(curMin - prevMin, "分", 1));
+
+  set("metricCount", "metricCountTrend", data.avg_practice_count.toFixed(1),
+      fmtTrend(data.avg_practice_count - data.avg_practice_count_last_week, "次", 1));
+
+  const fear = data.fear_index;
+  const noFear = fear === null || fear === undefined;
+  set("metricFear", "metricFearTrend",
+      noFear ? "待定义" : Number(fear).toFixed(2),
+      noFear ? { cls: "", text: "文档未定义算法" } : null);
+}
+
+// ============================================
+// 作业进度（GET /api/dashboard/homework-progress，功能 5.9）
+// ============================================
+// 状态三档由后端判（批改中 / 进行中 / 已截止），前端只做配色映射、不自己算：
+// 判档要用「今天的北京日期」与提交的终审状态，前端两样都拿不到，各算一套必然对不上。
+const HW_STATUS = {
+  grading: { cls: "grading", text: "批改中" },
+  ongoing: { cls: "ongoing", text: "进行中" },
+  closed:  { cls: "closed",  text: "已截止" },
+};
+
+// 卡片只放得下 3 条，多出来的靠右上角「管理作业 →」进作业页看。接口返回的是全部
+// 作业，截断发生在页面这层，并在入口上标出总数——否则「库里有 5 份、卡片上 3 份」
+// 会被读成只有 3 份。
+const HW_SHOW = 3;
+
+async function loadHomeworkProgress() {
+  const listEl = document.getElementById("hwList");
+  const linkEl = document.getElementById("hwManageLink");
+  listEl.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:4px 0">作业加载中…</div>`;
+  linkEl.textContent = "管理作业 →";
+
+  let data = null;
+  try {
+    const r = await fetch("/api/dashboard/homework-progress", { credentials: "same-origin" });
+    if (r.ok) data = (await r.json()).data;
+  } catch (e) { /* 落到下面的失败文案 */ }
+
+  if (!data) {
+    listEl.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:4px 0">作业进度加载失败，请刷新重试</div>`;
+    return;
+  }
+  const list = data.homeworks || [];
+  if (list.length === 0) {
+    listEl.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:4px 0">暂无作业</div>`;
+    return;
+  }
+  if (list.length > HW_SHOW) linkEl.textContent = `管理作业（共 ${list.length} 份）→`;
+
+  const total = data.student_count;
+  listEl.innerHTML = list.slice(0, HW_SHOW).map(h => {
+    const st = HW_STATUS[h.status] || { cls: "", text: h.status };
+    const pct = Math.round(h.progress * 100);
+    // 曲目那格显示「行当 · 板式」；两个都没有就整格不渲染（作业允许不挂曲目）
+    const demo = [h.demo_role, h.demo_banshi].filter(Boolean).join(" · ");
+    const meta = [
+      h.deadline ? `📅 截止: ${h.deadline}` : "📅 未设截止",
+      demo ? `🎵 ${demo}` : "",
+      `👥 ${h.submitted_count}/${total} 人已提交`,
+      // 待批条数只在 >0 时显示：「0 份待批」是噪音
+      h.pending_review_count > 0 ? `⏳ ${h.pending_review_count} 份待批` : "",
+    ].filter(Boolean).map(t => `<span>${t}</span>`).join("");
+    return `
+      <div class="hw-item">
+        <div class="hw-title">${h.title}</div>
+        <div class="hw-meta">${meta}</div>
+        <div class="hw-progress">
+          <div class="hw-bar"><div class="hw-bar-fill" style="width:${pct}%;background:var(--progress-gradient)"></div></div>
+          <span class="hw-bar-text">提交 ${pct}%</span>
+          <span class="hw-status ${st.cls}">${st.text}</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
 function refreshBKT() {
-  // 两个都重拉：掌握度和练习统计是同一批数据的两个视角，只刷一个会出现
-  // 热力图已经更新、右侧列表还停在旧值的情况
-  loadHeatmap();      // GET /api/dashboard/heatmap
-  loadStudents();     // GET /api/dashboard/students + /api/dashboard/alerts
+  // 一起重拉：掌握度、练习统计、班级过程指标都出自同一批 practice_records，
+  // 只刷一个会出现热力图已经更新、右侧列表还停在旧值的情况；
+  // 作业进度是另一批数据（homeworks/submissions），但同属这一页的实时性要求
+  loadHeatmap();           // GET /api/dashboard/heatmap
+  loadStudents();          // GET /api/dashboard/students + /api/dashboard/alerts
+  loadProcessMetrics();    // GET /api/dashboard/process-metrics
+  loadHomeworkProgress();  // GET /api/dashboard/homework-progress
 }
 
 // ============================================
@@ -966,6 +1044,8 @@ function refreshBKT() {
 // 所以这里不再调 selectStudent。
 loadHeatmap();
 loadStudents();
+loadProcessMetrics();
+loadHomeworkProgress();
 </script>
 <!-- ==== 登录用户条 + 登出（页面鉴权配套，见 docs/superpowers/specs/2026-09-15-page-auth-design.md）==== -->
 <!-- 页面已被服务端保护，能加载出来就说明会话有效。这段脚本不做守卫，

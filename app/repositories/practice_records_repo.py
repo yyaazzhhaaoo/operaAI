@@ -72,6 +72,35 @@ def get_last_practice_at(db: Session, student_ids: list[int]) -> dict[int, datet
     return {sid: at for sid, at in rows if at is not None}
 
 
+def get_weekly_totals(db: Session, student_ids: list[int]) -> dict[date, tuple[int, float]]:
+    """按北京**周一**分桶的练习总量，{周一日期: (练习次数, 总时长秒数)}。
+
+    班级过程指标（功能 5.8）要的是「一周的总次数与总时长」，两个指标同源同窗口，
+    一次查询出齐，不拆成两次各扫一遍表。date_trunc('week') 在 PostgreSQL 里就是
+    周一起算，与 dashboard_service 里 week_start 的算法一致。
+
+    created_at 不做时区换算：库里存的就是北京墙上时间，与 get_practice_days 同口径
+    （见 CLAUDE.md「容器内 PostgreSQL 的时区是 Etc/UTC」一条）。
+
+    时长用 coalesce 兜 0：duration_sec 允许为 NULL，一条没时长的记录不该把整周
+    的时长合计变成 NULL。
+    """
+    if not student_ids:
+        return {}
+    week = func.date_trunc("week", PracticeRecord.created_at).label("week")
+    rows = db.execute(
+        select(
+            week,
+            func.count(),
+            func.coalesce(func.sum(PracticeRecord.duration_sec), 0.0),
+        )
+        .where(PracticeRecord.student_id.in_(set(student_ids)))
+        .where(PracticeRecord.created_at.is_not(None))
+        .group_by(week)
+    ).all()
+    return {w.date(): (n, float(total)) for w, n, total in rows}
+
+
 def get_practice_days(db: Session, student_ids: list[int]) -> dict[int, dict[date, int]]:
     """按北京日期分桶的练习次数，{students.id: {日期: 次数}}；没练过的不在字典里。
 

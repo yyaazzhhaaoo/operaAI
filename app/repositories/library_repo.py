@@ -34,6 +34,19 @@ def list_segments(db: Session, demo_id: int) -> list[Segment]:
     ).all())
 
 
+def get_segment_demo_map(db: Session) -> dict[int, int]:
+    """segments.id -> demo_id，一次取全表。
+
+    推荐（功能 5.7）用它把知识图谱的唱段节点换回它所属的曲目——难度
+    （teacher_demos.elo_difficulty）与标题都挂在曲目上，不在唱段节点上。
+    """
+    return {
+        seg_id: demo_id
+        for seg_id, demo_id in db.execute(select(Segment.id, Segment.demo_id)).all()
+        if demo_id is not None
+    }
+
+
 def replace_segments(db: Session, demo_id: int, segments: list[dict]) -> None:
     """整批替换某 demo 的分段：先按 demo_id DELETE，再 INSERT。
 

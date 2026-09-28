@@ -5,11 +5,20 @@ from sqlalchemy.orm import Session
 
 from app.repositories import user_repo, library_repo, annotations_repo, homeworks_repo, bkt_history_repo, \
     practice_records_repo, graph_repo
-from app.models import BktHistory
+from app.common.errors import BusinessError
+from app.models import BktHistory, GraphNode, TeacherDemo
 from app.schemas.dashboard import DashBoardSummary, MasteryDropAlert, AlertResponse, PrereqLockAlert, PrereqSkill, \
-    HeatmapStudent, HeatmapResponse, StudentAbility, StudentAbilityResponse
+    HeatmapStudent, HeatmapResponse, StudentAbility, StudentAbilityResponse, \
+    RecommendationItem, RecommendationResponse, ProcessMetrics, \
+    HomeworkProgressItem, HomeworkProgressResponse
 
 BEIJING = ZoneInfo("Asia/Shanghai")
+
+# 推荐（功能 5.7）的两条难度判据。文档只写「BKT+依赖图谱 Top3 推荐曲目」，
+# 没给匹配区间，这两个数是实现时定的：与当前水平差 0.10 以内算相当，
+# 高出 0.10~0.25 算够得着，再高就太难；比水平低 0.10 以上则太简单，同样不推。
+DIFF_MATCH = 0.10
+DIFF_CHALLENGE = 0.25
 
 # 热力图的技法列（功能 5.5），顺序即 x 轴顺序。
 # 硬编码而不用 graph_nodes：库里 node_type='skill' 的节点只有 3 个、且技法名与页面
@@ -268,5 +277,193 @@ def _streak(days: dict[date, int], today: date) -> int:
         n += 1
         cur -= timedelta(days=1)
     return n
+
+
+def recommendations(db: Session, student_id: int) -> RecommendationResponse:
+    """学生推荐路径（功能 5.7）：BKT 掌握度 × 依赖图谱，Top3 推荐唱段。
+
+    文档（《5-接口清单》G5、《1-PRD》5.7）只写到「点击学生显示 Top 3 练习曲目」，
+    响应结构与匹配规则均未定义，以下口径是本次实现定死的，改动前先看这几条：
+
+    1. 候选集是**图谱里的唱段节点**（node_type='segment'），不是 segments 表：
+       「这个唱段要练哪些技法」只存在于 graph_edges 的 contains 边。
+    2. **能算才算**：需求技法里只要有一个在该生的 bkt 记录里没有，就判不出掌握度，
+       整条跳过。图谱里的「音准稳定性」「归韵」等技法名与 bkt_history 对不上
+       （见 DOC_ISSUES），「辕门外三声炮」等三个唱段因此永远进不了候选——
+       这是已知取舍，不是 bug。
+    3. 难度取 teacher_demos.elo_difficulty，且必须落在 0-1 才认：列默认值 1000
+       表示「未标定」，拿它算匹配会得出荒谬结果，直接排除。
+    4. **lock 优先于难度**：所需技法的前置技法未达标就记 lock，且不再参与难度过滤
+       （前置没过关时，难度合不合适不是重点）。lock 项排最后。
+    5. 排序 match → challenge → lock，同档按「偏离当前水平越小越靠前」，取前 3。
+       不足 3 条、甚至为空都是正常的（数据现状就会如此），前端有对应占位。
+    """
+    if not any(row[0] == student_id for row in user_repo.get_student_roster(db)):
+        raise BusinessError(404, "学生不存在")
+
+    # 该生各技法当前掌握度。p_l 为 None 的记录不算「测过」
+    mastery = {
+        r.skill: r.p_l
+        for r in bkt_history_repo.get_latest_by_skill(db)
+        if r.student_id == student_id and r.p_l is not None
+    }
+    if not mastery:
+        return RecommendationResponse(student_id=student_id, recommendations=[])
+
+    level = sum(mastery.values()) / len(mastery)
+
+    # (前置技法, 达标线) 按下游技法分组
+    prereq_by_skill: dict[str, list[tuple[str, float]]] = {}
+    for p_skill, threshold, skill in graph_repo.get_prereq_edges(db):
+        prereq_by_skill.setdefault(skill, []).append((p_skill, threshold))
+
+    need_by_segment = graph_repo.get_segment_skill_map(db)
+    seg_demo = library_repo.get_segment_demo_map(db)
+    demos = {d.id: d for d in (library_repo.get_library_list(db) or [])}
+
+    ranked: list[tuple[tuple[int, float], RecommendationItem]] = []
+    for node in graph_repo.get_segment_nodes(db):
+        skills = need_by_segment.get(node.id) or []
+        if not skills or any(s not in mastery for s in skills):
+            continue                          # 见口径 2
+
+        demo = _resolve_demo(node, seg_demo, demos)
+        if demo is None:
+            continue
+        difficulty = demo.elo_difficulty
+        if difficulty is None or not 0.0 <= difficulty <= 1.0:
+            continue                          # 见口径 3
+
+        locks = [
+            (p_skill, mastery[p_skill], threshold)
+            for skill in skills
+            for p_skill, threshold in prereq_by_skill.get(skill, [])
+            if p_skill in mastery and mastery[p_skill] < threshold
+        ]
+        weakest = min(skills, key=lambda s: mastery[s])
+        diff = difficulty - level
+
+        if locks:
+            p_skill, p_l, threshold = min(locks, key=lambda x: x[1])   # 最卡脖子的那个
+            status, rank = "lock", (2, 0.0)
+            reason = f"前置技法「{p_skill}」掌握度 {p_l:.0%}，未达 {threshold:.0%}，暂不推荐"
+        elif abs(diff) <= DIFF_MATCH:
+            status, rank = "match", (0, abs(diff))
+            reason = f"难度与当前水平相当，重点巩固「{weakest}」（{mastery[weakest]:.0%}）"
+        elif 0 < diff <= DIFF_CHALLENGE:
+            status, rank = "challenge", (1, diff)
+            reason = f"难度略高于当前水平，适合挑战；建议先巩固「{weakest}」（{mastery[weakest]:.0%}）"
+        else:
+            continue                          # 太难或太简单，都不推
+
+        ranked.append((rank, RecommendationItem(
+            segment_id=node.id,
+            demo_id=demo.id,
+            title=demo.title,
+            difficulty=round(difficulty, 2),
+            status=status,
+            reason=reason,
+        )))
+
+    ranked.sort(key=lambda x: x[0])
+    return RecommendationResponse(
+        student_id=student_id,
+        recommendations=[item for _, item in ranked[:3]],
+    )
+
+
+def process_metrics(db: Session) -> ProcessMetrics:
+    """班级过程指标（功能 5.8）：本周人均练习时长与频次，附上周同口径值。
+
+    周期、分母、单位与 fear_index 的处理见 ProcessMetrics 的注释。
+    """
+    student_ids = [row[0] for row in user_repo.get_student_roster(db)]
+
+    # 本周一。与 students() 里的 week_start 同一套算法，两个接口的「本周」必须同一天，
+    # 否则同一页面上「本周练习 3 次」和「人均 0.2 次」会打架
+    this_week = _beijing_now().date()
+    this_week -= timedelta(days=this_week.weekday())
+    last_week = this_week - timedelta(days=7)
+
+    totals = practice_records_repo.get_weekly_totals(db, student_ids)
+    cur_count, cur_sec = totals.get(this_week, (0, 0.0))
+    prev_count, prev_sec = totals.get(last_week, (0, 0.0))
+
+    # 在册 0 人时给 0 而不是让 ZeroDivisionError 冒成 500：库是空的时候这个接口
+    # 仍然应该能回 200，页面显示 0 比显示「加载失败」诚实
+    n = len(student_ids) or 1
+    return ProcessMetrics(
+        week_start=this_week,
+        student_count=len(student_ids),
+        avg_duration_sec=cur_sec / n,
+        avg_duration_sec_last_week=prev_sec / n,
+        avg_practice_count=cur_count / n,
+        avg_practice_count_last_week=prev_count / n,
+    )
+
+
+def homework_progress(db: Session) -> HomeworkProgressResponse:
+    """作业进度列表（功能 5.9）：每份作业的提交完成度与状态。
+
+    状态怎么判、列表怎么排，口径见 HomeworkProgressItem 的注释。
+    """
+    student_ids = [row[0] for row in user_repo.get_student_roster(db)]
+    today = _beijing_now().date()
+    # 在册 0 人时给 0 而不是让 ZeroDivisionError 冒成 500，同 process_metrics
+    n = len(student_ids) or 1
+
+    items: list[HomeworkProgressItem] = []
+    for hw, demo, submitted, pending in homeworks_repo.get_progress_rows(db, student_ids):
+        if pending:
+            # 先判批改中：截止没截止都要批，这一档优先级高于生命周期
+            status = "grading"
+        elif hw.status == "closed" or (hw.deadline is not None and hw.deadline < today):
+            status = "closed"
+        else:
+            status = "ongoing"
+        items.append(HomeworkProgressItem(
+            homework_id=hw.id,
+            title=hw.title,
+            deadline=hw.deadline,
+            # demo 可空：作业允许不挂曲目（demo_id 为 NULL）
+            demo_title=demo.title if demo else None,
+            demo_role=demo.role if demo else None,
+            demo_banshi=demo.banshi if demo else None,
+            submitted_count=submitted,
+            progress=submitted / n,
+            pending_review_count=pending,
+            status=status,
+        ))
+
+    # 待办优先：批改中 → 进行中 → 已截止；同档按截止日**降序**（最近的在前），
+    # 没填截止日的沉底——与仓储层 `deadline desc nulls_last` 同一口径，两层不打架。
+    # 次键取 id 降序，同一天截止的几份作业顺序才稳定。
+    order = {"grading": 0, "ongoing": 1, "closed": 2}
+    items.sort(key=lambda it: (
+        order[it.status],
+        it.deadline is None,
+        -(it.deadline.toordinal() if it.deadline else 0),
+        -it.homework_id,
+    ))
+    return HomeworkProgressResponse(student_count=len(student_ids), homeworks=items)
+
+
+def _resolve_demo(node: GraphNode, seg_demo: dict[int, int],
+                  demos: dict[int, TeacherDemo]) -> TeacherDemo | None:
+    """把图谱的唱段节点落到一个曲目上——难度与标题都挂在曲目上，不在节点上。
+
+    优先走图谱自己的约定（唱段节点的 ref_id 指向 segments.id，再由 demo_id 换算）；
+    ref_id 为空、或指到了一个不在册的 segment 时，退到「节点 label 是曲目标题的
+    结尾」这一层匹配。库里 6 个唱段节点有 3 个 ref_id 是空的，只认 ref_id 会让
+    它们永远进不了候选。
+    """
+    if node.ref_id is not None:
+        demo = demos.get(seg_demo.get(node.ref_id, -1))
+        if demo is not None:
+            return demo
+    for demo in demos.values():
+        if demo.title and demo.title.endswith(node.label):
+            return demo
+    return None
 
 
