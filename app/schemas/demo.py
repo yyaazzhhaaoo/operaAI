@@ -45,3 +45,44 @@ class DemoSegmentOut(BaseModel):
     seq: int | None = None
     title: str | None = None
     duration: float | None = None
+
+
+class LyricCharOut(BaseModel):
+    """逐字歌词的一格（C3）。
+
+    字段名对齐前端 annotation.html 的 LYRICS：库里的 word/midi/end 在这里换成
+    char/pitch，end 与 start 合成 duration（spec 3.2）。
+
+    **pitch 为 None 表示这是标点**——前端靠 `item.pitch === null` 加 .punct 类
+    且不挂 onclick。所以映射时「库里的 midi 键缺失」必须补成显式 None，
+    漏成 undefined 的话 undefined === null 为 false，标点会渲染成可点的坏格子。
+
+    note 原样是 NOTE_* 词表（backend 不决定怎么显示，spec 3.4）。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    char: str
+    pitch: float | None = None
+    start: float | None = None
+    duration: float | None = None
+    note: str | None = None
+    tip: str | None = None
+
+
+class SegmentDetailOut(BaseModel):
+    """段落详情（C3）。
+
+    `duration` 是**唱段时长**，与 `lyrics[].duration`（单字时长）同名不同义，
+    靠层级区分（spec 3.1）。
+
+    `lyrics` 无歌词时是 []，不是 None：lyrics_json 为 NULL 的新段落会大量命中。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    seq: int | None = None
+    title: str | None = None
+    duration: float | None = None
+    lyrics: list[LyricCharOut] = []

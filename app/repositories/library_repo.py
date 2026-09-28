@@ -34,6 +34,15 @@ def list_segments(db: Session, demo_id: int) -> list[Segment]:
     ).all())
 
 
+def get_segment(db: Session, segment_id: int) -> Segment | None:
+    """按主键取单个分段。供 C3。
+
+    用 db.get 而不是 select().where()：它先查会话的 identity map，命中就不发 SQL。
+    这里没有 join 需求，主键查询就是全部。
+    """
+    return db.get(Segment, segment_id)
+
+
 def get_segment_demo_map(db: Session) -> dict[int, int]:
     """segments.id -> demo_id，一次取全表。
 

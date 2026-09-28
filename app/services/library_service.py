@@ -130,3 +130,73 @@ def demo_segments(db: Session, demo_id: int) -> list[Segment]:
     if library_repo.get_demo(db, demo_id) is None:
         raise BusinessError(404, "曲目不存在")
     return library_repo.list_segments(db, demo_id)
+
+
+def _num(v) -> float | None:
+    """JSONB 列没有类型约束，只放行真正的数值，其余一律 None。
+
+    挡住字符串 "64"、True 这类：前端拿 pitch 去算 midiToNote()，非数值会渲染成
+    「NaN undefined」，不如按「没有值」处理（spec 3.2）。
+
+    bool 要单独排除——Python 里 isinstance(True, int) 是 True。
+    """
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    return v
+
+
+def _normalize_lyrics(raw: list | None) -> list[dict]:
+    """把 lyrics_json 的库内形状映射成 C3 出参的逐字形状（spec 3.2）。
+
+    | 库          | 出参       | 规则                                        |
+    | word        | char       | 缺失/非字符串 → **整条丢弃**（构造不出字）       |
+    | midi        | pitch      | 缺失/非数值 → None（前端靠 pitch === null 判标点）|
+    | start       | start      | 缺失/非数值 → None                            |
+    | end - start | duration   | 任一缺失 → None；标点是 end == start → 0.0     |
+    | note        | note       | **原样传 NOTE_***，不做分数串映射（那是前端显示词）|
+    | tip         | tip        | 缺失 → None                                  |
+
+    raw 为 None（解析产出的新段落就是这样，见 DOC_ISSUES 第 20 条）→ 返回 []，
+    不是 None：前端统一按数组处理，少一个分支。这是**常态不是边角**。
+
+    条目不是对象就跳过，不让一个脏条目把整个接口打成 500。
+    """
+    out = []
+    for e in raw or []:
+        if not isinstance(e, dict):
+            continue
+        word = e.get("word")
+        if not isinstance(word, str):
+            continue
+        start = _num(e.get("start"))
+        end = _num(e.get("end"))
+        out.append({
+            "char": word,
+            "pitch": _num(e.get("midi")),
+            "start": start,
+            "duration": (end - start) if (start is not None and end is not None) else None,
+            "note": e.get("note"),
+            "tip": e.get("tip"),
+        })
+    return out
+
+
+def segment_detail(db: Session, segment_id: int) -> dict:
+    """C3 段落详情。含归一后的逐字歌词。
+
+    曲目列表（C1）与分段列表（C2）都不碰 lyrics_json，这里是唯一入口——
+    也正是因此，映射逻辑写在这一个地方就够了，不必给每个调用方各写一遍。
+
+    不返回 demo_id（调用方从 C2 过来，本来就知道，同 C2 不返回它的理由），
+    不返回原始 lyrics_json 字符串（那是 JSONB 列的内部表示）。
+    """
+    seg = library_repo.get_segment(db, segment_id)
+    if seg is None:
+        raise BusinessError(404, "唱段不存在")
+    return {
+        "id": seg.id,
+        "seq": seg.seq,
+        "title": seg.title,
+        "duration": seg.duration,
+        "lyrics": _normalize_lyrics(seg.lyrics_json),
+    }
