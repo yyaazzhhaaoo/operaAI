@@ -202,6 +202,10 @@ body{
   background:var(--primary-soft);
   color:var(--primary);
 }
+.piece-btn:disabled{opacity:0.45;cursor:not-allowed}
+/* 盖掉上面的 .piece-btn:hover，否则划过禁用按钮仍会变色、看着像可点 */
+.piece-btn:disabled:hover{border-color:var(--border-light);color:var(--text-secondary)}
+.piece-empty{font-size:13px;color:var(--text-muted);padding:8px 0}
 
 /* ===== 歌词网格 ===== */
 .lyrics-grid{
@@ -436,11 +440,8 @@ body{
     <p>在 VocalParse 输出的歌词上标注重点/容忍度，建立教学评测规则</p>
   </div>
 
-  <div class="piece-selector">
-    <button class="piece-btn active" onclick="switchPiece(0)">《穆桂英挂帅》· 辕门外三声炮</button>
-    <button class="piece-btn" onclick="switchPiece(1)">《贵妃醉酒》· 海岛冰轮初转腾</button>
-    <button class="piece-btn" onclick="switchPiece(2)">《霸王别姬》· 看大王在帐中</button>
-  </div>
+  <!-- 曲目按钮由页末脚本从 GET /api/demos 渲染 -->
+  <div class="piece-selector" id="pieceSelector"></div>
 
   <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px">
     <!-- 左侧：歌词网格 -->
@@ -755,15 +756,78 @@ function showToast(type, title, msg) {
   setTimeout(() => { if (toast.parentElement) toast.remove(); }, 5000);
 }
 
+// ============================================
+// 曲目选择器（C1 GET /api/demos）
+// 歌词网格仍是上面的 LYRICS mock——换歌词要等 C2/C3
+// （/demos/<id>/segments、/segments/<id>）实现，本轮只把曲目列表接真。
+// ============================================
+
+let demos = [];          // /api/demos 的原样结果（已按 id 升序）
+let currentDemoIdx = -1; // 渲染顺序的下标，不是 demo_id；-1 = 未选中
+
+async function fetchDemos() {
+  const box = document.getElementById("pieceSelector");
+  let rows;
+  try {
+    // 必须用同源相对路径：写成 location.host + ':8877' 那样的跨源地址时，
+    // fetch 默认不带 Cookie，后端 login_required 只会看到空 session 并回 401
+    // （与 pitch_comparison.html、demo_library.html 同一个坑）
+    const r = await fetch('/api/demos', { credentials: 'same-origin' });
+    const body = await r.json();
+    if (!r.ok || body.code !== 0) throw new Error(body.message || String(r.status));
+    rows = body.data || [];
+  } catch (e) {
+    // 不弹 toast、不打断页面：歌词网格仍是 mock，曲目列表拿不到
+    // 不该让整个标注页不可用
+    box.innerHTML = '<span class="piece-empty">曲目列表加载失败</span>';
+    return;
+  }
+
+  if (rows.length === 0) {
+    // 「拿不到」和「确实没有」不能混成同一句文案
+    box.innerHTML = '<span class="piece-empty">暂无曲目</span>';
+    return;
+  }
+
+  demos = rows;
+  currentDemoIdx = -1;
+  box.innerHTML = "";
+  rows.forEach((d, i) => {
+    const usable = d.segment_count > 0;
+    const btn = document.createElement("button");
+    btn.className = "piece-btn";
+    btn.textContent = `${d.title} (${d.segment_count}段)`;
+    btn.disabled = !usable;
+    if (usable) {
+      btn.onclick = () => switchPiece(i);
+    } else {
+      // 仍然渲染、只置灰：标注页标不了没分段的曲目，但要让人看见
+      // 「这条还没解析」，直接隐藏等于把问题藏起来
+      btn.title = "该曲目尚未解析出分段，无法标注";
+    }
+    box.appendChild(btn);
+  });
+
+  // 默认选中第一条有分段的；全都没有分段时一条都不选
+  const first = rows.findIndex(d => d.segment_count > 0);
+  if (first >= 0) switchPiece(first);
+}
+
 function switchPiece(idx) {
+  const d = demos[idx];
+  if (!d) return;
+  currentDemoIdx = idx;
   document.querySelectorAll(".piece-btn").forEach((b, i) => {
     b.classList.toggle("active", i === idx);
   });
-  showToast("info", "🎵 切换曲目", "已加载新曲目数据（模拟）");
+  // 文案不能说「已加载新曲目数据」——歌词网格仍是 mock，那会让人以为
+  // 网格跟着换了
+  showToast("info", "🎵 已选择曲目", `${d.title} · 歌词数据待接入（C2/C3 未实现）`);
 }
 
 renderLyrics();
 renderAnnotations();
+fetchDemos();
 </script>
 <!-- ==== 登录用户条 + 登出（页面鉴权配套，见 docs/superpowers/specs/2026-09-15-page-auth-design.md）==== -->
 <!-- 页面已被服务端保护，能加载出来就说明会话有效。这段脚本不做守卫，
