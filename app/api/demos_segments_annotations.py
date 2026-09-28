@@ -2,13 +2,25 @@ from flask import request
 
 from app.api import api_bp
 from app.common.decorators import login_required, teacher_required
+from app.db import get_db
 from app.response import ok
+from app.schemas.demo import DemoListOut
+from app.services import library_service
 
 
-@api_bp.route("/demos",methods=["GET"])
+@api_bp.route("/demos", methods=["GET"])
 @login_required
 def demos():
-    return ok();
+    """C1 曲目列表（陪练选曲 + 作业布置用）。
+
+    权限只要求登录（文档 C1 的权限列写的也是「登录」）：本接口要服务学生端的
+    「陪练选曲」，加 @teacher_required 会当场堵死学生端。注意这与
+    /api/demo/library/list（教师专属）不是同一个场景。
+
+    不过滤 segment_count = 0 的曲目，由调用方自己判断（spec 3.3）。
+    """
+    rows = library_service.demo_list(get_db())
+    return ok([DemoListOut.model_validate(r).model_dump(mode="json") for r in rows])
 
 @api_bp.route("/demos/<id>/segments",methods=["GET"])
 @login_required
