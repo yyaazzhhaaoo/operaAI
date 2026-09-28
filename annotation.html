@@ -534,56 +534,8 @@ body{
 // 模拟数据层（后端 API 预留接口）
 // ============================================
 
-const LYRICS = [
-  {char:"辕",pitch:64,note:"8",start:0.0,duration:0.234},{char:"门",pitch:66,note:"8",start:0.234,duration:0.234},
-  {char:"外",pitch:67,note:"4",start:0.469,duration:0.469},{char:"三",pitch:69,note:"8",start:0.938,duration:0.234},
-  {char:"声",pitch:71,note:"8",start:1.172,duration:0.234},{char:"炮",pitch:72,note:"4",start:1.406,duration:0.703},
-  {char:"如",pitch:69,note:"8",start:2.109,duration:0.234},{char:"同",pitch:67,note:"8",start:2.344,duration:0.234},
-  {char:"雷",pitch:71,note:"4",start:2.578,duration:0.703},{char:"震",pitch:69,note:"2",start:3.281,duration:0.938},
-  {char:"，",pitch:null,note:null,start:null,duration:null},{char:"天",pitch:67,note:"8",start:4.219,duration:0.234},
-  {char:"波",pitch:66,note:"8",start:4.453,duration:0.234},{char:"府",pitch:64,note:"4",start:4.688,duration:0.469},
-  {char:"走",pitch:67,note:"8",start:5.156,duration:0.234},{char:"出",pitch:69,note:"8",start:5.391,duration:0.234},
-  {char:"来",pitch:71,note:"8",start:5.625,duration:0.234},{char:"保",pitch:72,note:"4",start:5.859,duration:0.703},
-  {char:"国",pitch:71,note:"8",start:6.562,duration:0.234},{char:"臣",pitch:69,note:"2",start:6.797,duration:0.938},
-  {char:"。",pitch:null,note:null,start:null,duration:null},{char:"头",pitch:67,note:"8",start:7.734,duration:0.234},
-  {char:"戴",pitch:69,note:"8",start:7.969,duration:0.234},{char:"金",pitch:71,note:"8",start:8.203,duration:0.234},
-  {char:"冠",pitch:72,note:"4",start:8.438,duration:0.703},{char:"遮",pitch:74,note:"8",start:9.141,duration:0.234},
-  {char:"云",pitch:72,note:"8",start:9.375,duration:0.234},{char:"鬓",pitch:71,note:"2",start:9.609,duration:0.938},
-  {char:"，",pitch:null,note:null,start:null,duration:null},{char:"当",pitch:69,note:"8",start:10.547,duration:0.234},
-  {char:"年",pitch:67,note:"8",start:10.781,duration:0.234},{char:"的",pitch:66,note:"16",start:11.016,duration:0.117},
-  {char:"铠",pitch:69,note:"4",start:11.133,duration:0.703},{char:"甲",pitch:71,note:"8",start:11.836,duration:0.234},
-  {char:"披",pitch:72,note:"8",start:12.07,duration:0.234},{char:"上",pitch:74,note:"8",start:12.305,duration:0.234},
-  {char:"身",pitch:72,note:"2",start:12.539,duration:0.938},{char:"。",pitch:null,note:null,start:null,duration:null},
-  {char:"帅",pitch:76,note:"8",start:13.477,duration:0.234},{char:"字",pitch:74,note:"8",start:13.711,duration:0.234},
-  {char:"旗",pitch:72,note:"4",start:13.945,duration:0.703},{char:"镇",pitch:71,note:"8",start:14.648,duration:0.234},
-  {char:"乾",pitch:69,note:"8",start:14.883,duration:0.234},{char:"坤",pitch:67,note:"2",start:15.117,duration:0.938},
-  {char:"，",pitch:null,note:null,start:null,duration:null},{char:"浑",pitch:69,note:"8",start:16.055,duration:0.234},
-  {char:"天",pitch:71,note:"8",start:16.289,duration:0.234},{char:"侯",pitch:72,note:"4",start:16.523,duration:0.703},
-  {char:"穆",pitch:74,note:"8",start:17.227,duration:0.234},{char:"桂",pitch:76,note:"8",start:17.461,duration:0.234},
-  {char:"英",pitch:74,note:"2",start:17.695,duration:0.938},{char:"。",pitch:null,note:null,start:null,duration:null},
-  {char:"谁",pitch:67,note:"8",start:18.633,duration:0.234},{char:"料",pitch:66,note:"8",start:18.867,duration:0.234},
-  {char:"想",pitch:64,note:"4",start:19.102,duration:0.703},{char:"我",pitch:67,note:"8",start:19.805,duration:0.234},
-  {char:"五",pitch:69,note:"8",start:20.039,duration:0.234},{char:"十",pitch:71,note:"8",start:20.273,duration:0.234},
-  {char:"三",pitch:72,note:"8",start:20.508,duration:0.234},{char:"岁",pitch:71,note:"2",start:20.742,duration:0.938},
-  {char:"，",pitch:null,note:null,start:null,duration:null},{char:"又",pitch:69,note:"8",start:21.68,duration:0.234},
-  {char:"帅",pitch:72,note:"4",start:21.914,duration:0.703},{char:"三",pitch:74,note:"8",start:22.617,duration:0.234},
-  {char:"军",pitch:72,note:"1",start:22.852,duration:1.875},{char:"。",pitch:null,note:null,start:null,duration:null},
-];
-
-const EXISTING_ANNS = [
-  {index:5,char:"炮",tag:"拖腔",category:"rhythm",tolerance:50,note:"拖腔需饱满，允许±50cents"},
-  {index:8,char:"雷",tag:"拖腔",category:"rhythm",tolerance:40,note:"大拖腔，字尾上扬"},
-  {index:17,char:"保",tag:"强音",category:"pitch",tolerance:30,note:"保字需加重语气"},
-  {index:24,char:"冠",tag:"滑音",category:"articulation",tolerance:30,note:"冠字上滑装饰"},
-  {index:25,char:"遮",tag:"滑音",category:"articulation",tolerance:25,note:"下滑音，幅度约30cents"},
-  {index:32,char:"铠",tag:"拖腔",category:"rhythm",tolerance:45,note:"铠字拖腔，铠甲之意需沉稳"},
-  {index:38,char:"帅",tag:"强音",category:"pitch",tolerance:20,note:"帅字旗，起势高音需有力"},
-  {index:40,char:"旗",tag:"拖腔",category:"rhythm",tolerance:50,note:"旗字拖腔展示气势"},
-  {index:46,char:"侯",tag:"归韵",category:"articulation",tolerance:20,note:"侯字归韵，口型保持"},
-  {index:52,char:"想",tag:"拖腔",category:"rhythm",tolerance:50,note:"想字大拖腔，情感转折处"},
-  {index:60,char:"帅",tag:"拖腔",category:"rhythm",tolerance:40,note:"收尾拖腔，三军之势"},
-  {index:62,char:"军",tag:"归韵",category:"articulation",tolerance:15,note:"军字收音，归韵到位"},
-];
+// 歌词不再有 mock：来自 C3（GET /api/segments/<id>），见页末 fetchLyrics()。
+// 标注列表同理待 C4（/segments/<id>/annotations），初始为空。
 
 const TECHNIQUE_DEPS = {
   "拖腔":  { prereqs: ["气息支撑","音准稳定性"], classAvg: { "气息支撑": 0.62, "音准稳定性": 0.71 } },
@@ -600,11 +552,29 @@ const RULE_IMPACT = {
 
 let selectedIndex = -1;
 let selectedTag = null;
-let annotations = [...EXISTING_ANNS];
+// 待 C4：POST/GET/DELETE /api/annotations*。本轮永远是空数组
+let annotations = [];
 
 function midiToNote(midi) {
   const names = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
   return names[Math.round(midi) % 12] + (Math.floor(Math.round(midi)/12)-1);
+}
+
+const NOTE_LABELS = {
+  "NOTE_1": "1/1 拍", "NOTE_2": "1/2 拍", "NOTE_4": "1/4 拍",
+  "NOTE_8": "1/8 拍", "NOTE_16": "1/16 拍", "NOTE_32": "1/32 拍",
+};
+const NOTE_DOT_LABELS = {
+  "NOTE_DOT_2": "1/2 附点拍", "NOTE_DOT_4": "1/4 附点拍", "NOTE_DOT_8": "1/8 附点拍",
+  "NOTE_DOT_16": "1/16 附点拍", "NOTE_DOT_32": "1/32 附点拍",
+};
+
+function noteLabel(note) {
+  // 后端统一传 NOTE_* 词表（DOC_ISSUES 第 27.2 条），分数串是这一层的显示词
+  if (note === null || note === undefined) return "—";
+  // 认不出来就原样显示。**不能有兜底档**：改造前那两处嵌套三元只认 "16"/"8"/"4"/"2"，
+  // 遇到 NOTE_8 会一路落到最后的 "1/1"，把 1/8 拍显示成 1/1 拍
+  return NOTE_LABELS[note] || NOTE_DOT_LABELS[note] || note;
 }
 
 function getPLColor(p) {
@@ -617,9 +587,15 @@ function getPLColor(p) {
 function renderLyrics() {
   const grid = document.getElementById("lyricsGrid");
   grid.innerHTML = "";
-  LYRICS.forEach((item, idx) => {
+  if (lyrics.length === 0) {
+    // 三种空态（未选唱段 / 该唱段暂无歌词 / 加载失败）共用这一个出口，
+    // 具体说哪句由 lyricsEmptyMsg 决定
+    grid.innerHTML = `<span class="piece-empty">${lyricsEmptyMsg}</span>`;
+    return;
+  }
+  lyrics.forEach((item, idx) => {
     if (item.char === "END") return;
-    if (idx > 0 && ["，", "。"].includes(LYRICS[idx-1].char)) {
+    if (idx > 0 && ["，", "。"].includes(lyrics[idx-1].char)) {
       const br = document.createElement("div"); br.className = "line-break"; grid.appendChild(br);
     }
     const cell = document.createElement("div");
@@ -629,7 +605,7 @@ function renderLyrics() {
     if (item.pitch !== null) {
       let html = `<div class="lyric-char">${item.char}</div>`;
       html += `<div class="lyric-pitch">${item.pitch} ${midiToNote(item.pitch)}</div>`;
-      html += `<div class="lyric-note">${item.note==="16"?"1/16":(item.note==="8"?"1/8":(item.note==="4"?"1/4":(item.note==="2"?"1/2":"1/1")))}拍</div>`;
+      html += `<div class="lyric-note">${noteLabel(item.note)}</div>`;
       html += `<div class="lyric-time">${item.start.toFixed(1)}s</div>`;
       if (hasAnn) html += `<div class="ann-indicator" title="${hasAnn.tag}: ${hasAnn.note}">✓</div>`;
       cell.innerHTML = html;
@@ -643,20 +619,35 @@ function renderLyrics() {
 
 function selectChar(idx) {
   selectedIndex = idx;
-  const item = LYRICS[idx];
+  const item = lyrics[idx];
   document.querySelectorAll(".lyric-cell").forEach(c => c.classList.remove("selected"));
   document.querySelector(`.lyric-cell[data-index="${idx}"]`)?.classList.add("selected");
   document.getElementById("bigChar").textContent = item.char;
   document.getElementById("charInfo").textContent = `第 ${idx+1} 字 · 点击选择标注类型`;
   document.getElementById("charMeta").style.display = "flex";
   document.getElementById("metaPitch").textContent = `音高: ${item.pitch} (${midiToNote(item.pitch)})`;
-  document.getElementById("metaNote").textContent = `时值: ${item.note==="16"?"1/16":(item.note==="8"?"1/8":(item.note==="4"?"1/4":(item.note==="2"?"1/2":"1/1")))}拍`;
+  // noteLabel 自带「拍」字，这里不要再拼一个
+  document.getElementById("metaNote").textContent = `时值: ${noteLabel(item.note)}`;
   document.getElementById("metaTime").textContent = `起止: ${item.start.toFixed(2)}s`;
   const ctrl = document.getElementById("annotateControls");
   ctrl.style.opacity = "1"; ctrl.style.pointerEvents = "all";
   selectedTag = null;
   document.querySelectorAll(".type-btn").forEach(b => b.classList.remove("active"));
   document.getElementById("depsPanel").classList.remove("show");
+}
+
+function resetAnnotationPanel() {
+  // 还原成 HTML 里的初始值（bigChar/charInfo/charMeta/annotateControls/depsPanel），
+  // 不这么做的话，切唱段后右栏还停在上一个唱段选中那个字的音高、时值上
+  selectedIndex = -1;
+  selectedTag = null;
+  document.getElementById("bigChar").textContent = "—";
+  document.getElementById("charInfo").textContent = "点击左侧歌词字进行标注";
+  document.getElementById("charMeta").style.display = "none";
+  const ctrl = document.getElementById("annotateControls");
+  ctrl.style.opacity = "1"; ctrl.style.pointerEvents = "none";
+  document.getElementById("depsPanel").classList.remove("show");
+  document.querySelectorAll(".type-btn").forEach(b => b.classList.remove("active"));
 }
 
 document.querySelectorAll(".type-btn").forEach(btn => {
@@ -700,7 +691,7 @@ function renderDeps(tagName) {
 
 function saveAnnotation() {
   if (selectedIndex < 0 || !selectedTag) { alert("请先选择一个字和标注类型"); return; }
-  const item = LYRICS[selectedIndex];
+  const item = lyrics[selectedIndex];
   const tolerance = document.getElementById("toleranceSlider").value;
   const existingIdx = annotations.findIndex(a => a.index === selectedIndex);
   const newAnn = {
@@ -763,7 +754,6 @@ function showToast(type, title, msg) {
 
 // ============================================
 // 曲目选择器（C1 GET /api/demos）
-// 歌词网格仍是上面的 LYRICS mock——换歌词要等 C3（/segments/<id>）实现。
 // ============================================
 
 let demos = [];          // /api/demos 的原样结果（已按 id 升序）
@@ -832,14 +822,12 @@ function switchPiece(idx) {
   document.getElementById("segmentSelector").innerHTML = "";
   // 不 await：高亮与 toast 不依赖分段结果，不该等它
   fetchSegments(d.id);
-  // 文案不能说「已加载新曲目数据」——歌词网格仍是 mock，那会让人以为
-  // 网格跟着换了
-  showToast("info", "🎵 已选择曲目", `${d.title} · 歌词网格待接入（C3 未实现）`);
+  // 不能说「已加载新曲目数据」：换曲目只是换了分段列表，歌词要等分段选完才到
+  showToast("info", "🎵 已选择曲目", `${d.title} · 正在加载唱段…`);
 }
 
 // ============================================
 // 分段选择器（C2 GET /api/demos/<id>/segments）
-// 歌词网格仍是上面的 LYRICS mock——换歌词要等 C3（/segments/<id>）实现。
 // ============================================
 
 let segments = [];       // 当前曲目的分段（按 seq 升序）
@@ -903,8 +891,55 @@ function switchSegment(idx) {
   document.querySelectorAll("#segmentSelector .piece-btn").forEach((b, i) => {
     b.classList.toggle("active", i === idx);
   });
-  // 同 switchPiece：不能说「已加载新唱段数据」，歌词网格仍是 mock
-  showToast("info", "🎵 已选择唱段", `${segLabel(s)} · 歌词网格待接入（C3 未实现）`);
+  // 换唱段＝换一整套字。annotations 的 index 是「第几个字」，留着会挂到
+  // 新唱段的同序号字上——那不是同一个字
+  annotations = [];
+  renderAnnotations();
+  resetAnnotationPanel();
+  // 旧歌词立刻让位，否则会在新数据到达前一直显示上一个唱段的字
+  lyrics = [];
+  lyricsEmptyMsg = "歌词加载中…";
+  renderLyrics();
+  // 不 await：高亮与 toast 不依赖歌词结果，不该等它
+  fetchLyrics(s.id);
+  showToast("info", "🎵 已选择唱段", segLabel(s));
+}
+
+// ============================================
+// 歌词（C3 GET /api/segments/<id>）
+// 标注相关的仍是 mock：saveAnnotation/renderAnnotations 待 C4–C6。
+// ============================================
+
+let lyrics = [];                  // 当前唱段的逐字数据（C3 出参 data.lyrics）
+let lyricsEmptyMsg = "请选择唱段"; // 网格为空时显示哪句话
+let lyricReqToken = 0;            // 竞态守卫，见 fetchLyrics
+
+async function fetchLyrics(segmentId) {
+  // 领号必须在 await 之前；await 之后再领就等于没领
+  const token = ++lyricReqToken;
+  let data;
+  try {
+    const r = await fetch(`/api/segments/${segmentId}`, { credentials: 'same-origin' });
+    const body = await r.json();
+    if (!r.ok || body.code !== 0) throw new Error(body.message || String(r.status));
+    data = body.data || {};
+  } catch (e) {
+    // 期间又切过唱段的话，这个失败属于上一个唱段，不该覆盖当前的状态
+    if (token !== lyricReqToken) return;
+    lyrics = [];
+    lyricsEmptyMsg = "歌词加载失败";
+    renderLyrics();
+    return;
+  }
+
+  // 判定必须在 await 之后：快速连点两个唱段时，先发的慢响应可能后到
+  if (token !== lyricReqToken) return;
+
+  lyrics = data.lyrics || [];
+  // 「这个唱段还没有歌词」是常态（解析产出的新段落 lyrics_json 就是 NULL），
+  // 与「加载失败」必须分开说
+  lyricsEmptyMsg = lyrics.length === 0 ? "该唱段暂无歌词" : "";
+  renderLyrics();
 }
 
 renderLyrics();
