@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.common.errors import BusinessError
 from app.models import TeacherDemo
 from app.models.demo import Segment
-from app.repositories import library_repo
+from app.repositories import annotations_repo, library_repo
 from app.services import parse_service
 
 
@@ -200,3 +200,36 @@ def segment_detail(db: Session, segment_id: int) -> dict:
         "duration": seg.duration,
         "lyrics": _normalize_lyrics(seg.lyrics_json),
     }
+
+
+def segment_annotations(db: Session, segment_id: int) -> list[dict]:
+    """C4 标注列表。该唱段的全部标注，按 word_index 升序。
+
+    **不按教师隔离**（spec 3.4）：annotations 的 UNIQUE 约束是
+    (segment_id, word_index, tag)，**不含 teacher_id**——同一唱段的同一个字、
+    同一个 tag 只能存一条，换个教师再标会撞唯一约束。这张表的设计前提就是
+    「一个唱段一套全局唯一的规则集」，不是每教师一份。teacher_id 仍照常写入
+    （C5 的事），只是不参与过滤。
+
+    唱段不存在抛 404：**必须显式查 segments**，不能拿标注查询的结果反推——
+    唱段不存在时查标注同样是空数组，不查 segments 就会把「唱段不存在」错答成
+    200 + []，与 C3 的口径打架。
+
+    唱段存在但没有标注回 []，不是 404（同 C2/C3 的「存在但为空」口径）。
+    这是当前真库的唯一情况：annotations 表 0 行。
+
+    返回 dict 而不是 ORM 对象：同 demo_list / demo_library_list 的风格，
+    api 层直接喂给 pydantic。
+    """
+    if library_repo.get_segment(db, segment_id) is None:
+        raise BusinessError(404, "唱段不存在")
+    return [
+        {
+            "id": a.id,
+            "word_index": a.word_index,
+            "tag": a.tag,
+            "tolerance": a.tolerance,
+            "created_at": a.created_at,
+        }
+        for a in annotations_repo.list_by_segment(db, segment_id)
+    ]

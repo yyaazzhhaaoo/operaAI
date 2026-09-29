@@ -4,7 +4,7 @@ from app.api import api_bp
 from app.common.decorators import login_required, teacher_required
 from app.db import get_db
 from app.response import ok
-from app.schemas.demo import DemoListOut, DemoSegmentOut, SegmentDetailOut
+from app.schemas.demo import AnnotationOut, DemoListOut, DemoSegmentOut, SegmentDetailOut
 from app.services import library_service
 
 
@@ -52,11 +52,22 @@ def segments(segment_id):
     data = library_service.segment_detail(get_db(), segment_id)
     return ok(SegmentDetailOut.model_validate(data).model_dump(mode="json"))
 
-@api_bp.route("/segments/<id>/annotations",methods=["GET"])
+@api_bp.route("/segments/<int:segment_id>/annotations", methods=["GET"])
 @login_required
 @teacher_required
-def segments_annotations(id):
-    return ok(id);
+def segments_annotations(segment_id):
+    """C4 标注规则列表。
+
+    `<int:segment_id>` 同 C2/C3：非数字路径在**路由层**就 404，不进视图。
+
+    **权限是教师**（文档 C4 的权限列就是「教师」），与 C1/C2/C3 的「登录」不同：
+    2.3 节这一组里 C4–C7 都是教师专属。装饰器叠放顺序固定，login_required 在外层。
+
+    唱段不存在回 404，唱段存在但没标注回 200 + []——「还没标过」是正常状态
+    （当前真库 annotations 表 0 行，在没有标注数据时这就是唯一会遇到的情况）。
+    """
+    rows = library_service.segment_annotations(get_db(), segment_id)
+    return ok([AnnotationOut.model_validate(r).model_dump(mode="json") for r in rows])
 
 @api_bp.route("/annotations",methods=["POST"])
 @login_required
