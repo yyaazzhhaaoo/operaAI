@@ -720,6 +720,57 @@ C2 在文档里的**全部**内容是「`GET /api/demos/<id>/segments` ｜ 登�
 
 ---
 
+## 28. 标注列表（C4）只有一句话描述，响应契约全未定义；另：`CLAUDE.md` 的数据库时区记载与实测不符
+
+**涉及**：《5-接口清单》2.3 节 C4 / `app/api/demos_segments_annotations.py` / `app/services/library_service.py` / `annotation.html`
+
+### 28.1 C4 的响应契约全未定义
+
+C4 在文档里的**全部**内容是「`GET /api/segments/<id>/annotations` ｜ 教师 ｜ 标注规则列表」一行。与第 26（C1）、27（C2/C3）条同源。本次采用的口径：
+
+| 未定义项 | 本次采用的口径 |
+|---|---|
+| 响应体字段 | `id` / `word_index` / `tag` / `tolerance` / `created_at` |
+| 字段名 | 用 `word_index`，**沿用文档给 C5 的入参名**（C5 的说明写的是「新增标注（segment_id, word_index, tag, tolerance）」），不叫 `index` |
+| `char` / `category` / `note` | **不由后端返回**。`char` 由前端从已加载的 `lyrics[word_index]` 取——后端按下标去读 `lyrics_json` 会踩 C3 归一函数的丢弃错位（见 27.2）；`category` 是 CSS 类名、`note` 是拼出来的显示串，都是 UI 措辞，同第 26 条对 `elo_difficulty` 的处置 |
+| 是否按教师隔离 | **不隔离**，返回该唱段全部标注。依据是表自己的约束：`UNIQUE(segment_id, word_index, tag)` **不含 `teacher_id`**，同一唱段的同一个字同一个 tag 只能存一条——这张表的设计前提就是「一个唱段一套全局唯一的规则集」，不是每教师一份 |
+| 排序 | `word_index, id` 升序（带 `id` 是为了稳定性） |
+| 唱段不存在 | `404`（**显式查 `segments`**，不能拿标注查询的结果反推，否则会错答成 `200 + []`） |
+| 唱段存在但无标注 | `200` + `[]` |
+| 分页 | 无 |
+
+**数据现状**：`annotations` 表实测 **0 行**，`seed.sql` 里也没有标注的 INSERT。所以本接口在真实数据上恒定返回 `[]`，标注页恒定走空态；真数据路径是靠临时插行验的。
+
+**待文档方确认**：
+
+1. C4 出参是否够用？C7（规则列表管理，功能 9.6）是否需要更多字段（如教师名、创建时间）？
+2. 不按教师隔离是否与预期一致？若预期「各教师管各自的标注」，需要**同时**改 `UNIQUE` 约束（去掉或加入 `teacher_id`），否则会出现「标不了（撞唯一约束）又看不见（被过滤掉）」的死角。
+3. `created_at` 是否有用？当前前端一处都没读它。
+
+### 28.2 `CLAUDE.md` 的数据库时区记载与实测不符
+
+`CLAUDE.md`「数据库接入层」一节写「**容器内 PostgreSQL 的时区是 `Etc/UTC`**，`NOW()` 返回 UTC，比北京时间早整 8 小时。所有 `created_at`/`recorded_at`/`submitted_at` 等 `DEFAULT NOW()` 的列存进去的都是 UTC 时间」。**实测不是这样**：
+
+```
+$ docker exec docker_postgres psql -U xiyun -d xiyun -c "SHOW timezone;"
+   TimeZone
+---------------
+ Asia/Shanghai
+
+$ docker exec docker_postgres psql -U xiyun -d xiyun -c "SELECT now(), now() AT TIME ZONE 'Asia/Shanghai';"
+            db_now             |          asia_now
+-------------------------------+----------------------------
+ 2026-09-29 08:58:49.787046+08 | 2026-09-29 08:58:49.787046
+```
+
+两者**相等**，即 `NOW()` 落库的**就是北京时间**。`app/repositories/practice_records_repo.py:53` 的注释记的是对的，`CLAUDE.md` 那句是错的。
+
+**影响**：所有 `DEFAULT NOW()` 的列一律**不做** `AT TIME ZONE` 换算。照着 `CLAUDE.md` 换算会把时间整体推后 8 小时，跨零点的那几条会串到第二天（`practice_records_repo.py` 的注释已经指出过这个后果）。C4 的 `created_at` 因此直接返回原值。
+
+**待确认**：这条是 `CLAUDE.md`（本仓库自己的文件）与实测不符，不是《…》文档的问题——是否要顺手把 `CLAUDE.md` 那句改掉？本次只登记、不改，因为改它会影响其他接口对时区的既有假设，需要单独过一遍。
+
+---
+
 ## 待核实
 
 - `CLAUDE.md` 记载《5-接口清单》共 49 个接口，但按 `方法 + 路径` 提取只得 43 条、按资源路径去重得 37 个。差异可能来自提取方式（表格结构、路径参数写法），也可能是文档自身统计有误，**尚未确认，不作为问题登记**。
