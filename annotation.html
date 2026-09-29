@@ -738,6 +738,7 @@ function renderAnnotations() {
 function deleteAnnotation() {
   // C6 未实现：不从列表里移除。本地 splice 掉的条目刷新就回来了，
   // 而点了 ✕ 却什么都没发生是更清楚的说法
+  // &lt;id&gt; 是 HTML 实体：showToast 走 innerHTML，直接写 <id> 会被当未知标签吞掉
   showToast("info", "删除接口未实现", "C6（DELETE /api/annotations/&lt;id&gt;）尚未实现，标注仍在库中");
 }
 
@@ -776,7 +777,7 @@ async function fetchDemos() {
     if (!r.ok || body.code !== 0) throw new Error(body.message || String(r.status));
     rows = body.data || [];
   } catch (e) {
-    // 不弹 toast、不打断页面：歌词网格仍是 mock，曲目列表拿不到
+    // 不弹 toast、不打断页面：曲目列表拿不到
     // 不该让整个标注页不可用
     box.innerHTML = '<span class="piece-empty">曲目列表加载失败</span>';
     // 分段区一并清空：曲目都没了，留着上一次的分段只会误导

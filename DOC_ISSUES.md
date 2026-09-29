@@ -724,7 +724,7 @@ C2 在文档里的**全部**内容是「`GET /api/demos/<id>/segments` ｜ 登�
 
 ## 28. 标注列表（C4）只有一句话描述，响应契约全未定义；另：`CLAUDE.md` 的数据库时区记载与实测不符
 
-**涉及**：《5-接口清单》2.3 节 C4 / `app/api/demos_segments_annotations.py` / `app/services/library_service.py` / `annotation.html`
+**涉及**：《5-接口清单》2.3 节 C4 / `app/api/demos_segments_annotations.py` / `app/services/library_service.py` / `app/repositories/annotations_repo.py` / `app/schemas/demo.py` / `annotation.html`
 
 ### 28.1 C4 的响应契约全未定义
 
@@ -747,7 +747,7 @@ C4 在文档里的**全部**内容是「`GET /api/segments/<id>/annotations` ｜
 
 1. C4 出参是否够用？C7（规则列表管理，功能 9.6）是否需要更多字段（如教师名、创建时间）？
 2. 不按教师隔离是否与预期一致？若预期「各教师管各自的标注」，需要**同时**改 `UNIQUE` 约束（去掉或加入 `teacher_id`），否则会出现「标不了（撞唯一约束）又看不见（被过滤掉）」的死角。
-3. `created_at` 是否有用？当前前端一处都没读它。
+3. `created_at` 是否有用？当前前端只把它映射进内部对象（`fetchAnnotations` 里的 `createdAt: r.created_at`），映射之后没有任何地方消费它。
 
 ### 28.2 `CLAUDE.md` 的数据库时区记载与实测不符
 
