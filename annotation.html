@@ -805,16 +805,42 @@ function renderAnnotations() {
       <div class="ann-tag tag-${cat}">${ann.tag}</div>
       <div style="color:var(--text-secondary);font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${annNote(ann)}</div>
       ${tol}
-      <div class="ann-del" onclick="deleteAnnotation()">✕</div>
+      <div class="ann-del" onclick="deleteAnnotation(${ann.id})">✕</div>
     </div>`;
   }).join("");
 }
 
-function deleteAnnotation() {
-  // C6 未实现：不从列表里移除。本地 splice 掉的条目刷新就回来了，
-  // 而点了 ✕ 却什么都没发生是更清楚的说法
-  // &lt;id&gt; 是 HTML 实体：showToast 走 innerHTML，直接写 <id> 会被当未知标签吞掉
-  showToast("info", "删除接口未实现", "C6（DELETE /api/annotations/&lt;id&gt;）尚未实现，标注仍在库中");
+async function deleteAnnotation(id) {
+  const ann = annotations.find((a) => a.id === id);
+  if (!ann) return;   // 行已被别处删掉、本地也找不到了，没什么可删
+  // 删错一个 tag 在 C6 之前是撤不回的，而误点只需一次轻触——先确认。
+  // 文案带上字与 tag（annNote 拼「谁字拖腔标注」）：只写「确定删除吗？」
+  // 用户无从判断删的是哪一条
+  if (!confirm(`确定删除「${annNote(ann)}」吗？`)) return;
+
+  try {
+    const r = await fetch(`/api/annotations/${id}`, {
+      method: 'DELETE',
+      // 同源相对路径 + same-origin：与 C1–C5 同理，写成跨源地址时 fetch
+      // 默认不带 Cookie，后端 login_required 只会看到空 session 并回 401
+      credentials: 'same-origin',
+    });
+    const body = await r.json();
+    if (!r.ok || body.code !== 0) throw new Error(body.message || String(r.status));
+  } catch (e) {
+    // 只弹 toast、不改本地列表：annotations 只装服务端确认过的状态。
+    // 失败时那一行必须原样留着——否则用户以为删掉了，刷新才发现还在
+    showToast("error", "删除失败", e.message);
+    return;
+  }
+
+  // 文案在 splice 之前算：ann 对象 splice 后仍在（只是不在数组里），
+  // 但把「读本地状态的东西」放在改本地状态之前，读起来不必回头确认
+  showToast("success", "已删除标注", annNote(ann));
+  const i = annotations.findIndex((a) => a.id === id);
+  if (i >= 0) annotations.splice(i, 1);
+  renderAnnotations();
+  renderLyrics();   // 格子上的 ✓ 由 renderLyrics 画，删了要重画一次
 }
 
 // toast 图标按类型查表。原来是「只判 success、其余一律 ℹ️」，新增的 error
