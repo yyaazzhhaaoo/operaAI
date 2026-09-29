@@ -314,7 +314,7 @@ async function saveAnnotation() {
 
 - `annotation.html:554` 的「当前唱段的标注（C4 出参，已映射成内部形状）」要改成「C4 列表 + C5 返回值」——内部形状现在有两个来源
 - `:693-695` 那段「C5 未实现」的注释连同提示一起删掉
-- 新增一条 `#saveAnnotate:disabled` 样式（`.btn-primary` 现在没有 disabled 规则，不加就只能靠浏览器默认外观，与页面其余部分不一致）
+- **不需要新增 CSS**：`.btn-primary:disabled`（`:170`，`opacity:0.5; cursor:not-allowed; transform:none; box-shadow:none`）与 `.toast` 基础样式都已存在，禁用态与 `error` toast 直接落上去即可。`.toast.error` 没有专用配色规则，落到 `.toast` 基础外观——与 C4 对 `.toast.info` 的处置一致
 
 ## 6. 验证
 
