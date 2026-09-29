@@ -738,7 +738,7 @@ function renderAnnotations() {
 function deleteAnnotation() {
   // C6 未实现：不从列表里移除。本地 splice 掉的条目刷新就回来了，
   // 而点了 ✕ 却什么都没发生是更清楚的说法
-  showToast("info", "删除接口未实现", "C6（DELETE /api/annotations/<id>）尚未实现，标注仍在库中");
+  showToast("info", "删除接口未实现", "C6（DELETE /api/annotations/&lt;id&gt;）尚未实现，标注仍在库中");
 }
 
 function showToast(type, title, msg) {
