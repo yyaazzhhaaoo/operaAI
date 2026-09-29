@@ -294,3 +294,25 @@ def create_annotation(db: Session, *, segment_id: int, word_index: int, tag: str
     }
     db.commit()
     return row
+
+
+def delete_annotation(db: Session, annotation_id: int) -> None:
+    """C6 删除标注。不存在抛 404。成功无返回值。
+
+    只有一条判定——路径参数已由 `<int:annotation_id>` 保证是非负整数，
+    没有请求体也就没有入参校验，重复删除在第一步就撞 404。所以这里没有
+    create_annotation 那样的 404/422/409 三级。
+
+    **不判归属**：任何教师可删任何人的标注（spec 3.3）。C4 的前提是
+    「一个唱段一套全局唯一的规则集」，规则的所有者是唱段而不是标它的
+    那位教师；且 C4 出参不返回 teacher_id，判归属只会让用户遇到
+    「删不掉又不知道为什么」。若文档方要求按人隔离，改动点在这里。
+
+    返回 None 而不是 dict：删除没有「新状态」可返回。本文件其他 service
+    函数都返回 dict/ORM，是因为它们的出参有内容，这里没有。
+    """
+    ann = annotations_repo.get_by_id(db, annotation_id)
+    if ann is None:
+        raise BusinessError(404, "标注不存在")
+    annotations_repo.remove(db, ann)
+    db.commit()

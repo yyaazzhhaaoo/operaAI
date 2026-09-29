@@ -63,3 +63,28 @@ def add(db: Session, *, segment_id: int, word_index: int, tag: str,
     db.add(ann)
     db.flush()          # 只为拿到自增 id 与 created_at，提交由 service 层负责
     return ann
+
+
+def get_by_id(db: Session, annotation_id: int) -> Annotation | None:
+    """按主键取一条标注（C6 的存在性判定）。取不到返回 None。
+
+    返回 None 表示「没有」——调用方据此抛 404，不拿它当别的信号。
+
+    用 db.get() 而不是 select().where()：直接走主键查询 / identity map，
+    是本文件已有写法里最短的一个。
+    """
+    return db.get(Annotation, annotation_id)
+
+
+def remove(db: Session, ann: Annotation) -> None:
+    """删除一条标注。只标脏，提交交给 service 层（同 add 只 flush 的约定）。
+
+    收 ORM 对象而不是 id：调用方（service）已经为了判 404 把行查出来了，
+    再收一个 id 去发 DELETE 语句等于把同一次查找做两遍。
+
+    **不用 `DELETE ... WHERE id = ?` 拿 rowcount**：rowcount 只有 0/1，
+    拿到 0 时还要再 SELECT 一次才能区分「不存在」与「并发被删」，省下的
+    那次查询又还回去了；而且本层一律以 ORM 对象为出入口，写原生 delete()
+    会让这一层出现两种风格。C6 的量级是「一次一行」，不值得为它优化。
+    """
+    db.delete(ann)
