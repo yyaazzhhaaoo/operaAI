@@ -4,6 +4,7 @@
 事务边界在本层：写操作显式 commit。
 """
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.common.errors import BusinessError
@@ -233,3 +234,63 @@ def segment_annotations(db: Session, segment_id: int) -> list[dict]:
         }
         for a in annotations_repo.list_by_segment(db, segment_id)
     ]
+
+
+def create_annotation(db: Session, *, segment_id: int, word_index: int, tag: str,
+                      tolerance: int | None, teacher_id: int | None) -> dict:
+    """C5 新增标注。返回新建的行，形状与 C4 列表行相同。
+
+    关键字参数：两个 int 加一个可空 int，位置调用时极易写反。
+
+    判定顺序 —— **segment 存在性 → 下标范围 → 重复**：
+
+    - 唱段不存在抛 404（同 C3/C4，必须显式查 segments）
+    - 下标越界抛 422。上界按 **C3 归一后**的歌词长度算，与 C3 出参、前端歌词
+      网格**同一个函数**——三者必须同源，否则会出现「接口说越界、页面上却
+      有这个字」。C4 spec 5.5 对出参采取「越界保留、首列显示 ?」是为了让**已有
+      的**脏数据可见；这里挡住是为了**不再生产**脏数据，两者不冲突
+    - 同字同 tag 已存在抛 409（`UNIQUE(segment_id, word_index, tag)`）
+
+    tag 的取值域与 tolerance 的 0–100 在 `AnnotationIn` 已经挡下，本层不重复判。
+
+    返回 dict 而不是 ORM 对象：同 segment_annotations / demo_list 的风格，
+    api 层直接喂给 pydantic。**字典在 commit 之前就组装好**——commit 会让
+    ORM 实例的属性过期，之后再读会多发一次 SELECT。
+    """
+    seg = library_repo.get_segment(db, segment_id)
+    if seg is None:
+        raise BusinessError(404, "唱段不存在")
+
+    n = len(_normalize_lyrics(seg.lyrics_json))
+    if word_index >= n:
+        # BusinessError 的消息不会被加字段名前缀（那是 pydantic 的 loc 拼的），
+        # 所以这里要把上下文写全，前端 toast 直接展示这一句
+        raise BusinessError(422, f"该唱段共 {n} 个字，word_index 必须在 0 到 {n - 1} 之间")
+
+    if annotations_repo.get_one(db, segment_id, word_index, tag) is not None:
+        raise BusinessError(409, "该字已标注此技法")
+
+    try:
+        ann = annotations_repo.add(
+            db, segment_id=segment_id, word_index=word_index, tag=tag,
+            tolerance=tolerance, teacher_id=teacher_id,
+        )
+    except IntegrityError:
+        # 这里只会是唯一约束冲突：其余约束都已被前面的判定与 AnnotationIn 挡下
+        # （segment_id 的外键由 404 判定、teacher_id 来自有效会话、tolerance 的
+        # CHECK 由入参模型保证、word_index / tag 的 NOT NULL 由必填保证）。
+        # **将来给 annotations 加新约束时，要回头重看这个假设。**
+        # rollback 是必需的：flush 失败后会话处于不可用状态，不回滚就不能再
+        # 执行任何语句（get_db() 只在 teardown 时 close()，不替这里回滚）。
+        db.rollback()
+        raise BusinessError(409, "该字已标注此技法") from None
+
+    row = {
+        "id": ann.id,
+        "word_index": ann.word_index,
+        "tag": ann.tag,
+        "tolerance": ann.tolerance,
+        "created_at": ann.created_at,
+    }
+    db.commit()
+    return row
