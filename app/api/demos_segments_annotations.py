@@ -114,11 +114,35 @@ def annotations():
     )
     return ok(AnnotationOut.model_validate(row).model_dump(mode="json"))
 
-@api_bp.route("/annotations/<id>",methods=["DELETE"])
+@api_bp.route("/annotations/<int:annotation_id>", methods=["DELETE"])
 @login_required
 @teacher_required
-def del_annotations(id):
-    return ok(id)
+def del_annotations(annotation_id):
+    """C6 删除标注。
+
+    路径参数用 `<int:annotation_id>`：非整数与负数在**路由层**就 404，不进
+    视图（同 C2/C3/C4 的 `<int:...>`）。所以本层与 service 层都不必判负数
+    或非数字——那是永不可达的死分支。已实测：`/api/segments/abc/annotations`
+    与 `/api/segments/-1/annotations` 都回 404（Werkzeug 的 IntegerConverter
+    正则是 `\\d+`，不收负号）。
+
+    参数名不叫 `id`：`id` 遮蔽内置函数，且读代码时分不清是「标注的 id」
+    还是别的什么。
+
+    **权限是教师**（文档 C6 的权限列就是「教师」），与同组 C4/C5/C7 一致。
+
+    **不判归属**（spec 3.3）：任何教师可删任何人的标注，理由见 service 层。
+
+    回 `ok(None)`，**不是 204**：本项目统一信封（《5-接口清单》），204 按
+    定义无响应体，会打破它。也不回被删的行——行已经没了，而前端本来就知道
+    自己删的是哪个 id（这点与 C5 不同：新建的 id 由数据库生成，前端不知道）。
+
+    与 C7 `/annotations/rules` 不冲突，且不依赖注册顺序：`rules` 不是整数，
+    永远匹配不上 `<int:annotation_id>`。反过来说，若这里保持字符串转换器，
+    C7 能不能用就取决于两条路由谁先注册了。
+    """
+    library_service.delete_annotation(get_db(), annotation_id)
+    return ok(None)
 
 @api_bp.route("/annotations/rules",methods=["GET"])
 @login_required
