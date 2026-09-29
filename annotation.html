@@ -963,6 +963,9 @@ async function fetchLyrics(segmentId) {
   // 与「加载失败」必须分开说
   lyricsEmptyMsg = lyrics.length === 0 ? "该唱段暂无歌词" : "";
   renderLyrics();
+  // 与 fetchAnnotations 末尾的 renderLyrics() 对称：annChar 从 lyrics 取字，
+  // 歌词比标注晚到时列表已经画过一遍、首列全落成 "?"，这里补画一次
+  renderAnnotations();
 }
 
 // ============================================
