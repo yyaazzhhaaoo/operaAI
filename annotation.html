@@ -551,8 +551,10 @@ const RULE_IMPACT = {
 
 let selectedIndex = -1;
 let selectedTag = null;
-// 当前唱段的标注（C4 出参，已映射成内部形状：word_index→index，见 fetchAnnotations）
+// 当前唱段的标注。两个来源：C4 列表（fetchAnnotations）与 C5 写入的返回值
+// （saveAnnotation）——两处都映射成同一套内部形状：word_index→index
 let annotations = [];
+let annLoaded = false;   // 本地 annotations 是否是一份完整列表，见 saveAnnotation
 
 function midiToNote(midi) {
   const names = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
@@ -614,6 +616,13 @@ function renderLyrics() {
     }
     grid.appendChild(cell);
   });
+  // 重画会丢掉 .selected，而 selectedIndex 仍指着刚才那个字（写完一条标注、
+  // 或标注列表刷新后都会走到这里）——不补回来，右栏还停在这个字的音高时值上，
+  // 左侧却看不出选的是哪个。切唱段那条路径不受影响：resetAnnotationPanel()
+  // 在 renderLyrics() 之前已经把 selectedIndex 置回 -1
+  if (selectedIndex >= 0) {
+    document.querySelector(`.lyric-cell[data-index="${selectedIndex}"]`)?.classList.add("selected");
+  }
 }
 
 function selectChar(idx) {
@@ -630,6 +639,12 @@ function selectChar(idx) {
   document.getElementById("metaTime").textContent = `起止: ${item.start.toFixed(2)}s`;
   const ctrl = document.getElementById("annotateControls");
   ctrl.style.opacity = "1"; ctrl.style.pointerEvents = "all";
+  clearTagSelection();
+}
+
+function clearTagSelection() {
+  // selectChar() 与 saveAnnotation() 成功后共用这三行。deps 面板是跟着 tag 走的，
+  // tag 清空了面板还开着就是自相矛盾
   selectedTag = null;
   document.querySelectorAll(".type-btn").forEach(b => b.classList.remove("active"));
   document.getElementById("depsPanel").classList.remove("show");
@@ -688,11 +703,71 @@ function renderDeps(tagName) {
   impact.innerHTML = `该技法将影响 <strong>${impactCount}</strong> 个唱句的评测 · 班级 ${depData.prereqs[0]} 掌握度 ${(depData.classAvg[depData.prereqs[0]]*100).toFixed(0)}%`;
 }
 
-function saveAnnotation() {
+async function saveAnnotation() {
   if (selectedIndex < 0 || !selectedTag) { alert("请先选择一个字和标注类型"); return; }
-  // C5 未实现：不往列表里 push。本地条目刷新即消失，却与真数据长得一模一样，
-  // 是「看起来像真数据」——列表只装真数据
-  showToast("info", "写入接口未实现", "C5（POST /api/annotations）尚未实现，本条标注未落库");
+  const seg = segments[currentSegIdx];
+  if (!seg) return;
+  const btn = document.getElementById("saveAnnotate");
+  // 防连点：第二次请求必然撞 409，而那个报错是用户自己点出来的
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = "添加中…";
+
+  let row;
+  try {
+    const r = await fetch('/api/annotations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // 同源相对路径 + same-origin：写成跨源地址时 fetch 默认不带 Cookie，
+      // 后端 login_required 只会看到空 session 并回 401（同 C1–C4 的坑）
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        segment_id: seg.id,
+        word_index: selectedIndex,
+        tag: selectedTag.tag,
+        tolerance: Number(document.getElementById("toleranceSlider").value),
+      }),
+    });
+    const body = await r.json();
+    if (!r.ok || body.code !== 0) throw new Error(body.message || String(r.status));
+    row = body.data;
+  } catch (e) {
+    // 只弹 toast、不改本地状态：annotations 只装服务端确认过的行
+    showToast("error", "添加失败", e.message);
+    return;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "添加标注";
+  }
+
+  // 写已经成功，toast 照发。文案用返回值拼，不去列表里找——下面的降级分支
+  // 可能没把它插进列表（annNote 内部会读 ann.index，传 undefined 会当场抛）
+  showToast("success", "已添加标注", annNote({ index: row.word_index, tag: row.tag }));
+  clearTagSelection();
+
+  // 期间切走了唱段的话，这一行属于旧唱段，不能插进新唱段的列表；也不该再为
+  // 旧唱段发一次 GET——fetchAnnotations 会领新号，把当前唱段的结果顶掉
+  if (segments[currentSegIdx] !== seg) return;
+
+  if (!annLoaded) {
+    // 本地列表本来就不完整（上一次 GET 失败过），插进去会让页面显得「这个
+    // 唱段只有刚写的这一条」——让服务端给权威结果
+    await fetchAnnotations(seg.id);
+    return;
+  }
+
+  // 本地插入而不是重新拉列表：写完已经成功了，若紧接着的 GET 失败，页面会显示
+  // 「标注加载失败」——那是在说一件没发生的事。
+  // 排序按 (index, id)，与 C4 的 ORDER BY word_index, id 一致，否则新条目会跳到最后
+  annotations.push({
+    id: row.id, index: row.word_index, tag: row.tag,
+    tolerance: row.tolerance, createdAt: row.created_at,
+  });
+  annotations.sort((a, b) => (a.index - b.index) || (a.id - b.id));
+  annEmptyMsg = "暂无标注规则";
+  annEmptyIcon = "📝";
+  renderAnnotations();
+  renderLyrics();          // 歌词格子上的 ✓ 由 renderLyrics 画，必须重画
 }
 
 // tag → CSS 类名，与 DOM 上按钮的 data-cat 同源（第 492–497 行）
@@ -742,12 +817,16 @@ function deleteAnnotation() {
   showToast("info", "删除接口未实现", "C6（DELETE /api/annotations/&lt;id&gt;）尚未实现，标注仍在库中");
 }
 
+// toast 图标按类型查表。原来是「只判 success、其余一律 ℹ️」，新增的 error
+// 会配上表示「提示」的图标——那是在说反话。表里没有的（如 info）仍回退 ℹ️
+const TOAST_ICON = { success: "✅", error: "⚠️" };
+
 function showToast(type, title, msg) {
   const container = document.getElementById("toastContainer");
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
   toast.innerHTML = `
-    <div class="toast-icon">${type === "success" ? "✅" : "ℹ️"}</div>
+    <div class="toast-icon">${TOAST_ICON[type] || "ℹ️"}</div>
     <div class="toast-content">
       <div class="toast-title">${title}</div>
       <div class="toast-msg">${msg}</div>
@@ -900,6 +979,7 @@ function switchSegment(idx) {
   // 换唱段＝换一整套字。annotations 的 index 是「第几个字」，留着会挂到
   // 新唱段的同序号字上——那不是同一个字
   annotations = [];
+  annLoaded = false;       // 切走的瞬间本地列表就不再是当前唱段的完整列表
   annEmptyMsg = "标注加载中…";
   annEmptyIcon = "📝";
   renderAnnotations();
@@ -974,6 +1054,7 @@ async function fetchAnnotations(segmentId) {
     // 期间又切过唱段的话，这个失败属于上一个唱段，不该覆盖当前的状态
     if (token !== annReqToken) return;
     annotations = [];
+    annLoaded = false;
     annEmptyMsg = "标注加载失败";
     annEmptyIcon = "⚠️";
     renderAnnotations();
@@ -990,6 +1071,7 @@ async function fetchAnnotations(segmentId) {
     id: r.id, index: r.word_index, tag: r.tag,
     tolerance: r.tolerance, createdAt: r.created_at,
   }));
+  annLoaded = true;
   annEmptyMsg = "暂无标注规则";
   annEmptyIcon = "📝";
   renderAnnotations();
