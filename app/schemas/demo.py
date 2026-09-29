@@ -10,6 +10,8 @@ audio_files 里这几列在 DDL 上都可空（见 schema.sql）。写成非空�
 （调用方要据此判断「这条能不能用」）。
 """
 
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -86,3 +88,32 @@ class SegmentDetailOut(BaseModel):
     title: str | None = None
     duration: float | None = None
     lyrics: list[LyricCharOut] = []
+
+
+class AnnotationOut(BaseModel):
+    """标注列表行（C4 `GET /api/segments/<id>/annotations`）。
+
+    **tolerance / created_at 可空**：DDL 上这两列可空，库里只要有一行空值，
+    写成非空就整个接口 500（同 DemoListOut / DemoSegmentOut 的坑）。
+    `id` / `word_index` / `tag` 三列在 DDL 上是 NOT NULL，保持非空。
+
+    字段名沿用文档给 C5 的入参名 `word_index`（C5 的说明是「新增标注
+    （segment_id, word_index, tag, tolerance）」），不叫 index——出参与将来的
+    写入字段名对齐，前端多写一行映射而已。
+
+    **不出 char / category / note**：库里没有这三列。char 由前端从已加载的
+    lyrics[word_index] 取（后端按下标去读 lyrics_json 会踩 C3 归一函数的
+    丢弃错位）；category 是 CSS 类名、note 是拼出来的显示串，都属于 UI 措辞，
+    同 C3 对 note 词表的口径（spec 3.2）。
+
+    **不出 teacher_id**：C4 不按教师隔离，返回该唱段的全部标注（spec 3.4），
+    给出 teacher_id 只会让人误以为有归属过滤。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    word_index: int
+    tag: str
+    tolerance: int | None = None
+    created_at: datetime | None = None
