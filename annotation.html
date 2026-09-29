@@ -690,26 +690,9 @@ function renderDeps(tagName) {
 
 function saveAnnotation() {
   if (selectedIndex < 0 || !selectedTag) { alert("请先选择一个字和标注类型"); return; }
-  const item = lyrics[selectedIndex];
-  const tolerance = document.getElementById("toleranceSlider").value;
-  const existingIdx = annotations.findIndex(a => a.index === selectedIndex);
-  const newAnn = {
-    index: selectedIndex, char: item.char, tag: selectedTag.tag,
-    category: selectedTag.cat, tolerance: parseInt(tolerance),
-    note: item.char + "字" + selectedTag.tag + "标注"
-  };
-  if (existingIdx >= 0) annotations[existingIdx] = newAnn;
-  else annotations.push(newAnn);
-
-  renderAnnotations(); renderLyrics();
-
-  const impactCount = RULE_IMPACT[selectedTag.tag] || 0;
-  showToast("success", "✅ 已创建标注规则",
-    `「${selectedTag.tag}」规则将影响 ${impactCount} 个唱句的评测，前置技法状态已同步到知识图谱。`);
-
-  const btn = document.getElementById("saveAnnotate");
-  btn.textContent = "✓ 已添加"; btn.style.background = "linear-gradient(90deg, #4A8F6B, #3D6B5A)";
-  setTimeout(() => { btn.textContent = "添加标注"; btn.style.background = ""; }, 1200);
+  // C5 未实现：不往列表里 push。本地条目刷新即消失，却与真数据长得一模一样，
+  // 是「看起来像真数据」——列表只装真数据
+  showToast("info", "写入接口未实现", "C5（POST /api/annotations）尚未实现，本条标注未落库");
 }
 
 // tag → CSS 类名，与 DOM 上按钮的 data-cat 同源（第 492–497 行）
@@ -734,7 +717,7 @@ function renderAnnotations() {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">${annEmptyIcon}</div>${annEmptyMsg}</div>`;
     return;
   }
-  list.innerHTML = annotations.map((ann, i) => {
+  list.innerHTML = annotations.map((ann) => {
     // tolerance 在 DDL 上可空，为 null 时不渲染这一格——照着拼会显示「±nullc」
     const tol = (ann.tolerance === null || ann.tolerance === undefined)
       ? "" : `<div class="ann-tol">±${ann.tolerance}c</div>`;
@@ -747,14 +730,15 @@ function renderAnnotations() {
       <div class="ann-tag tag-${cat}">${ann.tag}</div>
       <div style="color:var(--text-secondary);font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${annNote(ann)}</div>
       ${tol}
-      <div class="ann-del" onclick="deleteAnnotation(${i})">✕</div>
+      <div class="ann-del" onclick="deleteAnnotation()">✕</div>
     </div>`;
   }).join("");
 }
 
-function deleteAnnotation(idx) {
-  annotations.splice(idx, 1);
-  renderAnnotations(); renderLyrics();
+function deleteAnnotation() {
+  // C6 未实现：不从列表里移除。本地 splice 掉的条目刷新就回来了，
+  // 而点了 ✕ 却什么都没发生是更清楚的说法
+  showToast("info", "删除接口未实现", "C6（DELETE /api/annotations/<id>）尚未实现，标注仍在库中");
 }
 
 function showToast(type, title, msg) {
