@@ -535,7 +535,6 @@ body{
 // ============================================
 
 // 歌词不再有 mock：来自 C3（GET /api/segments/<id>），见页末 fetchLyrics()。
-// 标注列表同理待 C4（/segments/<id>/annotations），初始为空。
 
 const TECHNIQUE_DEPS = {
   "拖腔":  { prereqs: ["气息支撑","音准稳定性"], classAvg: { "气息支撑": 0.62, "音准稳定性": 0.71 } },
@@ -552,7 +551,7 @@ const RULE_IMPACT = {
 
 let selectedIndex = -1;
 let selectedTag = null;
-// 待 C4：POST/GET/DELETE /api/annotations*。本轮永远是空数组
+// 当前唱段的标注（C4 出参，已映射成内部形状：word_index→index，见 fetchAnnotations）
 let annotations = [];
 
 function midiToNote(midi) {
@@ -607,7 +606,7 @@ function renderLyrics() {
       html += `<div class="lyric-pitch">${item.pitch} ${midiToNote(item.pitch)}</div>`;
       html += `<div class="lyric-note">${noteLabel(item.note)}</div>`;
       html += `<div class="lyric-time">${item.start.toFixed(1)}s</div>`;
-      if (hasAnn) html += `<div class="ann-indicator" title="${hasAnn.tag}: ${hasAnn.note}">✓</div>`;
+      if (hasAnn) html += `<div class="ann-indicator" title="${annNote(hasAnn)}">✓</div>`;
       cell.innerHTML = html;
       cell.onclick = () => selectChar(idx);
     } else {
@@ -713,19 +712,41 @@ function saveAnnotation() {
   setTimeout(() => { btn.textContent = "添加标注"; btn.style.background = ""; }, 1200);
 }
 
+// tag → CSS 类名，与 DOM 上按钮的 data-cat 同源（第 492–497 行）
+const TAG_CATEGORY = {
+  "滑音":"articulation", "归韵":"articulation", "擞音":"articulation",
+  "换气":"breath", "强音":"pitch", "拖腔":"rhythm",
+};
+
+function annChar(ann) {
+  // 兜底 "?" 而不是隐藏：word_index 越界说明库里的标注指向一个不存在的字，
+  // 是数据有问题，要让人看见
+  const item = lyrics[ann.index];
+  return item ? item.char : "?";
+}
+
+function annNote(ann) { return `${annChar(ann)}字${ann.tag}标注`; }
+
 function renderAnnotations() {
   const list = document.getElementById("annotationList");
   document.getElementById("annCount").textContent = `(${annotations.length}条)`;
   if (annotations.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div>暂无标注规则</div>`;
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">${annEmptyIcon}</div>${annEmptyMsg}</div>`;
     return;
   }
   list.innerHTML = annotations.map((ann, i) => {
+    // tolerance 在 DDL 上可空，为 null 时不渲染这一格——照着拼会显示「±nullc」
+    const tol = (ann.tolerance === null || ann.tolerance === undefined)
+      ? "" : `<div class="ann-tol">±${ann.tolerance}c</div>`;
+    // tag 认不出来时 TAG_CATEGORY 取不到值，拼出的 tag-undefined 没有对应样式
+    // 规则，落回 .ann-tag 的基础外观。不兜底成某个已知类——那是给一个不认识
+    // 的 tag 硬安一个语义配色
+    const cat = TAG_CATEGORY[ann.tag] || "";
     return `<div class="annotation-item">
-      <div class="ann-char">${ann.char}</div>
-      <div class="ann-tag tag-${ann.category}">${ann.tag}</div>
-      <div style="color:var(--text-secondary);font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ann.note || ""}</div>
-      <div class="ann-tol">±${ann.tolerance}c</div>
+      <div class="ann-char">${annChar(ann)}</div>
+      <div class="ann-tag tag-${cat}">${ann.tag}</div>
+      <div style="color:var(--text-secondary);font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${annNote(ann)}</div>
+      ${tol}
       <div class="ann-del" onclick="deleteAnnotation(${i})">✕</div>
     </div>`;
   }).join("");
@@ -894,20 +915,22 @@ function switchSegment(idx) {
   // 换唱段＝换一整套字。annotations 的 index 是「第几个字」，留着会挂到
   // 新唱段的同序号字上——那不是同一个字
   annotations = [];
+  annEmptyMsg = "标注加载中…";
+  annEmptyIcon = "📝";
   renderAnnotations();
   resetAnnotationPanel();
   // 旧歌词立刻让位，否则会在新数据到达前一直显示上一个唱段的字
   lyrics = [];
   lyricsEmptyMsg = "歌词加载中…";
   renderLyrics();
-  // 不 await：高亮与 toast 不依赖歌词结果，不该等它
+  // 不 await：高亮与 toast 不依赖歌词与标注结果，不该等它
   fetchLyrics(s.id);
+  fetchAnnotations(s.id);
   showToast("info", "🎵 已选择唱段", segLabel(s));
 }
 
 // ============================================
 // 歌词（C3 GET /api/segments/<id>）
-// 标注相关的仍是 mock：saveAnnotation/renderAnnotations 待 C4–C6。
 // ============================================
 
 let lyrics = [];                  // 当前唱段的逐字数据（C3 出参 data.lyrics）
@@ -939,6 +962,50 @@ async function fetchLyrics(segmentId) {
   // 「这个唱段还没有歌词」是常态（解析产出的新段落 lyrics_json 就是 NULL），
   // 与「加载失败」必须分开说
   lyricsEmptyMsg = lyrics.length === 0 ? "该唱段暂无歌词" : "";
+  renderLyrics();
+}
+
+// ============================================
+// 标注（C4 GET /api/segments/<id>/annotations）
+// ============================================
+
+let annReqToken = 0;              // 竞态守卫，见 fetchAnnotations
+let annEmptyMsg = "暂无标注规则";  // 列表为空时显示哪句话
+let annEmptyIcon = "📝";          // 与上面的文案配套的图标
+
+async function fetchAnnotations(segmentId) {
+  // 领号必须在 await 之前；await 之后再领就等于没领
+  const token = ++annReqToken;
+  let rows;
+  try {
+    const r = await fetch(`/api/segments/${segmentId}/annotations`, { credentials: 'same-origin' });
+    const body = await r.json();
+    if (!r.ok || body.code !== 0) throw new Error(body.message || String(r.status));
+    rows = body.data || [];
+  } catch (e) {
+    // 期间又切过唱段的话，这个失败属于上一个唱段，不该覆盖当前的状态
+    if (token !== annReqToken) return;
+    annotations = [];
+    annEmptyMsg = "标注加载失败";
+    annEmptyIcon = "⚠️";
+    renderAnnotations();
+    return;
+  }
+
+  // 判定必须在 await 之后：快速连点两个唱段时，先发的慢响应可能后到
+  if (token !== annReqToken) return;
+
+  // 映射成内部形状，渲染函数就不必知道网络字段名。
+  // 空态文案**无条件复位**：否则「先失败、再切到有数据的唱段」会把上一次的
+  // 失败文案带过来
+  annotations = rows.map(r => ({
+    id: r.id, index: r.word_index, tag: r.tag,
+    tolerance: r.tolerance, createdAt: r.created_at,
+  }));
+  annEmptyMsg = "暂无标注规则";
+  annEmptyIcon = "📝";
+  renderAnnotations();
+  // 歌词格子上的 ✓ 由 renderLyrics 画，标注换了要重画一次
   renderLyrics();
 }
 
