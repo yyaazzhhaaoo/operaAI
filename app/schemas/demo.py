@@ -12,7 +12,7 @@ audio_files 里这几列在 DDL 上都可空（见 schema.sql）。写成非空�
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class DemoListOut(BaseModel):
@@ -91,7 +91,9 @@ class SegmentDetailOut(BaseModel):
 
 
 class AnnotationOut(BaseModel):
-    """标注列表行（C4 `GET /api/segments/<id>/annotations`）。
+    """标注行。C4 `GET /api/segments/<id>/annotations` 的列表元素，
+    **也是 C5 `POST /api/annotations` 的响应体**——同一个资源的同一形状，
+    分成两个类只会在字段漂移时多一处要改。
 
     **tolerance / created_at 可空**：DDL 上这两列可空，库里只要有一行空值，
     写成非空就整个接口 500（同 DemoListOut / DemoSegmentOut 的坑）。
@@ -117,3 +119,41 @@ class AnnotationOut(BaseModel):
     tag: str
     tolerance: int | None = None
     created_at: datetime | None = None
+
+
+# 标注技法词表（C5 入参 tag 的合法取值域）。
+# 三处同源：本元组、annotation.html 六个类型按钮的 data-tag（第 492–497 行）、
+# app/models/annotation.py 的类注释。将来按 tag 派发评测规则时，词表外的值
+# 无法处理，所以在写入端就挡住。
+ANNOTATION_TAGS = ("滑音", "归韵", "换气", "强音", "拖腔", "擞音")
+
+
+class AnnotationIn(BaseModel):
+    """C5 入参（`POST /api/annotations`）。
+
+    **`teacher_id` 不在入参里**：从会话取（api 层传 `current_user_id()`）。
+    让客户端指定归属等于开一个「以别人的名义标注」的越权入口。
+
+    `tolerance` 可选：列在 DDL 上可空，C4 出参 `AnnotationOut` 也已允许 null。
+    前端滑块总有值，但接口不必替调用方决定这个值一定存在。
+
+    `word_index` 这里**只判非负**，上界在 service 判——上界要查 segments 与
+    lyrics_json 才能算出来，是业务规则，不是入参格式。
+    """
+
+    segment_id: int
+    word_index: int = Field(ge=0)
+    tag: str
+    tolerance: int | None = Field(default=None, ge=0, le=100)
+
+    @field_validator("tag")
+    @classmethod
+    def _known_tag(cls, v: str) -> str:
+        # 不用 Literal[...]：pydantic 对它的报错 type 是 literal_error，
+        # app/common/errors.py 的 _MSG_CN 里没有这个映射，会回退成英文原文
+        # "Input should be '滑音', '归韵', ..." 直接透给中文 UI。
+        # 自定义 validator 抛的 ValueError 走的是 _MSG_CN 注释里的第 ②条路径，
+        # 去掉 "Value error, " 前缀后原样展示。
+        if v not in ANNOTATION_TAGS:
+            raise ValueError("取值必须是 " + "/".join(ANNOTATION_TAGS) + " 之一")
+        return v
