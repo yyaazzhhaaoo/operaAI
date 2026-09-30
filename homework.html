@@ -494,7 +494,7 @@ body{
               <div class="icon">📚</div>
               作业列表
             </div>
-            <span style="font-size:11px;color:var(--text-muted)">3项进行中</span>
+            <span style="font-size:11px;color:var(--text-muted)" id="hwSummary">加载中…</span>
           </div>
           <div class="card-body">
             <div class="hw-list" id="hwList"></div>
@@ -603,6 +603,10 @@ body{
 // ============================================
 // 模拟数据
 // ============================================
+// 作业列表已接真接口 GET /api/homeworks（见下方 fetchHomeworks / renderHwList）。
+// 这个常量保留是因为**待批改提交**那一块仍是 mock（F4/F5 尚未实现），
+// selectSubmission 还要读 HOMEWORKS[0].title 填批改详情页的标题。
+// 等 F4 落地、SUBMISSIONS 一起换掉时，这个常量与 SUBMISSIONS 一并删除。
 const HOMEWORKS = [
   { id: "h01", title: "《穆桂英挂帅》· 辕门外三声炮", deadline: "2026-08-02", demo: "王老师标准版", submitted: 18, total: 24, status: "grading" },
   { id: "h02", title: "《贵妃醉酒》· 海岛冰轮初转腾", deadline: "2026-08-05", demo: "王老师标准版", submitted: 12, total: 24, status: "ongoing" },
@@ -672,35 +676,107 @@ const SUBMISSIONS = [
   }
 ];
 
+// 同源空串 = 经 nginx 的 /api 代理。**不要改成 location.host + ':8877'**：
+// 那是跨源请求，而跨源 fetch 默认不带 Cookie，后端 login_required 只会看到空
+// session 并回 401（同 pitch_comparison.html:428 与 demo_library.html 的 API_BASE）。
+const API_BASE = "";
+// 登录用户，由第二段 <script> 的 /api/auth/me 赋值——本段脚本不在请求上下文里，
+// 取不到 session，唯一赋值点在那里。页面加载时它还是 null。
+let currentUser = null;
+
 let currentSubId = null;
 
 // ============================================
 // 渲染函数
 // ============================================
 
-function renderHwList() {
+// 后端只回 grading / ongoing / closed 三个值（app/schemas/homework.py::HomeworkListItem），
+// 与 .hw-item .status 的三个样式类一一对应。不认识的取值按「已截止」兜底——
+// 与改接口前的写法（三目链最后落到已截止）一致，不要在页面里另立第四种状态。
+const HW_STATUS = ["grading", "ongoing", "closed"];
+const HW_STATUS_TEXT = { grading: "批改中", ongoing: "进行中", closed: "已截止" };
+
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function renderHwList(items) {
   const container = document.getElementById("hwList");
-  container.innerHTML = HOMEWORKS.map(hw => {
-    const pct = Math.round(hw.submitted / hw.total * 100);
-    const statusText = hw.status === "grading" ? "批改中" : (hw.status === "ongoing" ? "进行中" : "已截止");
-    return `
-      <div class="hw-item">
-        <div class="top">
-          <div class="title">${hw.title}</div>
-          <span class="status ${hw.status}">${statusText}</span>
+  if (!items.length) {
+    container.innerHTML =
+      `<div style="padding:32px;text-align:center;color:var(--text-muted)">还没有布置过作业</div>`;
+  } else {
+    container.innerHTML = items.map(hw => {
+      const status = HW_STATUS.includes(hw.status) ? hw.status : "closed";
+      // total 为 0（库里没有在册学生）时给 0 而不是 NaN——后端此时也把 progress 给 0
+      const pct = hw.total ? Math.round(hw.submitted_count / hw.total * 100) : 0;
+      // null 是真实状态（deadline / demo_id 均可空），给占位文案而不是让整格消失
+      const deadline = hw.deadline || "未设截止";
+      // 只显示行当与板式：种子数据里作业标题与 demo_title 逐字相同，
+      // 再把曲目名拼上去会与卡片标题重复。库里没有「版本名」这个字段
+      // （mock 里的「王老师标准版」是演示页自拟的），口径见 spec 3.4。
+      const demo = [hw.demo_role, hw.demo_banshi].filter(Boolean).join(" · ") || "未挂曲目";
+      return `
+        <div class="hw-item">
+          <div class="top">
+            <div class="title">${esc(hw.title)}</div>
+            <span class="status ${status}">${HW_STATUS_TEXT[status]}</span>
+          </div>
+          <div class="meta">
+            <span>📅 ${esc(deadline)}</span>
+            <span>🎵 ${esc(demo)}</span>
+            <span>👥 ${hw.submitted_count}/${hw.total}</span>
+          </div>
+          <div class="progress-row">
+            <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
+            <span class="pct">${pct}%</span>
+          </div>
         </div>
-        <div class="meta">
-          <span>📅 ${hw.deadline}</span>
-          <span>🎵 ${hw.demo}</span>
-          <span>👥 ${hw.submitted}/${hw.total}</span>
-        </div>
-        <div class="progress-row">
-          <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
-          <span class="pct">${pct}%</span>
-        </div>
-      </div>
-    `;
-  }).join("");
+      `;
+    }).join("");
+  }
+  renderHwSummary(items);
+}
+
+// 卡片右上角的计数。接口不返回聚合数，由页面自己数——只数 ongoing 一档，
+// 与文案「N项进行中」严格对应（批改中与已截止都不算「进行中」）。
+function renderHwSummary(items) {
+  const el = document.getElementById("hwSummary");
+  if (!el) return;
+  const n = items.filter(hw => hw.status === "ongoing").length;
+  el.textContent = n ? `${n}项进行中` : "暂无进行中";
+}
+
+// 作业列表：真接口 GET /api/homeworks（统一信封）。
+// 学生不发这个请求——接口挂 @teacher_required，学生调必 403，明知会被拒就不发，
+// 直接按 currentUser.role 分支（同 demo_library.html 的 fetchDemos）。
+// 调用点在第二段 <script> 的 currentUser 赋值之后：本函数读角色，若在页面加载时
+// 同步调它，currentUser 还是 null，教师会被误判成学生、列表永不加载。
+async function fetchHomeworks() {
+  if (!currentUser || currentUser.role !== "teacher") {
+    const el = document.getElementById("hwList");
+    if (el) el.innerHTML =
+      `<div style="padding:32px;text-align:center;color:var(--text-muted)">作业列表仅教师可见</div>`;
+    // 计数一起清空：留「暂无进行中」会与「仅教师可见」并排出现，读起来像
+    // 「确实一份都没有」——那是「没权限看」，不是「没有作业」。
+    const s = document.getElementById("hwSummary");
+    if (s) s.textContent = "";
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/api/homeworks`, { credentials: "same-origin" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    renderHwList(body.data && body.data.homeworks ? body.data.homeworks : []);
+  } catch (e) {
+    const el = document.getElementById("hwList");
+    if (el) el.innerHTML =
+      `<div style="padding:32px;text-align:center;color:var(--text-muted)">加载失败，请刷新重试</div>`;
+    const s = document.getElementById("hwSummary");
+    if (s) s.textContent = "加载失败";
+  }
 }
 
 function renderSubmitList() {
@@ -850,7 +926,8 @@ function showAssignModal() {
 // ============================================
 // 初始化
 // ============================================
-renderHwList();
+// 作业列表**不在这里渲染**：fetchHomeworks 要读 currentUser，而它要等第二段
+// <script> 的 /api/auth/me 回来才有值，同步调会被误判成学生。调用点在那里。
 renderSubmitList();
 // 默认选中第一个提交
 selectSubmission("sub01");
@@ -885,6 +962,12 @@ selectSubmission("sub01");
     return location.replace('/login.html');              // 后端不可达
   }
   if (!user) return;
+  // 交给第一段 <script> 里的 fetchHomeworks 读角色；此处是唯一的赋值点。
+  currentUser = user;
+
+  // 作业列表要按角色分支，必须等 currentUser 就绪后才能拉——放在第一段 <script>
+  // 末尾同步调用的话，此刻它还是 null，教师会被 fetchHomeworks 误判成学生。
+  fetchHomeworks();
 
   const isTeacher = user.role === 'teacher';
   const roleText = isTeacher ? '教师' : '学生';
