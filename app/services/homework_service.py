@@ -3,9 +3,16 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from app.common.errors import BusinessError
 from app.models import Homework
 from app.repositories import homeworks_repo, user_repo
-from app.schemas.homework import HomeworkListItem, HomeworkListResponse
+from app.schemas.homework import (
+    HomeworkListItem,
+    HomeworkListResponse,
+    PendingSubmissionItem,
+    PendingSubmissionListResponse,
+    SubmissionTag,
+)
 
 # 判档与排序的口径**与看板 G7 逐字同源**（app/services/dashboard_service.py:536 的
 # homework_progress）。同一份作业在两条接口上必须是同一个档位与同一个顺序，否则
@@ -86,3 +93,99 @@ def list_homeworks(db: Session) -> HomeworkListResponse:
 
     items.sort(key=_sort_key)
     return HomeworkListResponse(homeworks=items)
+
+
+# 标签的置信度下限（spec 3.5）。0.7 这个数是**页面自己声明的**（待批改卡片区写着
+# 「只展示置信度 > 0.7 的标签」），文档从未规定要按置信度筛、也没规定阈值取多少。
+# **严格大于**，0.7 本身不算。
+_CONFIDENCE_MIN = 0.7
+
+
+def _num(v) -> float | None:
+    """JSONB 列没有类型约束，只放行真正的数值，其余一律 None。同 library_service._num。
+
+    挡住字符串 "0.82"、True 这类：拿它们比大小在 Python 里要么抛 TypeError、要么
+    按字符串字典序算出莫名其妙的结果。
+
+    bool 要单独排除——Python 里 isinstance(True, int) 是 True。
+    """
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    return v
+
+
+def _tags_of(ai_detail: dict | None) -> list[SubmissionTag]:
+    """从 ai_detail.defects 取置信度过线的标签，按置信度降序（spec 3.4–3.6）。
+
+    整条路径防御式取值：`ai_detail` 可空，其结构由 AI 侧写入、不受本服务约束，
+    而**一条坏数据不该让整个待批列表 500**——教师打开页面看不到任何待批提交，
+    比少看一个标签严重得多。所以 ai_detail 不是 dict / defects 不是 list /
+    元素不是 dict，一律跳过（最坏出 []，仍是 200）。
+
+    **必须重排**：库里的 defects 不按置信度排序（李小燕那条是 0.82 / 0.45 / 0.78），
+    不排的话过滤完卡片上第一个标签会是 0.78 而不是 0.82，顺序看起来是随机的。
+
+    label 缺失或空串的整条丢弃——构造不出标签文字，前端会渲染成一个空胶囊。
+    """
+    if not isinstance(ai_detail, dict):
+        return []
+    defects = ai_detail.get("defects")
+    if not isinstance(defects, list):
+        return []
+
+    scored: list[tuple[float, SubmissionTag]] = []
+    for d in defects:
+        if not isinstance(d, dict):
+            continue
+        label = d.get("label")
+        if not isinstance(label, str) or not label:
+            continue
+        conf = _num(d.get("confidence"))
+        if conf is None or conf <= _CONFIDENCE_MIN:
+            continue
+        # severity 原样透传，不做白名单；取不到就给 "unknown"，前端按中性色渲染。
+        # 这里**不**把未知档滤掉：滤掉会让标签凭空消失，比多一个颜色怪异的档严重。
+        sev = d.get("status")
+        scored.append((conf, SubmissionTag(
+            label=label,
+            severity=sev if isinstance(sev, str) and sev else "unknown",
+        )))
+
+    scored.sort(key=lambda t: -t[0])
+    return [tag for _, tag in scored]
+
+
+def list_pending_submissions(db: Session, homework_id: int) -> PendingSubmissionListResponse:
+    """某作业的待批改提交列表（功能 4.3）：AI 已初评、教师尚未终审的那些提交。
+
+    作业不存在抛 404。作业存在但没有待批提交返回**空列表**，不是 404——「这份作业
+    没有东西要批」是正常状态（同 library_service.demo_segments 对「有曲目没分段」的处理）。
+
+    取数与口径全在 `homeworks_repo.get_pending_submissions`（内含与 F1 的同源性说明），
+    这里只做 JSONB 解析与装配。
+    """
+    hw = homeworks_repo.get_homework(db, homework_id)
+    if hw is None:
+        raise BusinessError(404, "作业不存在")
+
+    # 注意仓储层返回的元组顺序是 (提交, 姓名, 等级, 头像)，不是 (提交, 姓名, 头像, 等级)。
+    # 解包顺序写错不会报错——等级与头像都是 str，pydantic 照收，只是两个字段对调了。
+    items = [
+        PendingSubmissionItem(
+            submission_id=sub.id,
+            student_id=sub.student_id,
+            student_name=name,
+            student_avatar=avatar,
+            student_level=level,
+            ai_score=sub.ai_score,
+            submitted_at=sub.submitted_at,
+            tags=_tags_of(sub.ai_detail),
+        )
+        for sub, name, level, avatar in homeworks_repo.get_pending_submissions(db, homework_id)
+    ]
+
+    return PendingSubmissionListResponse(
+        homework_id=hw.id,
+        homework_title=hw.title,
+        submissions=items,
+    )

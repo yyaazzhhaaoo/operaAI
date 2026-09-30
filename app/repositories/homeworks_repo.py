@@ -1,7 +1,7 @@
 from sqlalchemy import Date, cast, distinct, func, select, tuple_
 from sqlalchemy.orm import Session
 
-from app.models import Homework, Submission, TeacherDemo
+from app.models import Homework, Student, Submission, TeacherDemo, User
 
 
 def get_open_homeworks(db:Session,status:str) -> Homework:
@@ -93,3 +93,47 @@ def get_submission_stats(db: Session, student_ids: list[int]) -> tuple[int, int,
     ) or 0
 
     return hw_count, int(submitted), int(late)
+
+
+def get_homework(db: Session, homework_id: int) -> Homework | None:
+    """按 id 取作业，不存在返回 None。供 F4 判 404。"""
+    return db.get(Homework, homework_id)
+
+
+def get_pending_submissions(
+    db: Session, homework_id: int
+) -> list[tuple[Submission, str | None, str | None, str | None]]:
+    """某作业下未终审的提交，[(提交, 姓名, 等级, 头像)]，最早提交在前。
+
+    「未终审」= `status IS NULL OR status != 'reviewed'`，与上面的 get_progress_rows
+    的 `pending` **逐字同源**——同一批提交在 F1（出条数）与 F4（出行本身）上必须
+    是一致的，改这里必须同时改那里。NULL 同样要显式兜：`NULL != 'reviewed'` 在
+    SQL 里求值为 NULL 而非 true。
+
+    与 F1 的 `pending` 有一处**刻意不同：这里不过滤在册名单**。F1 过滤是为了让分子
+    不超过分母（students 表里连 teacher01 都有自己的行，见 students.id=1），F4 没有
+    分母，过滤只会让「提交人不在名单里」的真实提交永远不出现在待批列表里——教师
+    批不到它，比数目对不上严重得多。代价是脏数据下这里的条数会大于 F1 的
+    pending_review_count，那是预期不是 bug。
+
+    两个 join 都必须是 LEFT：`submissions.student_id` 可空，INNER JOIN 会把
+    student_id 为 NULL 的提交整条删掉，同样造成「批不到」；`students.user_id` 那层
+    用 LEFT 则保证 students 有行而 users 缺失时至少还能出 student_id。
+
+    姓名要按 `students.user_id` 拐一次取，**不能** `db.get(User, student_id)`：
+    submissions.student_id 指的是 students.id，与 users.id 只是偶尔数值相同，
+    直接当 users.id 用会静默取到另一个人的名字（DOC_ISSUES 第 21 条）。
+
+    排序 `submitted_at ASC NULLS LAST, id ASC`。`id` 不是装饰：库里 24/26/27 三条的
+    submitted_at 完全相同，只按时间排则顺序由执行计划决定，前端选中的提交会在刷新
+    后跳到别人身上。NULL 排最后是因为那说明入库时没写时间，不该插到真实时间前面。
+    """
+    stmt = (
+        select(Submission, User.display_name, Student.level, Student.avatar)
+        .outerjoin(Student, Student.id == Submission.student_id)
+        .outerjoin(User, User.id == Student.user_id)
+        .where(Submission.homework_id == homework_id)
+        .where((Submission.status.is_(None)) | (Submission.status != "reviewed"))
+        .order_by(Submission.submitted_at.asc().nulls_last(), Submission.id.asc())
+    )
+    return [tuple(row) for row in db.execute(stmt).all()]

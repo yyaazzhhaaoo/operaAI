@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -50,3 +50,77 @@ class HomeworkListResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
     homeworks: list[HomeworkListItem]
+
+
+class SubmissionTag(BaseModel):
+    """待批改卡片上的一个 AI 归因标签。
+
+    `label` 是 `ai_detail.defects[].label` 的**原文**（如「气息支撑不足」），后端
+    不改写、不缩写——批改详情区（F5）用的是同一批文字，两处对不上教师会以为是两回事。
+
+    `severity` 是 `defects[].status` 的**语义值透传**（high/medium/low），**不是**
+    页面的 CSS 类名（`.tag.danger/.warn/.info`，见 homework.html:270-272）。出表现层
+    词汇等于把「这个页面用这套配色」写进接口契约，换一版设计就要改后端。前端接到后
+    自己映射；取到未知档时按中性色渲染即可，后端不做白名单过滤——滤掉一个未预期的
+    分级会让标签凭空消失。
+    """
+
+    label: str
+    severity: str
+
+
+class PendingSubmissionItem(BaseModel):
+    """待批改提交列表的一行（功能 4.3「AI 初评待终审」）。
+
+    「待批改」= `submissions.status IS NULL OR status != 'reviewed'`，与 F1 的
+    `pending_review_count` 逐字同源（口径见 spec 3.1）。因此 F1 里 hw12 的
+    `pending_review_count` 与本列表的条数在干净数据下必然相等，验证时按这条对。
+
+    **学生字段平铺，不做嵌套对象**：与同模块的 `demo_title/demo_role/demo_banshi`
+    保持一种风格；嵌套更好看，但会引出「F5 要不要复用同一个 StudentBrief 模型」的
+    跨接口耦合，而本项目的 schema 现在是彼此独立的，不为一个四字段对象破例。
+
+    `student_name` / `student_level` / `student_avatar` 都可空：后两者是列本身可空
+    （**张三的 avatar 是空串不是 NULL**，前端用 `||` 兜不到要看空串），前者还多一种
+    情形——`students.user_id` 指向不存在的 user 时 join 不到（DOC_ISSUES 第 21/24 条
+    描述的那类脏数据）。
+
+    `tags` 的条数**没有上限**（spec 3.6）：页面自己声明的口径是「只展示置信度 > 0.7
+    的标签」，那就按这条来，不再叠一层截断——真数据里刘思琪有 3 条过线，截到 2 会
+    砍掉 0.71 的「拖腔不足」而留下 0.72 的「收尾偏急」，同量级留下哪个纯看运气。
+    撑破布局是前端 CSS 该解决的问题，不该由后端悄悄丢数据。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+    submission_id: int
+    student_id: int | None              # students.id（不是 users.id）
+    student_name: str | None            # users.display_name，经 students.user_id 拐一次
+    student_avatar: str | None          # 可能是空串
+    student_level: str | None           # 初学 / 进阶 / 高级
+    ai_score: float | None              # AI 初评分数
+    submitted_at: datetime | None       # 列可空；出参是 ISO-8601
+    tags: list[SubmissionTag]           # 置信度 > 0.7 的归因标签，按置信度降序
+
+
+class PendingSubmissionListResponse(BaseModel):
+    """待批改提交列表（功能 4.3）。
+
+    作业存在但没有待批提交时 `submissions` 是 `[]`，**不是 404**——「这份作业没有
+    东西要批」是正常状态。作业**不存在**才 404，由 service 抛 BusinessError。
+
+    与 F1「库里没有作业返回 `[]` 而非 404」不矛盾：F1 查的是集合（空集合是合法
+    结果），这里查的是一个具名资源。
+
+    `homework_title` 是给批改详情区标题用的：页面现在用 `HOMEWORKS[0].title` 硬编码
+    （homework.html:813），接入后应显示当前作业名。前端本可以从 F1 的列表里查，但
+    那要多一次请求和一份前端状态；这里一个字符串就够。
+    `homework_id` 是路径参数回显，异步返回时用来确认是不是当前选中的那份，避免竞态。
+
+    不分页（spec 3.8）：一份作业的待批提交是教师一次批完的工作量（真库 5 条），
+    分页要的 page/size/total 三个参数与前端翻页状态远超收益。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+    homework_id: int
+    homework_title: str
+    submissions: list[PendingSubmissionItem]
