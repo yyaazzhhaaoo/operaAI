@@ -1150,9 +1150,168 @@ async function fetchAnnotations(segmentId) {
   renderLyrics();
 }
 
+// ============================================
+// 全库标注规则（功能 9.6 / C7 GET /api/annotations/rules）
+// ============================================
+
+// 筛选条件。ruleTag 的 null 表示「全部」（＝不发 tag 参数）——它不是词表的
+// 第七项。六个技法名从 TAG_CATEGORY 取键，与左侧六个 .type-btn、与后端的
+// ANNOTATION_TAGS 同源，不另抄一份字面量。
+let ruleTag = null;
+let ruleWord = "";
+
+// 竞态守卫，见 fetchRules。**必须与 annReqToken 分开**：全库规则与左侧标注
+// 列表是两条互不相干的请求流，共用一个计数器会让「切唱段」把「筛字」的响应
+// 判成过期，反之亦然。
+let ruleReqToken = 0;
+
+// 空态文案与图标，由 fetchRules 按情形改写（同 annEmptyMsg / annEmptyIcon 的做法）
+let ruleEmptyMsg = "加载中…";
+let ruleEmptyIcon = "📋";
+
+// 只有「拿到了服务端答案」才计数。403 与网络失败时清空——那种情况下
+// 「共 0 条」是句假话
+let ruleCountable = false;
+
+async function fetchRules() {
+  // 领号必须在 await 之前；await 之后再领就等于没领（同 fetchAnnotations）
+  const token = ++ruleReqToken;
+
+  // 只带非缺省的条件：都不设时查询串为空，等价于全库。
+  // 不传空串——后端 ?word= 会收敛成「不筛」，结果虽同，但会让「没输入」与
+  // 「输入了空」在网络层无法区分，排查时多一层困惑。
+  const qs = new URLSearchParams();
+  if (ruleTag !== null) qs.set("tag", ruleTag);
+  if (ruleWord !== "") qs.set("word", ruleWord);
+
+  let rows;
+  try {
+    // 同源相对路径 + same-origin：写成跨源地址时 fetch 默认不带 Cookie，
+    // 后端 login_required 只看得到空 session 并回 401（同 C1–C6）
+    const r = await fetch(`/api/annotations/rules?${qs}`, { credentials: "same-origin" });
+
+    // 403 单独判：C7 挂的是 @teacher_required，学生打开本页就会撞上
+    // （页面级鉴权只管登录，不管教师）。用 r.status 而不是 body.code——后者
+    // 只是 HTTP 状态码的同值副本，且 r.json() 本身也可能失败。判在 r.json()
+    // 之前，非 JSON 的响应体不会把这里也拖进下面的 catch。
+    if (r.status === 403) {
+      if (token !== ruleReqToken) return;
+      ruleCountable = false;
+      ruleEmptyMsg = "全库规则仅教师可见";
+      ruleEmptyIcon = "🔒";
+      renderRules([]);
+      return;
+    }
+
+    const body = await r.json();
+    if (!r.ok || body.code !== 0) throw new Error(body.message || String(r.status));
+    rows = body.data || [];
+  } catch (e) {
+    // 期间又改过筛选条件的话，这个失败属于上一次查询，不该覆盖当前状态
+    if (token !== ruleReqToken) return;
+    ruleCountable = false;
+    ruleEmptyMsg = "规则列表加载失败";
+    ruleEmptyIcon = "⚠️";
+    renderRules([]);
+    return;
+  }
+
+  // 判定必须在 await 之后：快速连点两个筛选条件时，先发的慢响应可能后到
+  if (token !== ruleReqToken) return;
+
+  if (rows.length === 0) {
+    // 「库里还没规则」与「筛出来没有」是两回事，文案必须分开——
+    // 同 fetchDemos 里「拿不到」与「确实没有」的口径
+    if (ruleTag !== null || ruleWord !== "") {
+      ruleEmptyMsg = "没有匹配的规则";
+      ruleEmptyIcon = "🔍";
+    } else {
+      ruleEmptyMsg = "库里还没有标注规则";
+      ruleEmptyIcon = "📋";
+    }
+  }
+
+  // 成功路径无条件把计数打开：否则「先失败、再筛到有数据」会一直不计数
+  // （同 fetchAnnotations 复位 annEmptyMsg 的理由——上一次的失败状态不该留下）
+  ruleCountable = true;
+  renderRules(rows);
+}
+
+function fmtRuleTime(v) {
+  // created_at 在库里是 TIMESTAMP（naive），DB 时区 Asia/Shanghai，拿到的
+  // 已经是北京时间，不做换算。也不走 new Date()：一是没必要换算，二是它对
+  // 无时区 ISO 串的解析行为在 ES5 / ES2016+ 之间变过（UTC vs 本地），
+  // 切字符串没有这层歧义。
+  if (!v) return "—";
+  const s = String(v);
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)
+    ? s.slice(5, 10) + " " + s.slice(11, 16)
+    : s;
+}
+
+function esc(v) {
+  // demo_title / segment_title 是教师上传时自己填的，char 来自 lyrics_json，
+  // tag 来自库里——都是不可信字符串。这段是本页唯一渲染非本页产出文本的地方，
+  // 拼进 innerHTML 前一律转义。
+  // 左侧 renderAnnotations 用的是同一套拼法但没转义，那是既有代码，本轮不动。
+  return String(v).replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+function renderRules(rows) {
+  const list = document.getElementById("ruleList");
+  const count = document.getElementById("ruleCount");
+
+  // 「共」与「筛出」必须分开：把「筛出 3 条」读成「全库共 3 条」，就完全违背了
+  // 功能 9.6 的用途——全库有多少条规则，这个数字要是对的
+  const filtered = (ruleTag !== null || ruleWord !== "");
+  count.textContent = ruleCountable
+    ? `${filtered ? "筛出" : "共"} ${rows.length} 条`
+    : "";
+
+  if (rows.length === 0) {
+    list.innerHTML =
+      `<div class="empty-state"><div class="empty-icon">${ruleEmptyIcon}</div>${ruleEmptyMsg}</div>`;
+    return;
+  }
+
+  list.innerHTML = `<table class="rule-table">
+    <thead><tr>
+      <th>曲目</th><th>唱段</th><th>字</th><th>技法</th><th>容忍度</th><th>标注时间</th>
+    </tr></thead>
+    <tbody>${rows.map((r) => {
+      // char 为 null 时显示 "?" 而不是留空：同左侧 annChar() 的兜底口径——
+      // 取不到是数据问题（segment_id 为空 / lyrics_json 为空 / 下标越界），
+      // 要让人看见，不是藏起来
+      const ch = (r.char === null || r.char === undefined) ? "?" : r.char;
+      // word_index 是 0 基（C5 的 Field(ge=0) 也这么约束），显示「第 0 字」不通顺
+      const idx = `<span class="rule-idx">第 ${r.word_index + 1} 字</span>`;
+      // tag 认不出来时 TAG_CATEGORY 取不到值，拼出的 tag-undefined 没有对应
+      // 样式规则，落回 .ann-tag 的基础外观。不兜底成某个已知类——那是给一个
+      // 不认识的 tag 硬安一个语义配色（同左侧 renderAnnotations 的口径）
+      const cat = TAG_CATEGORY[r.tag] || "";
+      // tolerance / created_at / 归属在 DDL 上均可空，为 null 显示「—」。
+      // 这与左侧 .ann-tol 不同——那里是 flex，少一格不影响别人；表格里
+      // 少一格会让整列错位
+      const tol = (r.tolerance === null || r.tolerance === undefined)
+        ? "—" : `±${r.tolerance}c`;
+      return `<tr>
+        <td>${esc(r.demo_title || "—")}</td>
+        <td>${esc(r.segment_title || "—")}</td>
+        <td>${esc(ch)} ${idx}</td>
+        <td><span class="ann-tag tag-${cat}">${esc(r.tag)}</span></td>
+        <td>${tol}</td>
+        <td>${fmtRuleTime(r.created_at)}</td>
+      </tr>`;
+    }).join("")}</tbody>
+  </table>`;
+}
+
 renderLyrics();
 renderAnnotations();
 fetchDemos();
+fetchRules();   // 全库标注规则（功能 9.6），不带参数 = 全库
 </script>
 <!-- ==== 登录用户条 + 登出（页面鉴权配套，见 docs/superpowers/specs/2026-09-15-page-auth-design.md）==== -->
 <!-- 页面已被服务端保护，能加载出来就说明会话有效。这段脚本不做守卫，
