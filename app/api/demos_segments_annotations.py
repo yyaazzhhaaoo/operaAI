@@ -7,6 +7,7 @@ from app.response import ok
 from app.schemas.demo import (
     AnnotationIn,
     AnnotationOut,
+    AnnotationRuleOut,
     DemoListOut,
     DemoSegmentOut,
     SegmentDetailOut,
@@ -144,10 +145,37 @@ def del_annotations(annotation_id):
     library_service.delete_annotation(get_db(), annotation_id)
     return ok(None)
 
-@api_bp.route("/annotations/rules",methods=["GET"])
+@api_bp.route("/annotations/rules", methods=["GET"])
 @login_required
 @teacher_required
 def annotations_rules():
-    tag = request.args.get("tag")
-    word = request.args.get("word")
-    return ok({"tag":tag,"word":word})
+    """C7 规则列表管理（功能 9.6）。跨唱段的全库标注列表，可按 tag 与 word 筛。
+
+    **权限是教师**（文档 C7 的权限列就是「教师」），与同组 C4/C5/C6 一致。
+
+    契约未在文档中定义——文档只有「`GET /api/annotations/rules?tag=&word=` ｜
+    教师 ｜ 规则列表管理（功能 9.6）」一行，响应体、两个参数的匹配语义、排序、
+    分页一概没有。本轮口径见 `DOC_ISSUES.md` 第 32 条与本接口的 spec。
+
+    `request.args.get(...) or None` 把**缺省与空串一起收敛成 None**
+    （`?tag=` 与不带 tag 都是「不筛」）。不做 `strip()`：`?word=%20三` 这种
+    畸形输入原样匹配、匹配不上回空列表，比替调用方猜意图更可预期。
+
+    **tag 在 SQL 筛、word 在 service 的 Python 循环里筛**：word 筛的是字，
+    而字不存在于 annotations 表里，得先归一 lyrics_json 才算得出来。
+    这个不对称是本质的，理由见 service 层。
+
+    **不校验 tag 取值**：筛一个词表外的值是**合法查询**，回 `200` + `[]`，
+    不是 `422`。词表只为写入端把关（C5）——那是为了「不再生产脏数据」，
+    读取端宽容同 C4 出参的不校验口径。
+
+    **本接口没有 404，也没有 422**：没有路径参数、不读 body（`_payload()`
+    不参与）、不校验入参取值。唯一的失败是权限（401/403）。
+
+    与 C6 的 `/annotations/<int:annotation_id>` 不冲突，且不依赖注册顺序：
+    `rules` 不是整数，永远匹配不上 IntegerConverter（正则 `\\d+`）。
+    """
+    tag = request.args.get("tag") or None
+    word = request.args.get("word") or None
+    rows = library_service.annotation_rules(get_db(), tag=tag, word=word)
+    return ok([AnnotationRuleOut.model_validate(r).model_dump(mode="json") for r in rows])

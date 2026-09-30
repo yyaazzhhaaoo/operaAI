@@ -121,6 +121,44 @@ class AnnotationOut(BaseModel):
     created_at: datetime | None = None
 
 
+class AnnotationRuleOut(BaseModel):
+    """全库标注行。C7 `GET /api/annotations/rules` 的列表元素。
+
+    它是 `AnnotationOut` 的**超集**（多 `char` 与四个归属字段），**不是替换
+    关系**——C4 / C5 仍用 `AnnotationOut`。两者的差别是场景：C4 面向**单个
+    唱段**，调用方那一刻已经加载了该唱段的 lyrics，所以 char 由前端取，
+    不必后端算，也不必给归属；C7 面向**全库**，前端没有别的唱段的 lyrics，
+    char 只能后端算，而没有归属这张表就读不出「这条规则属于哪个曲目」。
+
+    **char 可空**，三种来源：annotations.segment_id 为 NULL、
+    segments.lyrics_json 为 NULL、word_index 越界（歌词被重新解析过）。
+    三种情况下**行都保留**、char 回 null，不剔除——集中展示的价值就在于
+    「全库有多少条规则」这个数字是对的（spec 3.4）。
+
+    **四个归属字段全可空**：理由同 AnnotationOut 的 tolerance / created_at
+    ——segments.demo_id 与 segments.title 在 DDL 上可空，库里只要有一行空值，
+    写成非空就整片 500。
+
+    **不出 teacher_id**：同 AnnotationOut，C7 也不按教师隔离，返回只会让人
+    误以为有归属过滤。**不出 seq**：唱段标题的信息量大于「第 N 段」，
+    且后加字段不是破坏性变更。**不出 lyrics_json**：那是 JSONB 列的内部
+    表示，形状还有三种互不兼容的版本（DOC_ISSUES 第 27 条）。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    word_index: int
+    char: str | None = None
+    tag: str
+    tolerance: int | None = None
+    created_at: datetime | None = None
+    segment_id: int | None = None
+    segment_title: str | None = None
+    demo_id: int | None = None
+    demo_title: str | None = None
+
+
 # 标注技法词表（C5 入参 tag 的合法取值域）。
 # 三处同源：本元组、annotation.html 六个类型按钮的 data-tag（第 492–497 行）、
 # app/models/annotation.py 的类注释。将来按 tag 派发评测规则时，词表外的值
