@@ -790,6 +790,13 @@ async function saveAnnotation() {
   showToast("success", "已添加标注", annNote({ index: row.word_index, tag: row.tag }));
   clearTagSelection();
 
+  // 写已经落库，全库规则列表的行与计数此刻就过期了，带当前筛选条件重拉一次。
+  // **必须放在下面两个 return 之前**：它们是「用户快速操作」的常见路径
+  // （切走了唱段 / 本地列表本来就不完整），也恰恰是全库列表最容易陈旧的时刻。
+  // 不 await：toast 与左侧列表的更新不该等这一次请求（同 switchPiece 调
+  // fetchSegments 的口径）
+  fetchRules();
+
   // 期间切走了唱段的话，这一行属于旧唱段，不能插进新唱段的列表；也不该再为
   // 旧唱段发一次 GET——fetchAnnotations 会领新号，把当前唱段的结果顶掉
   if (segments[currentSegIdx] !== seg) return;
@@ -886,6 +893,8 @@ async function deleteAnnotation(id) {
   if (i >= 0) annotations.splice(i, 1);
   renderAnnotations();
   renderLyrics();   // 格子上的 ✓ 由 renderLyrics 画，删了要重画一次
+  // 同 saveAnnotation：全库规则列表的行与计数此刻已经过期
+  fetchRules();
 }
 
 // toast 图标按类型查表。原来是「只判 success、其余一律 ℹ️」，新增的 error
