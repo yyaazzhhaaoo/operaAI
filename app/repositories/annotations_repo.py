@@ -1,7 +1,8 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Annotation
+from app.models import Annotation, TeacherDemo
+from app.models.demo import Segment
 
 
 def get_annotations_list(db: Session) -> list[Annotation] | None:
@@ -88,3 +89,40 @@ def remove(db: Session, ann: Annotation) -> None:
     会让这一层出现两种风格。C6 的量级是「一次一行」，不值得为它优化。
     """
     db.delete(ann)
+
+
+def list_rules(db: Session, tag: str | None) -> list[tuple[Annotation, Segment | None, TeacherDemo | None]]:
+    """全库标注 + 各自所属的唱段与曲目，供 C7 `GET /api/annotations/rules`。
+
+    **一条 SQL 查完，不做 N+1**（同 get_demo_list 的取舍）。曲目数是个位数、
+    标注数是十位数，joinedload 不必上。
+
+    **outerjoin 而非 join**：annotations.segment_id 与 segments.demo_id 在 DDL
+    上都可空，内连接会把这两类行整条丢掉——集中展示少几行且毫无提示，与
+    spec 3.4「char 取不到时保留行」的口径直接打架。
+
+    tag 条件**下推到 SQL**（`tag is None` 时不加）：能少捞一批行就少捞一批。
+    `word` 筛选不在这里——它依赖归一后的字，SQL 层拿不到，在 service 层做。
+
+    排序 demo_id → segment_id → word_index → id 全升序：先按曲目分组，再按
+    唱段、再按字序，末位 id 保证稳定（同一个字可挂多个 tag，UNIQUE 是三列）。
+    demo_id 为 NULL 的行在 PG 的 `ORDER BY ... ASC` 下默认排最后（NULLS LAST），
+    这是 PG 的既定行为，不必显式 nulls_last()。
+
+    返回三元组而不是往模型上挂临时属性：同 get_demo_list 返回
+    (TeacherDemo, 分段数) 的理由——「哪些来自库、哪些是算出来的」要看得出来。
+    """
+    stmt = (
+        select(Annotation, Segment, TeacherDemo)
+        .outerjoin(Segment, Annotation.segment_id == Segment.id)
+        .outerjoin(TeacherDemo, Segment.demo_id == TeacherDemo.id)
+        .order_by(
+            Segment.demo_id,
+            Annotation.segment_id,
+            Annotation.word_index,
+            Annotation.id,
+        )
+    )
+    if tag is not None:
+        stmt = stmt.where(Annotation.tag == tag)
+    return list(db.execute(stmt).all())

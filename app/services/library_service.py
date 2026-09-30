@@ -182,6 +182,29 @@ def _normalize_lyrics(raw: list | None) -> list[dict]:
     return out
 
 
+def _lyric_at(seg, index: int) -> dict | None:
+    """取某个唱段第 index 个字的**归一化**歌词，取不到回 None。供 C7 算 char。
+
+    必须复用 _normalize_lyrics，**不许**直接 seg.lyrics_json[index]：归一函数会
+    **丢弃**非法条目（非对象、word 非字符串），直接下标取会拿到错位的字。
+    C3 出参、C5 写入校验、C7 的 char 三处必须同源，否则会出现
+    「C5 说这个下标合法、C7 却取到别的字」。
+
+    取不到有两种来源，都回 None（调用方据此把 char 置空，**行仍保留**）：
+    seg 为 None（标注的 segment_id 为空）、index 越界（歌词在该标注写入后
+    被重新解析过——replace_segments 会整批替换）。
+
+    判 0 <= index 而不是只判上界：word_index 在 DDL 上只有 NOT NULL，
+    负数下标会从列表尾部取字（Python 语义），那是静默取错值。
+    """
+    if seg is None:
+        return None
+    lyrics = _normalize_lyrics(seg.lyrics_json)
+    if 0 <= index < len(lyrics):
+        return lyrics[index]
+    return None
+
+
 def segment_detail(db: Session, segment_id: int) -> dict:
     """C3 段落详情。含归一后的逐字歌词。
 
@@ -316,3 +339,50 @@ def delete_annotation(db: Session, annotation_id: int) -> None:
         raise BusinessError(404, "标注不存在")
     annotations_repo.remove(db, ann)
     db.commit()
+
+
+def annotation_rules(db: Session, *, tag: str | None, word: str | None) -> list[dict]:
+    """C7 全库标注规则列表，可按 tag 与 word 筛选。
+
+    tag / word 为 None 表示不筛（api 层已把缺省与空串一起收敛成 None）。
+
+    **tag 在 SQL 筛、word 在这里筛**：word 筛的是**字**，而字不存在于
+    annotations 表里，得先经 _normalize_lyrics 归一 lyrics_json 才算得出来，
+    SQL 层拿不到。这个不对称是本质的，不是随手分的。
+
+    **char 取不到时回 None，行保留**（spec 3.4）：集中展示的价值就在于
+    「全库有多少条规则」这个数字是对的，悄悄少几行等于谎报。同 C4 spec 5.5
+    「越界保留、让脏数据可见」的口径。
+
+    **不抛 BusinessError**：本接口没有路径参数、不读 body，没有 404 场景；
+    tag 也不校验词表——筛一个词表外的值是合法查询，空结果是正确回答
+    （词表只为写入端把关，见 C5）。
+
+    关键字参数：两个都可空且都是 str，位置调用时极易把 tag 与 word 写反。
+
+    返回 dict 而不是 ORM 对象：同 segment_annotations / demo_list 的风格，
+    api 层直接喂 pydantic。
+
+    不按 segment 缓存归一结果：同一唱段的多条标注会重复归一同一份
+    lyrics_json，但量级是「一个唱段几条标注、歌词十几字」，重复归一的代价
+    远小于多一张缓存表的复杂度。
+    """
+    rows = []
+    for ann, seg, demo in annotations_repo.list_rules(db, tag):
+        lyric = _lyric_at(seg, ann.word_index)
+        char = lyric["char"] if lyric else None
+        if word is not None and char != word:
+            continue
+        rows.append({
+            "id": ann.id,
+            "word_index": ann.word_index,
+            "char": char,
+            "tag": ann.tag,
+            "tolerance": ann.tolerance,
+            "created_at": ann.created_at,
+            "segment_id": ann.segment_id,
+            "segment_title": seg.title if seg else None,
+            "demo_id": seg.demo_id if seg else None,
+            "demo_title": demo.title if demo else None,
+        })
+    return rows
