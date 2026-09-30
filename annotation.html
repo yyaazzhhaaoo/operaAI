@@ -1259,6 +1259,58 @@ function esc(v) {
   ));
 }
 
+function renderRuleTagFilter() {
+  const box = document.getElementById("ruleTagFilter");
+  // 「全部」是本地概念（＝不发 tag 参数），不是词表的第七项。
+  // 六个技法名与顺序都取自左侧那六个 .type-btn——它们是本页技法词表的
+  // 显示真源（后端的 ANNOTATION_TAGS 是写入校验的真源，TAG_CATEGORY 是
+  // 配色的真源）。从 DOM 取而不是写 `Object.keys(TAG_CATEGORY)`：后者的
+  // 键序是 滑音/归韵/擞音/换气/强音/拖腔，与左侧按钮的显示顺序不一致。
+  const tags = [...document.querySelectorAll(".type-btn")].map((b) => b.dataset.tag);
+  const items = [null, ...tags];
+
+  box.innerHTML = items.map((t) => {
+    // data-tag 用空串表示「全部」：null 塞进 HTML 属性会变成字符串 "null"
+    const v = t === null ? "" : t;
+    const active = t === ruleTag ? " active" : "";
+    return `<button class="piece-btn${active}" data-tag="${v}">${t === null ? "全部" : t}</button>`;
+  }).join("");
+
+  box.querySelectorAll(".piece-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = btn.dataset.tag === "" ? null : btn.dataset.tag;
+      // 点已经选中的那个按钮不重发请求
+      if (next === ruleTag) return;
+      ruleTag = next;
+      renderRuleTagFilter();   // 重画以更新 .active
+      fetchRules();
+    });
+  });
+}
+
+function applyRuleWord(v) {
+  // 值没变就不重发：compositionend 之后浏览器往往还会补一个
+  // isComposing === false 的 input 事件，不去重就会为同一个词发两次请求
+  if (v === ruleWord) return;
+  ruleWord = v;
+  fetchRules();
+}
+
+function initRuleWordInput() {
+  const input = document.getElementById("ruleWordInput");
+  // 中文输入法：拼音合成阶段浏览器就会发 input 事件。不挡的话，打「san」
+  // 会依次按 s → a → n 各请求一次，而且 maxlength 在合成期间不生效，
+  // 最后一个字母可能被留下来当筛选条件。
+  // 不做 debounce：一个字就是一次完整查询，没有中间态可言。
+  input.addEventListener("input", (e) => {
+    if (e.isComposing) return;   // 合成中，不是最终输入
+    applyRuleWord(input.value);
+  });
+  input.addEventListener("compositionend", () => {
+    applyRuleWord(input.value);
+  });
+}
+
 function renderRules(rows) {
   const list = document.getElementById("ruleList");
   const count = document.getElementById("ruleCount");
@@ -1311,7 +1363,11 @@ function renderRules(rows) {
 renderLyrics();
 renderAnnotations();
 fetchDemos();
-fetchRules();   // 全库标注规则（功能 9.6），不带参数 = 全库
+// 全库标注规则（功能 9.6）。控件先画、再拉数据：顺序反过来的话，
+// 拉回来时按钮还不存在，筛不动
+renderRuleTagFilter();
+initRuleWordInput();
+fetchRules();
 </script>
 <!-- ==== 登录用户条 + 登出（页面鉴权配套，见 docs/superpowers/specs/2026-09-15-page-auth-design.md）==== -->
 <!-- 页面已被服务端保护，能加载出来就说明会话有效。这段脚本不做守卫，
