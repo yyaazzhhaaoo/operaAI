@@ -237,7 +237,16 @@ C7 返回 10 个字段，前端用 7 个：`char` `word_index` `tag` `tolerance`
 
 ## 8. 复用与新增
 
-**只复用、不新造**（均已存在）：`.card` `.card-header` `.card-title` `.card-subtitle` `.piece-btn`(+`.active`) `.ann-tag` + `tag-*` `.empty-state` `.empty-icon`。
+**只复用、不新造**（均已存在）：`.card` `.card-header` `.card-title` `.card-subtitle` `.piece-btn`(+`.active`)、`.empty-state` `.empty-icon`（382–383 行，**无作用域前缀，可直接用**）。
+
+**但 `.ann-tag` 不能直接复用**：它的基础规则与四个 `tag-*` 配色**全部挂在 `.annotation-item` 之下**（340–346 行），表格里写 `class="ann-tag"` 会一点样式都没有。处理办法是**把那五条选择器扩成并列选择器**：
+
+```css
+.annotation-item .ann-tag,
+.rule-table .ann-tag{ ... }
+```
+
+而不是在表格的 CSS 里重抄一份颜色常量——两处十六进制色值迟早漂移。扩选择器不改变左侧标注列表的任何渲染结果。
 
 **新增 CSS 只有三条**，写在本页既有的 `<style>` 里（单文件架构，不新建文件、不动 `:root`）：
 
