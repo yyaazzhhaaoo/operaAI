@@ -1070,6 +1070,8 @@ def post_homeworks():
 
 同理，**学生打开这一页会看到「作业列表仅教师可见」，但下方 mock 的待批改提交照常显示**（页面级鉴权只要求登录，同第 33.2 条）。
 
+**2026-10-08 更新**：批改详情（F5）前端**已接入**，见 `docs/superpowers/specs/2026-10-08-submission-detail-page-design.md`。`homework.html` 的左侧列表与右侧批改面板现在都是真数据，`HOMEWORKS` / `SUBMISSIONS` 两个 mock 常量已删除——**第 34.5 条「同一页真数据与 mock 并存」至此消失**。右侧三块（逐字偏差 4.4 / 加权融合 4.5 / 校准 4.10）因库里没有数据源而渲染显式空态，不是遗漏。
+
 ---
 
 ## 35. 待批改提交列表（F4）只有一句话描述，响应契约、待批判定、标签口径全未定义
@@ -1133,6 +1135,8 @@ def post_homeworks():
 2. **mock 自身对 `severity` 是自相矛盾的**：`sub01` 的两条 `cdm` 都是 `status:"high"`，对应的 `tags` 却都是 `cls:"warn"`；`sub02` 也是 `high`，`tags` 却是 `danger`。接入后按确定映射出，卡片颜色统一了，属于修 bug 而非回归。
 3. 学生 `张三` 的 `students.avatar` 是**空串不是 NULL**（`students.id=2`）。兜法已按 `avatar || "🎭"` 落地——用 `||` 不能用 `??`，后者只兜 `null`/`undefined`，兜不到空串。**注意张三本人没有提交**，真库那 5 条的头像都是真 emoji，所以这条兜底在真数据上走不到，是靠桩测试覆盖的。
 
+**2026-10-08 再更新**：批改详情面板（F5）也已接入，`homework.html` 右侧不再是 mock。上面这条 35.4 的标题与表格里「右侧仍是 mock」「`HOMEWORKS` / `SUBMISSIONS` 保留未删」的描述**均已过时**，保留原文作为当时的决策记录：F4 落地时右侧面板还没有数据源，保留常量比删掉再抄回来省事。
+
 ### 35.5 验证时的一次数据事故（已复原，记录备查）
 
 验证「坏 `ai_detail` 不 500」这条兜底时，需要临时改库。**第一次复原用的 psql `-c` 块里混进了一条语法错误的语句，整块回滚，导致 5 行里 4 行的临时改动没被撤销**，其中 3 行的 `ai_detail` 被我改成了测试用的假数据。
@@ -1147,7 +1151,7 @@ def post_homeworks():
 
 ## 36. 批改详情（F5）的 4.4 与 4.5 在库里没有数据源；桩地址写错
 
-F5 于 2026-10-08 实现（设计 `docs/superpowers/specs/2026-10-08-submission-detail-api-design.md`、计划 `docs/superpowers/plans/2026-10-08-submission-detail-api.md`、代码 `app/api/homeworks.py` / `app/services/homework_service.py` / `app/repositories/homeworks_repo.py` / `app/schemas/homework.py`）。**前端未接入**——`homework.html` 右侧批改面板仍是 mock。
+F5 于 2026-10-08 实现（设计 `docs/superpowers/specs/2026-10-08-submission-detail-api-design.md`、计划 `docs/superpowers/plans/2026-10-08-submission-detail-api.md`、代码 `app/api/homeworks.py` / `app/services/homework_service.py` / `app/repositories/homeworks_repo.py` / `app/schemas/homework.py`）。**前端已于同日接入**（设计 `docs/superpowers/specs/2026-10-08-submission-detail-page-design.md`）——`homework.html` 右侧批改面板已走真接口，下面 36.1 / 36.2 / 36.4 三处的「无数据源 / 数据不全」在页面上表现为显式空态。
 
 ### 36.1 功能 4.4（逐字音分偏差）无数据源
 
