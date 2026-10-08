@@ -1,10 +1,15 @@
 from flask import request
 
 from app.api import api_bp
-from app.common.decorators import login_required, teacher_required, student_required
+from app.common.decorators import (
+    current_user_id,
+    login_required,
+    student_required,
+    teacher_required,
+)
 from app.db import get_db
 from app.response import ok
-from app.schemas.homework import SubmissionReviewIn
+from app.schemas.homework import SubmissionCalibrationIn, SubmissionReviewIn
 from app.services import homework_service
 
 
@@ -75,8 +80,17 @@ def submissions_review(submission_id):
     return ok(homework_service.review_submission(
         get_db(), submission_id, data).model_dump(mode="json"))
 
-@api_bp.route("/submissions/<id>/calibration",methods=["POST"])
+@api_bp.route("/submissions/<int:submission_id>/calibration",methods=["POST"])
 @login_required
 @teacher_required
-def submissions_calibration(id):
-    return ok(id)
+def submissions_calibration(submission_id):
+    # 路径参数从原来的 <id> 改成 <int:submission_id>：<id> 是字符串转换器，
+    # /submissions/abc/calibration 也会匹配进来再进视图去查库；<int:...> 让 Werkzeug
+    # 在路由层就挡掉（IntegerConverter 的正则是 \d+），走 errors.py 的统一 404。同 F1/F4/F5/F6。
+    #
+    # teacher_id 在路由层从 session 取，service 不碰 flask.session（见 service 的注释）。
+    data = SubmissionCalibrationIn.model_validate(_payload())
+    out = homework_service.calibrate_submission(
+        get_db(), submission_id, data, teacher_id=current_user_id())
+    # 撤销（bias_mode = null）时 out 是 None，None.model_dump() 会炸，所以判空。
+    return ok(out.model_dump(mode="json") if out else None)
