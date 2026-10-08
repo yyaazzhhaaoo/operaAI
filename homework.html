@@ -863,6 +863,17 @@ function selectHomework(hwId) {
   submitItems = null;              // 先进加载态，否则会短暂显示上一份作业的提交
   submitNotice = "";
   renderSubmitList();
+
+  // 右侧也必须复位。F4 时这不可能出问题（右侧永远是空状态），F5 落地后就是实缺陷：
+  // 开过 hw12 的刘思琪再点 hw13，右侧还挂着刘思琪的分数与评语，而左下已经换成
+  // hw13 的空列表——教师会以为 hw13 里有一份刘思琪的提交（spec 3.9）。
+  currentSubId = null;             // 取消左下的高亮
+  detailSeq++;                     // 作废在飞的详情请求
+  detailData = null;
+  detailError = "";
+  detailState = "idle";            // 回空状态，**不是** loading——没有新提交要加载
+  renderDetail();
+
   fetchSubmissions(hwId);
 }
 
@@ -911,13 +922,17 @@ function renderSubmitList() {
     const tagsHtml = (it.tags || []).map(t =>
       `<span class="tag ${SEV_CLS[t.severity] || "neutral"}">${esc(t.label)}</span>`
     ).join("");
+    // 选中态。F4 就引入了 currentSubId 却从没读过、.submit-item.active 的样式一直
+    // 没被用过；F5 让点击真的换出右侧内容，这里才接上（spec 3.8）。不接的话点开
+    // 一条右侧换了内容、左侧却看不出点的是哪一名。
+    const active = it.submission_id === currentSubId ? " active" : "";
     // avatar 可能是**空串不是 NULL**（students.id=2 张三那个种子），必须用 ||
     // 兜——?? 只兜 null/undefined，兜不到空串（spec 3.6）。
     const avatar = it.student_avatar || "🎭";
     const name = it.student_name || "未知学生";
     const score = (it.ai_score === null || it.ai_score === undefined) ? "—" : it.ai_score;
     return `
-      <div class="submit-item" onclick="selectSubmission(${it.submission_id})">
+      <div class="submit-item${active}" onclick="selectSubmission(${it.submission_id})">
         <div class="avatar">${esc(avatar)}</div>
         <div class="info">
           <div class="name">${esc(name)}</div>
