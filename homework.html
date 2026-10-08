@@ -604,82 +604,14 @@ body{
 
 <script>
 // ============================================
-// 模拟数据
+// 本页数据全部来自真接口，没有 mock
 // ============================================
-// 作业列表已接真接口 GET /api/homeworks，待批改提交已接
-// GET /api/homeworks/<id>/submissions（见下方 fetchHomeworks / renderHwList /
-// fetchSubmissions / renderSubmitList）。
-// 这两个常量保留是因为**批改详情页**（右侧面板）仍是 mock——逐字偏差、加权融合、
-// CDM、BKT、校准、评语都是 F5 的内容，尚未实现，selectSubmission 仍靠它们填右侧。
-// 等 F5 落地时，这两个常量连同 selectSubmission 的函数体一并删除。
-const HOMEWORKS = [
-  { id: "h01", title: "《穆桂英挂帅》· 辕门外三声炮", deadline: "2026-08-02", demo: "王老师标准版", submitted: 18, total: 24, status: "grading" },
-  { id: "h02", title: "《贵妃醉酒》· 海岛冰轮初转腾", deadline: "2026-08-05", demo: "王老师标准版", submitted: 12, total: 24, status: "ongoing" },
-  { id: "h03", title: "《霸王别姬》· 看大王在帐中", deadline: "2026-07-28", demo: "王老师标准版", submitted: 24, total: 24, status: "closed" }
-];
-
-const SUBMISSIONS = [
-  {
-    id: "sub01", student: { name: "李小燕", avatar: "🎭", level: "初级" },
-    ai_score: 82.5,
-    dimensions: { pitch: 84, rhythm: 84, breath: 86, articulation: 80 },
-    fusion: { total: 0.72, passed: true },
-    cdm: [
-      { label: "气息支撑不足", confidence: 0.82, status: "high", evidence: "长音能量波动大，拖腔'炮'字抖动" },
-      { label: "拖腔时值偏短", confidence: 0.78, status: "high", evidence: "'雷'字时长 0.55s < 标准 0.70s" }
-    ],
-    bkt: [
-      { skill: "音准控制", before: 0.72, after: 0.74, delta: 0.02 },
-      { skill: "气息支撑", before: 0.51, after: 0.53, delta: 0.02 },
-      { skill: "拖腔", before: 0.28, after: 0.28, delta: 0.00 }
-    ],
-    lyrics: [
-      {char:"辕", diff:-8, st:"excellent"},{char:"门", diff:-12, st:"good"},
-      {char:"外", diff:-15, st:"excellent"},{char:"三", diff:-5, st:"excellent"},
-      {char:"声", diff:-18, st:"good"},{char:"炮", diff:-35, st:"fair"},
-      {char:"如", diff:5, st:"excellent"},{char:"同", diff:-3, st:"excellent"},
-      {char:"雷", diff:-42, st:"fair"},{char:"震", diff:-22, st:"good"},
-      {char:",", diff:null, st:"punct"},{char:"天", diff:-8, st:"excellent"},
-      {char:"波", diff:-10, st:"good"},{char:"府", diff:-15, st:"good"},
-      {char:"走", diff:-5, st:"excellent"},{char:"出", diff:-8, st:"excellent"},
-      {char:"来", diff:12, st:"excellent"},{char:"保", diff:-58, st:"fair"},
-      {char:"国", diff:-3, st:"excellent"},{char:"臣", diff:-18, st:"good"}
-    ],
-    calib: [
-      { id: "cal1", label: "AI 音准评分偏高", checked: false },
-      { id: "cal2", label: "AI 气息评分偏高", checked: false },
-      { id: "cal3", label: "AI 咬字评分偏低", checked: false }
-    ],
-    comment: "音准整体良好，拖腔处理有进步。建议在'雷'字拖腔时加强气息支撑，保持音高稳定。继续练习！",
-    time: "2026-07-29 06:30",
-    tags: [{text:"拖腔偏低", cls:"warn"}, {text:"时值偏短", cls:"warn"}]
-  },
-  {
-    id: "sub02", student: { name: "刘思琪", avatar: "🎵", level: "初级" },
-    ai_score: 75.2,
-    dimensions: { pitch: 68, rhythm: 72, breath: 70, articulation: 78 },
-    fusion: { total: 0.58, passed: false },
-    cdm: [
-      { label: "音准偏差随机", confidence: 0.85, status: "high", evidence: "多字偏差无系统性倾向" },
-      { label: "听辨能力弱", confidence: 0.76, status: "high", evidence: "音高偏差随机" }
-    ],
-    bkt: [
-      { skill: "音准控制", before: 0.48, after: 0.46, delta: -0.02 },
-      { skill: "气息支撑", before: 0.42, after: 0.40, delta: -0.02 }
-    ],
-    lyrics: [
-      {char:"辕", diff:-25, st:"fair"},{char:"门", diff:-30, st:"fair"},{char:"外", diff:-18, st:"good"}
-    ],
-    calib: [
-      { id: "cal1", label: "AI 音准评分偏高", checked: true },
-      { id: "cal2", label: "AI 气息评分偏高", checked: false },
-      { id: "cal3", label: "AI 咬字评分偏低", checked: false }
-    ],
-    comment: "音准偏差较大，建议先进行单音模唱训练。",
-    time: "2026-07-29 05:15",
-    tags: [{text:"音准偏差", cls:"danger"}, {text:"听辨弱", cls:"danger"}]
-  }
-];
+//   GET /api/homeworks                    作业列表（F1）→ fetchHomeworks
+//   GET /api/homeworks/<id>/submissions   待批改提交（F4）→ fetchSubmissions
+//   GET /api/submissions/<id>/detail      批改详情（F5）→ fetchDetail
+// 逐字偏差（4.4）与四维分（4.5）在库里没有数据源、校准（4.10）属 F7，右侧那三块
+// 因此出显式空态，见 renderDetailLyrics / renderDetailFusion / renderDetailCalib。
+// 原来这里的 HOMEWORKS / SUBMISSIONS 两个 mock 常量已随 F5 落地删除。
 
 // 同源空串 = 经 nginx 的 /api 代理。**不要改成 location.host + ':8877'**：
 // 那是跨源请求，而跨源 fetch 默认不带 Cookie，后端 login_required 只会看到空
