@@ -179,3 +179,30 @@ def get_submission_detail(
     )
     row = db.execute(stmt).first()
     return tuple(row) if row is not None else None
+
+
+def get_submission(db: Session, submission_id: int) -> Submission | None:
+    """按 id 取一条提交，不存在返回 None。供 F6 判 404 与标脏。
+
+    **不复用上面的 get_submission_detail**：那个为 F5 一次取四张表的字段、走三段
+    LEFT JOIN，而且返回的是**元组**——元组改不了 ORM 属性。F6 只要 Submission 本身
+    （要往它的列上写值），单独 get 是一条主键查询，比复用那条 join 更省。
+    """
+    return db.get(Submission, submission_id)
+
+
+def apply_review(db: Session, row: Submission, changes: dict) -> None:
+    """把 changes 里的列写到 row 上。只标脏，commit 交给 service 层。
+
+    `changes` 的 key 必须是**调用方已判定为「显式给出过」**的字段名——本函数不做
+    「缺省 vs 显式 null」的区分，给什么写什么（那个判定在 service 里靠
+    `model_fields_set` 做，见 spec 3.2）。
+
+    `db` 本次没用到，保留它是为了守住本层「第一个参数永远是 db」的约定
+    （见 app/repositories/__init__.py 开头的三条约定）。
+
+    不 flush：本次没有自增 id 要拿（`annotations_repo.add` 要 flush 是为了拿 id），
+    脏对象由 service 的 commit 一并写回。
+    """
+    for field, value in changes.items():
+        setattr(row, field, value)
