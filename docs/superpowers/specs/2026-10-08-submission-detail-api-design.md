@@ -23,7 +23,7 @@ DOC_ISSUES：本次新增第 36 条；另更正 §34.3 结尾的错误判断
 ### 1.2 非目标
 
 - **不改前端。** `homework.html` 右侧批改面板仍是 mock（F4 前端接入时的既定范围，见 `2026-10-08-homework-submissions-page-design.md` §3.3）。
-- **不实现 F6（终审）/ F7（校准）。** 相关桩维持 `return ok(id)`。
+- **不实现 F6（终审）/ F7（校准）。** 相关桩维持 `return ok(id)`。（2026-10-08 说明：F6 与 F7 后来各自实现；F7 落地时**撤销了本文下面「校准现状不出」那条**——见 §3.9 末尾的更新。）
 - **不补数据源。** 不写 `ai_detail`、不改种子数据、不实现 F3（学生提交作业）。见 §3.1——4.4 与 4.5 在本次交付里是**空位**，这是本次最重要的一个事实。
 - **不做多提交聚合、不分页、不截断。**
 - **不引入 pytest。** 本仓库无测试框架，验证靠 `/tmp` 临时脚本 + curl + psql（既有做法）。
@@ -224,6 +224,8 @@ B 组 `words[]` 的另外三个字段 `teacher_freq` / `student_freq` / `octave_
 **真库里的一个反常**：23/24 的 `teacher_score` 与 `teacher_comment` 已有值，但 `status` 仍是 `ai_scored`、`reviewed_at` 仍是 NULL——即「写了分数但没走终审」。本接口照实透传，不替它推断状态。（DOC_ISSUES 第 622 行记过：全项目还没有任何代码把 `status` 写成 `reviewed`，F4 因此一直把它们列为待批。终审接口 F6 落地后才谈得上修正。）
 
 **校准现状（`score_calibrations`）不出。** 它是 F7 的读职责，本次不把 F7 的回显口径提前拉进 F5。
+
+> **2026-10-08 更新（本条已被推翻）**：F7 落地时改为**出**——出参加 `calibration` 字段（`{bias_mode, ai_score, teacher_score, created_at} | null`），同一提交多行时取**最新一条**（`created_at DESC, id DESC`）。推翻的理由：F7 在《5-接口清单》里只有 POST，读职责没有落点，「F7 的读职责」这句话本身指不到任何接口。新口径见 `2026-10-08-submission-calibration-design.md` §3.6 与 §4.5，以及 `DOC_ISSUES.md` 第 37 条。
 
 ### 3.10 头部字段与空值兜底
 
