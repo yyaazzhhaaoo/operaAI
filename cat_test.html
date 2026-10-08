@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>戏韵AI · 摸底测试（CAT）</title>
+<script src="static/echarts.min.js"></script>
+<style>
+/* ============================================================
+   浅色高对比度配色 · 宣纸背景 + 景泰蓝/朱砂红
+   与 sing_along 保持一致
+   ============================================================ */
+:root {
+  --bg-primary: #F5EDE4;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F0E8DC;
+  --bg-hover: #F5F0EA;
+  --bg-card-header: #F8F3EC;
+  --text-primary: #2D1F14;
+  --text-secondary: #5A4A3A;
+  --text-muted: #8A7A6A;
+  --text-light: #B0A090;
+  --border-light: #E8DDD0;
+  --border-medium: #D5C8B8;
+  --border-strong: #C0B0A0;
+  --primary: #0066B3;
+  --primary-hover: #0055A0;
+  --primary-glow: rgba(0, 102, 179, 0.30);
+  --primary-soft: rgba(0, 102, 179, 0.08);
+  --primary-border: rgba(0, 102, 179, 0.25);
+  --success: #4A8F6B;
+  --success-soft: rgba(74, 143, 107, 0.12);
+  --warning: #C9A84C;
+  --warning-soft: rgba(201, 168, 76, 0.12);
+  --danger: #B83A2F;
+  --danger-soft: rgba(184, 58, 47, 0.12);
+  --nav-gradient: linear-gradient(90deg, #F5EDE4, #E8DDD0 40%, #D5C8B8 50%, #E8DDD0 60%, #F5EDE4);
+  --progress-gradient: linear-gradient(90deg, #0066B3, #4A8AF4);
+  --font-base: 16px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg-primary);
+  color:var(--text-primary);
+  min-height:100vh;
+  line-height:1.7;
+  font-size:var(--font-base);
+}
+
+/* ===== Navbar 浅色宣纸风格 ===== */
+.navbar{
+  background:var(--nav-gradient);
+  border-bottom:2px solid var(--border-medium);
+  padding:0 24px;
+  height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  position:sticky;
+  top:0;
+  z-index:50;
+}
+.nav-brand{display:flex;align-items:center;gap:12px}
+.nav-brand .logo{
+  width:34px;height:34px;
+  background:linear-gradient(135deg, var(--primary), #004080);
+  border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:700;color:#fff;
+  box-shadow:0 2px 12px var(--primary-glow);
+}
+.nav-brand h1{font-size:17px;color:var(--text-primary);font-weight:700}
+.nav-brand .badge{
+  background:var(--primary-soft);
+  color:var(--primary);
+  padding:2px 10px;border-radius:12px;
+  font-size:11px;font-weight:600;
+  border:1px solid var(--primary-border);
+}
+.nav-user{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary)}
+.nav-user .avatar{
+  width:30px;height:30px;border-radius:50%;
+  background:linear-gradient(135deg, #B89076, #8B6B4F);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;color:#fff;
+}
+
+/* ===== Layout ===== */
+.layout{display:flex;min-height:calc(100vh - 58px)}
+.sidebar{
+  width:200px;background:var(--bg-secondary);
+  border-right:2px solid var(--border-light);
+  padding:12px 0;position:fixed;height:100%;overflow-y:auto;z-index:40;
+}
+.nav-group{margin-bottom:6px}
+.nav-group-title{
+  padding:6px 16px;font-size:11px;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:0.8px;font-weight:700;
+}
+.nav-item{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 16px;margin:0 8px;
+  color:var(--text-secondary);font-size:13px;
+  cursor:pointer;transition:all 0.2s;text-decoration:none;
+  border-radius:8px;border-left:4px solid transparent;
+}
+.nav-item:hover{color:var(--text-primary);background:var(--bg-hover)}
+.nav-item.active{
+  color:var(--primary);
+  background:var(--primary-soft);
+  border-left-color:var(--primary);
+  font-weight:600;
+}
+.nav-item .icon{font-size:16px;width:22px;text-align:center}
+.nav-badge{
+  margin-left:auto;background:var(--danger);color:#fff;
+  font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600;
+}
+.main-content{margin-left:200px;flex:1;padding:20px;max-width:1000px;margin-right:auto;margin-left:auto}
+@media(min-width:1240px){.main-content{margin-left:240px}}
+.page-header{margin-bottom:16px}
+.page-header h2{font-size:20px;color:var(--text-primary);font-weight:700;margin-bottom:2px}
+.page-header p{font-size:14px;color:var(--text-secondary)}
+
+/* ===== 卡片 ===== */
+.card{
+  background:var(--bg-secondary);
+  border:1px solid var(--border-light);
+  border-radius:14px;
+  padding:20px 24px;
+  margin-bottom:16px;
+  box-shadow:0 1px 4px rgba(0,0,0,0.04);
+  transition:border-color 0.3s, box-shadow 0.3s;
+}
+.card:hover{border-color:var(--border-medium);box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+.card-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:14px;flex-wrap:wrap;gap:8px;
+}
+.card-title{
+  font-size:15px;font-weight:700;color:var(--text-primary);
+  display:flex;align-items:center;gap:8px;
+}
+.card-title .icon{
+  width:28px;height:28px;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+  background:var(--primary-soft);color:var(--primary);
+}
+
+/* ===== 按钮 ===== */
+.btn-primary{
+  padding:10px 28px;border:none;border-radius:10px;
+  background:var(--primary);
+  color:#fff;font-size:14px;font-weight:700;
+  cursor:pointer;transition:all 0.3s;
+  display:inline-flex;align-items:center;gap:6px;
+  box-shadow:0 2px 12px var(--primary-glow);
+  min-height:44px;
+}
+.btn-primary:hover{
+  background:var(--primary-hover);
+  box-shadow:0 4px 20px var(--primary-glow);
+  transform:translateY(-1px);
+}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed;transform:none;box-shadow:none}
+
+.btn-secondary{
+  padding:10px 28px;border:2px solid var(--border-medium);
+  border-radius:10px;background:var(--bg-secondary);
+  color:var(--text-secondary);font-size:14px;font-weight:600;
+  cursor:pointer;transition:all 0.3s;
+  display:inline-flex;align-items:center;gap:6px;
+  min-height:44px;
+}
+.btn-secondary:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-soft)}
+
+/* ===== 进度条 ===== */
+.progress-wrap{margin-bottom:20px}
+.progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.progress-title{font-size:13px;font-weight:600;color:var(--text-primary)}
+.progress-meta{font-size:12px;color:var(--text-muted)}
+.progress-track{
+  height:8px;background:var(--bg-primary);border-radius:4px;overflow:hidden;
+  border:1px solid var(--border-light);
+}
+.progress-fill{
+  height:100%;
+  background:var(--progress-gradient);
+  border-radius:4px;transition:width 0.6s cubic-bezier(0.4,0,0.2,1);
+  position:relative;
+}
+.progress-fill::after{
+  content:"";position:absolute;right:0;top:0;bottom:0;width:20px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.25));
+  border-radius:0 4px 4px 0;
+}
+.step-dots{
+  display:flex;justify-content:space-between;margin-top:8px;position:relative;z-index:2;
+}
+.step-dot{
+  width:28px;height:28px;border-radius:50%;
+  background:var(--bg-primary);border:2px solid var(--border-light);
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;color:var(--text-muted);
+  transition:all 0.4s;cursor:default;
+}
+.step-dot.active{
+  border-color:var(--primary);
+  background:var(--primary-soft);
+  color:var(--primary);
+  box-shadow:0 0 12px var(--primary-glow);
+}
+.step-dot.done{
+  border-color:var(--success);
+  background:var(--success-soft);
+  color:var(--success);
+}
+
+/* ===== 测试卡片 ===== */
+.phrase-card{
+  background:var(--bg-secondary);
+  border:1px solid var(--border-light);
+  border-radius:12px;
+  padding:24px;text-align:center;margin-bottom:20px;
+  position:relative;overflow:hidden;
+}
+.phrase-card::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:3px;
+  background:var(--progress-gradient);
+}
+.phrase-num{font-size:12px;color:var(--primary);font-weight:600;margin-bottom:6px;letter-spacing:1px}
+.phrase-title{font-size:20px;font-weight:700;color:var(--text-primary);margin-bottom:4px}
+.phrase-lyrics{
+  font-size:28px;color:var(--text-primary);font-weight:600;
+  margin:14px 0;padding:16px;background:var(--bg-primary);
+  border-radius:10px;border:1px dashed var(--border-medium);
+  font-family:"PingFang SC","Microsoft YaHei",serif;
+}
+.phrase-meta{
+  display:flex;justify-content:center;gap:14px;flex-wrap:wrap;margin-bottom:12px;
+}
+.phrase-tag{
+  padding:4px 12px;border-radius:6px;font-size:12px;font-weight:600;
+  background:var(--bg-primary);border:1px solid var(--border-light);
+  color:var(--text-secondary);
+}
+.phrase-tag .val{color:var(--text-primary)}
+.phrase-desc{font-size:13px;color:var(--text-secondary);margin-bottom:16px}
+
+/* ===== 录音区 ===== */
+.record-area{
+  padding:30px;background:var(--bg-primary);border-radius:12px;
+  border:2px dashed var(--border-medium);text-align:center;
+  margin-bottom:16px;transition:all 0.3s;
+}
+.record-area:hover{border-color:var(--primary);background:var(--bg-hover)}
+.record-area.recording{
+  border-color:var(--danger);
+  background:var(--danger-soft);
+  animation:pulseRed 2s infinite;
+}
+@keyframes pulseRed{
+  0%,100%{box-shadow:0 0 0 0 rgba(184,58,47,0)}
+  50%{box-shadow:0 0 20px 0 rgba(184,58,47,0.10)}
+}
+.record-btn{
+  width:72px;height:72px;border-radius:50%;
+  background:linear-gradient(135deg, var(--primary), var(--primary-hover));
+  border:none;color:#fff;font-size:28px;cursor:pointer;
+  transition:all 0.3s;display:flex;align-items:center;justify-content:center;
+  margin:0 auto 12px;box-shadow:0 4px 20px var(--primary-glow);
+}
+.record-btn:hover{transform:scale(1.05);box-shadow:0 6px 24px var(--primary-glow)}
+.record-btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+.record-btn.recording{
+  background:linear-gradient(135deg, var(--danger), #9E3126);
+  box-shadow:0 4px 20px rgba(184,58,47,0.3);
+  animation:pulseBtn 1.5s infinite;
+}
+@keyframes pulseBtn{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+.record-hint{font-size:13px;color:var(--text-secondary)}
+.record-timer{font-size:24px;font-weight:700;color:var(--text-primary);font-family:monospace;margin-top:6px}
+
+/* ===== 波形动画 ===== */
+.waveform{
+  display:flex;align-items:center;justify-content:center;gap:3px;height:40px;margin:10px 0;
+}
+.wave-bar{
+  width:4px;background:var(--progress-gradient);border-radius:2px;
+  animation:wave 1s ease-in-out infinite;
+}
+.wave-bar:nth-child(1){height:12px;animation-delay:0s}
+.wave-bar:nth-child(2){height:24px;animation-delay:0.1s}
+.wave-bar:nth-child(3){height:32px;animation-delay:0.2s}
+.wave-bar:nth-child(4){height:20px;animation-delay:0.3s}
+.wave-bar:nth-child(5){height:36px;animation-delay:0.4s}
+.wave-bar:nth-child(6){height:16px;animation-delay:0.5s}
+.wave-bar:nth-child(7){height:28px;animation-delay:0.6s}
+.wave-bar:nth-child(8){height:14px;animation-delay:0.7s}
+.wave-bar:nth-child(9){height:30px;animation-delay:0.8s}
+.wave-bar:nth-child(10){height:18px;animation-delay:0.9s}
+@keyframes wave{0%,100%{transform:scaleY(0.6)}50%{transform:scaleY(1)}}
+
+/* ===== 分析中 ===== */
+.analyzing-box{text-align:center;padding:40px 20px}
+.analyzing-icon{
+  font-size:48px;margin-bottom:16px;
+  animation:spin 2s linear infinite;display:inline-block;
+}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.analyzing-title{font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:6px}
+.analyzing-text{font-size:13px;color:var(--text-secondary);margin-bottom:16px}
+.analyzing-steps{
+  display:flex;flex-direction:column;gap:8px;max-width:400px;margin:0 auto;text-align:left;
+}
+.analyzing-step{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 14px;background:var(--bg-primary);
+  border-radius:8px;border:1px solid var(--border-light);
+  font-size:13px;color:var(--text-secondary);
+  transition:all 0.4s;
+}
+.analyzing-step.done{
+  color:var(--success);
+  border-color:rgba(74,143,107,0.3);
+  background:var(--success-soft);
+}
+.analyzing-step.done .step-check{
+  width:18px;height:18px;border-radius:50%;
+  background:var(--success);display:flex;align-items:center;justify-content:center;
+  font-size:11px;color:#fff;
+}
+.analyzing-step .step-check{
+  width:18px;height:18px;border-radius:50%;
+  border:2px solid var(--border-medium);
+}
+.analyzing-step.active{
+  color:var(--primary);
+  border-color:rgba(0,102,179,0.3);
+  background:var(--primary-soft);
+}
+
+/* ===== 结果 ===== */
+.result-box{padding:20px 0}
+.result-score{text-align:center;margin-bottom:20px}
+.result-score-val{
+  font-size:56px;font-weight:800;color:var(--text-primary);line-height:1;
+  background:linear-gradient(135deg, var(--warning), #B89076);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+.result-score-label{font-size:13px;color:var(--text-muted);margin-top:4px}
+.result-dims{
+  display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;
+}
+.result-dim{
+  padding:14px;background:var(--bg-primary);border-radius:10px;border:1px solid var(--border-light);
+}
+.result-dim-header{
+  display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;
+}
+.result-dim-name{font-size:13px;font-weight:600;color:var(--text-primary)}
+.result-dim-score{font-size:14px;font-weight:700;color:var(--text-primary)}
+.result-dim-bar{
+  height:6px;background:var(--border-light);border-radius:3px;overflow:hidden;
+}
+.result-dim-fill{
+  height:100%;border-radius:3px;transition:width 1s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* ===== 鼓励语 ===== */
+.encourage-card{
+  background:var(--primary-soft);
+  border:1px solid var(--primary-border);
+  border-radius:12px;padding:16px;
+  display:flex;align-items:flex-start;gap:12px;margin-bottom:16px;
+}
+.encourage-icon{font-size:24px;flex-shrink:0}
+.encourage-text{font-size:14px;color:var(--text-primary);line-height:1.7}
+.encourage-text strong{color:var(--primary)}
+
+/* ===== 能力画像浮动面板 ===== */
+.ability-preview{
+  position:fixed;right:20px;top:80px;width:260px;
+  background:var(--bg-secondary);
+  border:1px solid var(--border-medium);
+  border-radius:12px;padding:16px;
+  box-shadow:0 20px 50px rgba(0,0,0,0.08);
+  z-index:40;transition:all 0.4s;
+  transform:translateX(300px);opacity:0;
+}
+.ability-preview.show{transform:translateX(0);opacity:1}
+.ability-preview-title{
+  font-size:12px;font-weight:700;color:var(--text-muted);
+  margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px;
+}
+.ability-preview-item{
+  display:flex;align-items:center;gap:10px;margin-bottom:6px;
+}
+.ability-preview-name{font-size:12px;color:var(--text-secondary);flex:1}
+.ability-preview-bar{
+  flex:1;height:4px;background:var(--border-light);
+  border-radius:2px;overflow:hidden;max-width:80px;
+}
+.ability-preview-fill{height:100%;border-radius:2px;transition:width 0.6s}
+.ability-preview-val{
+  font-size:11px;font-weight:700;min-width:36px;text-align:right;
+}
+
+/* ===== 完成页面 ===== */
+.complete-hero{text-align:center;padding:40px 20px}
+.complete-icon{
+  font-size:64px;margin-bottom:16px;
+  animation:popIn 0.6s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes popIn{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+.complete-title{font-size:24px;font-weight:700;color:var(--text-primary);margin-bottom:6px}
+.complete-subtitle{font-size:14px;color:var(--text-secondary);margin-bottom:20px}
+.complete-stats{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:14px;
+  max-width:600px;margin:0 auto 20px;
+}
+.complete-stat{
+  padding:16px;background:var(--bg-primary);border-radius:12px;
+  border:1px solid var(--border-light);text-align:center;
+}
+.complete-stat-val{
+  font-size:28px;font-weight:800;color:var(--text-primary);line-height:1;
+}
+.complete-stat-val.up{color:var(--success)}
+.complete-stat-val.warn{color:var(--warning)}
+.complete-stat-label{font-size:12px;color:var(--text-muted);margin-top:4px}
+
+/* ===== 雷达图 ===== */
+.profile-radar{height:300px;width:100%}
+.profile-list{
+  display:flex;flex-direction:column;gap:8px;
+}
+.profile-item{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 14px;background:var(--bg-primary);
+  border-radius:8px;border:1px solid var(--border-light);
+}
+.profile-item .skill-name{
+  font-size:13px;font-weight:600;color:var(--text-primary);flex:1;min-width:80px;
+}
+.profile-item .skill-bar{
+  flex:1;height:6px;background:var(--border-light);
+  border-radius:3px;overflow:hidden;max-width:200px;
+}
+.profile-item .skill-fill{height:100%;border-radius:3px;transition:width 1s cubic-bezier(0.4,0,0.2,1)}
+.profile-item .skill-val{
+  font-size:13px;font-weight:700;min-width:50px;text-align:right;
+}
+.profile-item .skill-status{
+  font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600;margin-left:8px;
+}
+
+/* ===== 建议卡片 ===== */
+.suggest-card{
+  background:var(--bg-primary);border-radius:10px;
+  border:1px solid var(--border-light);padding:14px;
+  margin-bottom:10px;display:flex;align-items:flex-start;gap:12px;
+  transition:all 0.2s;
+}
+.suggest-card:hover{border-color:var(--border-medium)}
+.suggest-num{
+  width:28px;height:28px;border-radius:50%;
+  background:var(--progress-gradient);display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;color:#fff;flex-shrink:0;
+}
+.suggest-content{flex:1}
+.suggest-title{font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:2px}
+.suggest-desc{font-size:12px;color:var(--text-secondary);line-height:1.5}
+
+/* ===== 介绍页 ===== */
+.intro-hero{text-align:center;padding:40px 20px 24px}
+.intro-icon{font-size:56px;margin-bottom:16px}
+.intro-title{font-size:24px;font-weight:700;color:var(--text-primary);margin-bottom:6px}
+.intro-subtitle{
+  font-size:14px;color:var(--text-secondary);max-width:500px;margin:0 auto 28px;line-height:1.7;
+}
+.intro-features{
+  display:grid;grid-template-columns:repeat(2,1fr);gap:12px;
+  max-width:560px;margin:0 auto 28px;
+}
+.intro-feature{
+  padding:16px;background:var(--bg-primary);border-radius:10px;
+  border:1px solid var(--border-light);text-align:left;
+  display:flex;align-items:flex-start;gap:12px;
+}
+.intro-feature-icon{font-size:24px;flex-shrink:0}
+.intro-feature-title{font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:2px}
+.intro-feature-desc{font-size:12px;color:var(--text-secondary);line-height:1.5}
+
+/* ===== Toast ===== */
+.toast-container{
+  position:fixed;top:72px;right:20px;z-index:200;
+  display:flex;flex-direction:column;gap:10px;
+}
+.toast{
+  background:var(--bg-secondary);border:1px solid var(--border-light);
+  border-radius:12px;padding:14px 18px;
+  box-shadow:0 10px 30px rgba(0,0,0,0.08);
+  display:flex;align-items:flex-start;gap:12px;
+  min-width:300px;max-width:400px;animation:toastIn 0.3s ease;
+}
+.toast.success{border-color:rgba(74,143,107,0.4)}
+.toast.info{border-color:rgba(0,102,179,0.4)}
+.toast.warn{border-color:rgba(201,168,76,0.4)}
+.toast-icon{font-size:20px}
+.toast-content{flex:1}
+.toast-title{font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:2px}
+.toast-msg{font-size:12px;color:var(--text-secondary);line-height:1.5}
+@keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+
+.hidden{display:none !important}
+.fade-in{animation:fadeIn 0.4s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+.btn-group{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg-primary)}
+::-webkit-scrollbar-thumb{background:var(--border-medium);border-radius:3px}
+
+@media(max-width:1200px){.sidebar{display:none}.main-content{margin-left:auto;margin-right:auto;padding:16px}.ability-preview{display:none}}
+@media(max-width:768px){.intro-features{grid-template-columns:1fr}.result-dims{grid-template-columns:1fr}.complete-stats{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand">
+    <div class="logo">戏</div>
+    <h1>戏韵AI · 老师工作台</h1>
+    <span class="badge">摸底测试</span>
+  </div>
+  <div class="nav-user">
+    <div class="avatar">👩‍🏫</div>
+    <span>王慧芳</span>
+    <span style="color:var(--text-muted);font-size:13px">|</span>
+    <span style="color:var(--text-secondary);font-size:13px">中国戏曲学院</span>
+  </div>
+</nav>
+
+<div class="layout">
+<aside class="sidebar">
+  <div class="nav-group">
+    <div class="nav-group-title">核心功能</div>
+    <a href="dashboard.html" class="nav-item"><span class="icon">📊</span>班级看板</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">🧑‍🏫 教学工作台</div>
+    <a href="demo_library.html" class="nav-item"><span class="icon">🎵</span>示范库管理</a>
+    <a href="annotation.html" class="nav-item"><span class="icon">🏷️</span>歌词级标注</a>
+    <a href="homework.html" class="nav-item"><span class="icon">📝</span>作业批改</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">🎤 学生练习</div>
+    <a href="sing_along.html" class="nav-item"><span class="icon">🎙️</span>实时跟唱</a>
+    <a href="AI_teacher.html" class="nav-item"><span class="icon">🤖</span>AI教练对话</a>
+    <a href="cat_test.html" class="nav-item active"><span class="icon">🎯</span>摸底测试（CAT）</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">📈 数据分析</div>
+    <a href="tracking.html" class="nav-item"><span class="icon">📈</span>能力追踪（BKT）</a>
+    <a href="recommendation.html" class="nav-item"><span class="icon">🎯</span>渐进式推荐</a>
+    <a href="knowledge_graph.html" class="nav-item"><span class="icon">🧠</span>知识图谱</a>
+    <a href="cdm_report.html" class="nav-item"><span class="icon">🔍</span>归因诊断（CDM）</a>
+    <a href="daily_report.html" class="nav-item"><span class="icon">📰</span>每日学习报告</a>
+  </div>
+</aside>
+
+<main class="main-content">
+  <div class="page-header">
+    <h2>🎯 冷启动摸底测试（CAT）</h2>
+    <p>计算机自适应测试 · 5-8句跟唱 · 3分钟建立初始能力画像 · 解决冷启动推荐不准问题</p>
+  </div>
+
+  <!-- 介绍页 -->
+  <div id="introPage" class="fade-in">
+    <div class="card" style="text-align:center">
+      <div class="intro-hero">
+        <div class="intro-icon">🎭</div>
+        <div class="intro-title">欢迎开启你的戏曲学习之旅</div>
+        <div class="intro-subtitle">系统将为你进行一段简短的摸底测试，了解你当前的演唱基础，以便推荐最适合你的练习内容</div>
+      </div>
+      <div class="intro-features">
+        <div class="intro-feature">
+          <div class="intro-feature-icon">📊</div>
+          <div>
+            <div class="intro-feature-title">自适应出题</div>
+            <div class="intro-feature-desc">每唱一句，系统即时分析并动态选择下一题，精准定位你的水平</div>
+          </div>
+        </div>
+        <div class="intro-feature">
+          <div class="intro-feature-icon">⏱️</div>
+          <div>
+            <div class="intro-feature-title">仅需 3-5 分钟</div>
+            <div class="intro-feature-desc">8句代表性唱句，覆盖音准、气息、节奏、装饰音等核心维度</div>
+          </div>
+        </div>
+        <div class="intro-feature">
+          <div class="intro-feature-icon">🤖</div>
+          <div>
+            <div class="intro-feature-title">即时反馈</div>
+            <div class="intro-feature-desc">每句唱完立即看到分析结果，过程中穿插鼓励话术</div>
+          </div>
+        </div>
+        <div class="intro-feature">
+          <div class="intro-feature-icon">🎯</div>
+          <div>
+            <div class="intro-feature-title">精准画像</div>
+            <div class="intro-feature-desc">完成后生成各技法掌握概率 P(L)，为后续推荐提供依据</div>
+          </div>
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="btn-primary" onclick="startTest()">🚀 开始摸底测试</button>
+        <button class="btn-secondary" onclick="skipTest()">⏭️ 跳过（使用默认画像）</button>
+      </div>
+      <div style="margin-top:14px;font-size:12px;color:var(--text-muted)">
+        💡 提示：建议佩戴耳机，在安静环境中进行，以获得最准确的分析结果
+      </div>
+    </div>
+  </div>
+
+  <!-- 测试进行中 -->
+  <div id="testPage" class="hidden">
+    <div class="progress-wrap">
+      <div class="progress-header">
+        <span class="progress-title">测试进度</span>
+        <span class="progress-meta">第 <strong id="currentStepNum" style="color:var(--primary)">1</strong> / <strong id="totalStepNum">8</strong> 句 · 预计剩余 <span id="remainTime">3</span> 分钟</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+      </div>
+      <div class="step-dots" id="stepDots"></div>
+    </div>
+
+    <div class="ability-preview" id="abilityPreview">
+      <div class="ability-preview-title">📊 实时能力画像</div>
+      <div id="abilityPreviewList"></div>
+    </div>
+
+    <div class="card phrase-card" id="phraseCard">
+      <div class="phrase-num">摸底测试 · 第 <span id="phraseNum">1</span> 句</div>
+      <div class="phrase-title" id="phraseTitle">单音模唱 · 中音区</div>
+      <div class="phrase-meta">
+        <span class="phrase-tag">曲目: <span class="val" id="phrasePiece">基础音准测试</span></span>
+        <span class="phrase-tag">难度: <span class="val" id="phraseDiff">入门</span></span>
+        <span class="phrase-tag">时长: <span class="val" id="phraseDuration">8s</span></span>
+        <span class="phrase-tag">考察: <span class="val" id="phraseSkill">音准控制</span></span>
+      </div>
+      <div class="phrase-lyrics" id="phraseLyrics">啦 ——</div>
+      <div class="phrase-desc" id="phraseDesc">请跟唱"啦"字，保持音高稳定，尽量与示范音高一致</div>
+
+      <div class="record-area" id="recordArea">
+        <button class="record-btn" id="recordBtn" onclick="submitPhrase()">🎤</button>
+        <div class="record-hint" id="recordHint">点击麦克风图标，模拟完成跟唱并提交分析</div>
+        <div class="record-timer hidden" id="recordTimer">00:00</div>
+        <div class="waveform hidden" id="waveform">
+          <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hidden" id="analyzingCard">
+      <div class="analyzing-box">
+        <div class="analyzing-icon">🧬</div>
+        <div class="analyzing-title">AI 正在分析你的演唱...</div>
+        <div class="analyzing-text">基于 VocalParse 统一转录模型，提取音高、节奏、气息等多维特征</div>
+        <div class="analyzing-steps" id="analyzingSteps">
+          <div class="analyzing-step active" data-step="1">
+            <span class="step-check"></span>
+            <span>音频预处理与人声分离</span>
+          </div>
+          <div class="analyzing-step" data-step="2">
+            <span class="step-check"></span>
+            <span>歌词级音高与时值提取</span>
+          </div>
+          <div class="analyzing-step" data-step="3">
+            <span class="step-check"></span>
+            <span>与老师示范基准对比对齐</span>
+          </div>
+          <div class="analyzing-step" data-step="4">
+            <span class="step-check"></span>
+            <span>多维特征融合与 BKT 状态更新</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hidden" id="resultCard">
+      <div class="result-box">
+        <div class="result-score">
+          <div class="result-score-val" id="resultScore">78</div>
+          <div class="result-score-label">本句综合得分</div>
+        </div>
+        <div class="result-dims" id="resultDims"></div>
+
+        <div class="encourage-card" id="encourageCard">
+          <div class="encourage-icon">💬</div>
+          <div class="encourage-text" id="encourageText">分析中...</div>
+        </div>
+
+        <div style="background:var(--bg-primary);border-radius:10px;border:1px solid var(--border-light);padding:14px;margin-bottom:16px">
+          <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px">🔄 BKT 状态更新摘要</div>
+          <div id="bktUpdateList" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn-primary" id="nextBtn" onclick="nextPhrase()">下一句 →</button>
+          <button class="btn-secondary" onclick="retryPhrase()">↺ 重唱本句</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="completePage" class="hidden">
+    <div class="card" style="text-align:center">
+      <div class="complete-hero">
+        <div class="complete-icon">🎉</div>
+        <div class="complete-title">摸底测试完成！</div>
+        <div class="complete-subtitle">你的初始能力画像已建立，系统将根据此画像为你推荐最适合的练习内容</div>
+      </div>
+      <div class="complete-stats">
+        <div class="complete-stat">
+          <div class="complete-stat-val" id="statTime">3:24</div>
+          <div class="complete-stat-label">测试用时</div>
+        </div>
+        <div class="complete-stat">
+          <div class="complete-stat-val" id="statAvg">—</div>
+          <div class="complete-stat-label">平均得分</div>
+        </div>
+        <div class="complete-stat">
+          <div class="complete-stat-val up" id="statMastered">—</div>
+          <div class="complete-stat-label">已掌握技法</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card profile-card">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="icon" style="background:rgba(0,102,179,0.10);color:var(--primary)">🧬</div>
+            初始能力画像（雷达图）
+          </div>
+        </div>
+        <div class="profile-radar" id="profileRadar"></div>
+      </div>
+      <div class="card profile-card">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="icon" style="background:rgba(0,102,179,0.10);color:var(--primary)">📋</div>
+            各技法掌握概率 P(L)
+          </div>
+        </div>
+        <div class="profile-list" id="profileList"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="icon" style="background:rgba(74,143,107,0.10);color:var(--success)">🎯</div>
+          系统推荐学习路径
+        </div>
+      </div>
+      <div id="suggestList"></div>
+      <div style="margin-top:20px;text-align:center">
+        <button class="btn-primary" onclick="enterLearning()">🚀 进入个性化学习</button>
+        <button class="btn-secondary" onclick="viewReport()">📊 查看详细报告</button>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+const TECHNIQUES = [
+  { key: "音准控制", color: "#0066B3", category: "基础" },
+  { key: "气息支撑", color: "#4A8F6B", category: "基础" },
+  { key: "滑音", color: "#C0392B", category: "装饰" },
+  { key: "拖腔", color: "#C9A84C", category: "装饰" },
+  { key: "归韵咬字", color: "#8A6E4B", category: "基础" },
+  { key: "节奏感知", color: "#B89076", category: "基础" },
+  { key: "颤音", color: "#D97706", category: "装饰" },
+  { key: "装饰音技巧", color: "#7C3AED", category: "装饰" }
+];
+
+const PHRASE_POOL = [
+  { id: "cat01", title: "单音模唱 · 中音区", lyrics: "啦 ——", piece: "基础音准测试", difficulty: 0.25, testSkills: ["音准控制"], duration: "8s", description: "请跟唱'啦'字，保持音高稳定，尽量与示范音高一致" },
+  { id: "cat02", title: "长音保持 · 气息测试", lyrics: "啊 ——————", piece: "基础气息测试", difficulty: 0.30, testSkills: ["气息支撑"], duration: "10s", description: "请深吸一口气，跟唱'啊'字，尽量保持音高和音量稳定" },
+  { id: "cat03", title: "简单节奏型", lyrics: "哒 哒 哒 哒", piece: "基础节奏测试", difficulty: 0.28, testSkills: ["节奏感知"], duration: "6s", description: "请跟随节拍，均匀唱出四个'哒'字，注意时值一致" },
+  { id: "cat04", title: "上滑音练习", lyrics: "咦 ~ 呀", piece: "装饰音基础", difficulty: 0.45, testSkills: ["滑音","音准控制"], duration: "8s", description: "请跟唱'咦~呀'，注意从低音滑向高音的流畅度" },
+  { id: "cat05", title: "短拖腔练习", lyrics: "哎 ~ ~", piece: "装饰音基础", difficulty: 0.48, testSkills: ["拖腔","气息支撑"], duration: "9s", description: "请跟唱'哎~~'，将尾音自然拖长，注意气息均匀输出" },
+  { id: "cat06", title: "归韵咬字", lyrics: "天 ~ 边 ~", piece: "咬字基础", difficulty: 0.42, testSkills: ["归韵咬字"], duration: "8s", description: "请跟唱'天边'，注意'天'字收韵完整，口型保持到位" },
+  { id: "cat07", title: "颤音感知", lyrics: "咿 ~~", piece: "装饰音基础", difficulty: 0.50, testSkills: ["颤音","音准控制"], duration: "8s", description: "请跟唱'咿~~'，尝试让声音产生自然的波动感" },
+  { id: "cat08", title: "综合短句 · 辕门外", lyrics: "辕门外三声炮", piece: "《穆桂英挂帅》", difficulty: 0.65, testSkills: ["音准控制","节奏感知","归韵咬字"], duration: "12s", description: "请跟唱这句经典唱段，综合展示你的音准、节奏和咬字能力" }
+];
+
+const ENCOURAGE_MESSAGES = {
+  high: [
+    "太棒了！你的<strong>{skill}</strong>基础很扎实，继续保持！",
+    "非常出色！这句的<strong>{skill}</strong>处理得很到位，看得出你有很好的功底。",
+    "惊艳！系统检测到你的<strong>{skill}</strong>稳定性超过了80%的同龄学习者。"
+  ],
+  mid: [
+    "不错，你的<strong>{skill}</strong>有一定基础，再稍加练习就能更稳。",
+    "还可以，这句的<strong>{skill}</strong>基本达标，注意保持气息均匀。",
+    "有进步空间！<strong>{skill}</strong>的大框架是对的，细节可以慢慢打磨。"
+  ],
+  low: [
+    "没关系，摸底测试就是为了发现问题。<strong>{skill}</strong>是后续的重点练习方向。",
+    "别担心，系统已经记录了你<strong>{skill}</strong>的当前水平，会为你推荐合适的练习。",
+    "起步都是不容易的。<strong>{skill}</strong>需要循序渐进，系统会安排前置基础训练。"
+  ]
+};
+
+let currentIndex = 0;
+let answers = [];
+let abilityProfile = {};
+let sessionStartTime = null;
+let radarChart = null;
+let isRecording = false;
+let recordTimer = null;
+let recordSeconds = 0;
+
+TECHNIQUES.forEach(t => {
+  abilityProfile[t.key] = { p_l: 0.35, confidence: 0.40, history: [0.35] };
+});
+
+function getDiffLabel(d) {
+  if (d >= 0.70) return { text: "高难度", color: "#B83A2F" };
+  if (d >= 0.50) return { text: "中等", color: "#C9A84C" };
+  return { text: "入门", color: "#4A8F6B" };
+}
+
+function getPLColor(p) {
+  if (p >= 0.85) return { bar: "#4A8F6B", text: "#4A8F6B", label: "已掌握" };
+  if (p >= 0.60) return { bar: "#0066B3", text: "#0066B3", label: "学习中" };
+  if (p >= 0.40) return { bar: "#C9A84C", text: "#C9A84C", label: "薄弱" };
+  return { bar: "#B83A2F", text: "#B83A2F", label: "未掌握" };
+}
+
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m + ":" + s.toString().padStart(2, '0');
+}
+
+function randomBetween(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function startTest() {
+  document.getElementById('introPage').classList.add('hidden');
+  document.getElementById('testPage').classList.remove('hidden');
+  sessionStartTime = Date.now();
+  currentIndex = 0;
+  answers = [];
+  TECHNIQUES.forEach(t => {
+    abilityProfile[t.key] = { p_l: 0.35, confidence: 0.40, history: [0.35] };
+  });
+  renderStepDots();
+  loadPhrase(0);
+  showToast('info', '🎯 测试开始', '请跟随系统提示逐句跟唱，每句唱完后会自动分析。');
+}
+
+function skipTest() {
+  if (!confirm('跳过摸底测试将使用默认能力画像（各技法 0.35），推荐精度会降低。确定跳过吗？')) return;
+  showToast('warn', '⏭️ 已跳过测试', '使用默认能力画像，后续可在设置中重新进行摸底。');
+  document.getElementById('introPage').classList.add('hidden');
+  showCompletePage();
+}
+
+function renderStepDots() {
+  const container = document.getElementById('stepDots');
+  container.innerHTML = PHRASE_POOL.map((p, i) => {
+    let cls = '';
+    if (i < currentIndex) cls = 'done';
+    else if (i === currentIndex) cls = 'active';
+    return '<div class="step-dot ' + cls + '">' + (i < currentIndex ? '✓' : i + 1) + '</div>';
+  }).join('');
+}
+
+function updateProgress() {
+  const pct = (currentIndex / PHRASE_POOL.length) * 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('currentStepNum').textContent = currentIndex + 1;
+  document.getElementById('totalStepNum').textContent = PHRASE_POOL.length;
+  const remain = Math.max(1, Math.ceil((PHRASE_POOL.length - currentIndex) * 0.5));
+  document.getElementById('remainTime').textContent = remain;
+}
+
+function loadPhrase(index) {
+  currentIndex = index;
+  updateProgress();
+  renderStepDots();
+  const phrase = PHRASE_POOL[index];
+  const diffInfo = getDiffLabel(phrase.difficulty);
+  document.getElementById('phraseNum').textContent = index + 1;
+  document.getElementById('phraseTitle').textContent = phrase.title;
+  document.getElementById('phrasePiece').textContent = phrase.piece;
+  document.getElementById('phraseDiff').textContent = diffInfo.text;
+  document.getElementById('phraseDiff').style.color = diffInfo.color;
+  document.getElementById('phraseDuration').textContent = phrase.duration;
+  document.getElementById('phraseSkill').textContent = phrase.testSkills.join('、');
+  document.getElementById('phraseLyrics').textContent = phrase.lyrics;
+  document.getElementById('phraseDesc').textContent = phrase.description;
+  document.getElementById('recordArea').classList.remove('recording');
+  document.getElementById('recordBtn').classList.remove('recording');
+  document.getElementById('recordBtn').disabled = false;
+  document.getElementById('recordHint').textContent = '点击麦克风图标，模拟完成跟唱并提交分析';
+  document.getElementById('recordTimer').classList.add('hidden');
+  document.getElementById('waveform').classList.add('hidden');
+  document.getElementById('phraseCard').classList.remove('hidden');
+  document.getElementById('analyzingCard').classList.add('hidden');
+  document.getElementById('resultCard').classList.add('hidden');
+  updateAbilityPreview();
+  document.getElementById('abilityPreview').classList.add('show');
+}
+
+function submitPhrase() {
+  if (isRecording) return;
+  isRecording = true;
+  recordSeconds = 0;
+  const btn = document.getElementById('recordBtn');
+  const area = document.getElementById('recordArea');
+  const hint = document.getElementById('recordHint');
+  const timer = document.getElementById('recordTimer');
+  const wave = document.getElementById('waveform');
+  btn.classList.add('recording');
+  area.classList.add('recording');
+  hint.textContent = '正在录制...';
+  timer.classList.remove('hidden');
+  wave.classList.remove('hidden');
+  btn.disabled = true;
+  recordTimer = setInterval(() => {
+    recordSeconds++;
+    timer.textContent = '00:' + recordSeconds.toString().padStart(2, '0');
+    if (recordSeconds >= 3) finishRecording();
+  }, 1000);
+}
+
+function finishRecording() {
+  clearInterval(recordTimer);
+  isRecording = false;
+  document.getElementById('phraseCard').classList.add('hidden');
+  document.getElementById('analyzingCard').classList.remove('hidden');
+  document.getElementById('analyzingCard').classList.add('fade-in');
+  simulateAnalysis();
+}
+
+function simulateAnalysis() {
+  const steps = document.querySelectorAll('.analyzing-step');
+  let stepIdx = 0;
+  const interval = setInterval(() => {
+    if (stepIdx > 0) {
+      steps[stepIdx - 1].classList.remove('active');
+      steps[stepIdx - 1].classList.add('done');
+    }
+    if (stepIdx < steps.length) {
+      steps[stepIdx].classList.add('active');
+      stepIdx++;
+    } else {
+      clearInterval(interval);
+      setTimeout(() => showResult(), 400);
+    }
+  }, 500);
+}
+
+function showResult() {
+  const phrase = PHRASE_POOL[currentIndex];
+  const baseScore = Math.max(45, Math.min(95, 75 + randomBetween(-20, 15)));
+  const score = Math.round(baseScore);
+  const dims = {};
+  phrase.testSkills.forEach(sk => {
+    dims[sk] = Math.round(Math.max(40, Math.min(98, score + randomBetween(-15, 10))));
+  });
+  TECHNIQUES.forEach(t => {
+    if (!dims[t.key]) dims[t.key] = Math.round(50 + randomBetween(-10, 10));
+  });
+  const bktUpdates = {};
+  phrase.testSkills.forEach(sk => {
+    const before = abilityProfile[sk].p_l;
+    const dimScore = dims[sk] / 100;
+    const learnRate = dimScore > 0.7 ? 0.12 : (dimScore > 0.5 ? 0.06 : 0.02);
+    const after = Math.min(0.95, before + learnRate + randomBetween(-0.02, 0.02));
+    abilityProfile[sk].p_l = parseFloat(after.toFixed(3));
+    abilityProfile[sk].confidence = Math.min(0.95, abilityProfile[sk].confidence + 0.06);
+    abilityProfile[sk].history.push(abilityProfile[sk].p_l);
+    bktUpdates[sk] = { before: before, after: abilityProfile[sk].p_l };
+  });
+  const mainSkill = phrase.testSkills[0];
+  const mainScore = dims[mainSkill];
+  let level = 'mid';
+  if (mainScore >= 80) level = 'high';
+  else if (mainScore < 60) level = 'low';
+  const templates = ENCOURAGE_MESSAGES[level];
+  const encourageText = templates[Math.floor(Math.random() * templates.length)].replace('{skill}', mainSkill);
+  answers.push({ phraseId: phrase.id, score: score, dimensions: dims, bktUpdates: bktUpdates, timestamp: new Date().toISOString() });
+
+  document.getElementById('analyzingCard').classList.add('hidden');
+  document.getElementById('resultCard').classList.remove('hidden');
+  document.getElementById('resultCard').classList.add('fade-in');
+  document.getElementById('resultScore').textContent = score;
+  const scoreColor = score >= 80 ? 'linear-gradient(135deg,#4A8F6B,#3D6B5A)' : (score >= 60 ? 'linear-gradient(135deg,#C9A84C,#B89076)' : 'linear-gradient(135deg,#B83A2F,#9E3126)');
+  document.getElementById('resultScore').style.background = scoreColor;
+  document.getElementById('resultScore').style.webkitBackgroundClip = 'text';
+  document.getElementById('resultScore').style.webkitTextFillColor = 'transparent';
+
+  const dimContainer = document.getElementById('resultDims');
+  const dimEntries = Object.entries(dims).slice(0, 4);
+  dimContainer.innerHTML = dimEntries.map(([name, val]) => {
+    const color = val >= 80 ? '#4A8F6B' : (val >= 60 ? '#0066B3' : '#B83A2F');
+    return '<div class="result-dim"><div class="result-dim-header"><span class="result-dim-name">' + name + '</span><span class="result-dim-score" style="color:' + color + '">' + val + '分</span></div><div class="result-dim-bar"><div class="result-dim-fill" style="width:0%;background:' + color + '" data-width="' + val + '%"></div></div></div>';
+  }).join('');
+  setTimeout(() => {
+    document.querySelectorAll('.result-dim-fill').forEach(el => {
+      el.style.width = el.getAttribute('data-width');
+    });
+  }, 100);
+
+  document.getElementById('encourageText').innerHTML = encourageText;
+  const bktList = document.getElementById('bktUpdateList');
+  bktList.innerHTML = Object.entries(bktUpdates).map(([sk, upd]) => {
+    const color = getPLColor(upd.after);
+    const arrow = upd.after > upd.before ? '↗' : '→';
+    return '<div style="display:flex;align-items:center;gap:10px;font-size:12px"><span style="color:var(--text-secondary);min-width:70px">' + sk + '</span><div style="flex:1;height:4px;background:var(--border-light);border-radius:2px;overflow:hidden;max-width:120px"><div style="width:' + (upd.after*100) + '%;height:100%;background:' + color.bar + ';border-radius:2px;transition:width 0.6s"></div></div><span style="color:var(--text-muted);font-family:monospace">' + (upd.before*100).toFixed(0) + '% ' + arrow + '</span><span style="color:' + color.text + ';font-weight:700;min-width:40px;text-align:right">' + (upd.after*100).toFixed(0) + '%</span><span class="skill-status" style="background:' + color.bar + '20;color:' + color.text + '">' + color.label + '</span></div>';
+  }).join('');
+
+  updateAbilityPreview();
+  const nextBtn = document.getElementById('nextBtn');
+  if (currentIndex >= PHRASE_POOL.length - 1) nextBtn.textContent = '查看完整画像 →';
+  else nextBtn.textContent = '下一句 →';
+}
+
+function updateAbilityPreview() {
+  const container = document.getElementById('abilityPreviewList');
+  container.innerHTML = TECHNIQUES.map(t => {
+    const p = abilityProfile[t.key].p_l;
+    const color = getPLColor(p);
+    return '<div class="ability-preview-item"><span class="ability-preview-name">' + t.key + '</span><div class="ability-preview-bar"><div class="ability-preview-fill" style="width:' + (p*100) + '%;background:' + color.bar + '"></div></div><span class="ability-preview-val" style="color:' + color.text + '">' + (p*100).toFixed(0) + '%</span></div>';
+  }).join('');
+}
+
+function nextPhrase() {
+  if (currentIndex >= PHRASE_POOL.length - 1) showCompletePage();
+  else loadPhrase(currentIndex + 1);
+}
+
+function retryPhrase() {
+  answers.pop();
+  const phrase = PHRASE_POOL[currentIndex];
+  phrase.testSkills.forEach(sk => {
+    if (abilityProfile[sk].history.length > 1) {
+      abilityProfile[sk].history.pop();
+      abilityProfile[sk].p_l = abilityProfile[sk].history[abilityProfile[sk].history.length - 1];
+    }
+  });
+  loadPhrase(currentIndex);
+  showToast('info', '↺ 重新跟唱', '已重置本句状态，请再次跟唱。');
+}
+
+function showCompletePage() {
+  document.getElementById('testPage').classList.add('hidden');
+  document.getElementById('completePage').classList.remove('hidden');
+  document.getElementById('completePage').classList.add('fade-in');
+  document.getElementById('abilityPreview').classList.remove('show');
+  const totalTime = Math.floor((Date.now() - sessionStartTime) / 1000);
+  document.getElementById('statTime').textContent = formatTime(totalTime);
+  const avgScore = Math.round(answers.reduce((a, b) => a + b.score, 0) / answers.length);
+  document.getElementById('statAvg').textContent = avgScore + '分';
+  document.getElementById('statAvg').style.color = avgScore >= 80 ? '#4A8F6B' : (avgScore >= 60 ? '#C9A84C' : '#B83A2F');
+  const masteredCount = TECHNIQUES.filter(t => abilityProfile[t.key].p_l >= 0.60).length;
+  document.getElementById('statMastered').textContent = masteredCount + '/' + TECHNIQUES.length;
+  renderProfileRadar();
+  renderProfileList();
+  renderSuggestions();
+  showToast('success', '🎉 摸底测试完成', '已建立初始能力画像，平均得分 ' + avgScore + ' 分。');
+}
+
+function renderProfileRadar() {
+  const dom = document.getElementById('profileRadar');
+  if (radarChart) radarChart.dispose();
+  radarChart = echarts.init(dom);
+  const values = TECHNIQUES.map(t => abilityProfile[t.key].p_l);
+  const option = {
+    backgroundColor: 'transparent',
+    tooltip: {
+      backgroundColor: 'rgba(255,255,255,0.96)',
+      borderColor: 'var(--border-light)',
+      textStyle: { color: 'var(--text-primary)', fontSize: 12 },
+      formatter: function(p) {
+        const color = getPLColor(p.value);
+        return '<div style="font-weight:600">' + p.name + '</div><div style="color:' + color.text + ';font-size:16px;font-weight:700">' + (p.value*100).toFixed(0) + '% · ' + color.label + '</div>';
+      }
+    },
+    radar: {
+      indicator: TECHNIQUES.map(t => ({ name: t.key, max: 1 })),
+      shape: 'polygon',
+      splitNumber: 4,
+      axisName: { color: 'var(--text-secondary)', fontSize: 11 },
+      splitLine: { lineStyle: { color: 'var(--border-light)' } },
+      splitArea: { show: true, areaStyle: { color: ['rgba(245,237,228,0.4)', 'rgba(245,237,228,0.2)'] } },
+      axisLine: { lineStyle: { color: 'var(--border-light)' } }
+    },
+    series: [{
+      type: 'radar',
+      data: [{ value: values, name: '掌握度', areaStyle: { color: 'rgba(0,102,179,0.15)' }, lineStyle: { color: '#0066B3', width: 2 }, itemStyle: { color: '#0066B3' } }],
+      symbolSize: 5
+    }]
+  };
+  radarChart.setOption(option);
+  window.addEventListener('resize', () => radarChart.resize());
+}
+
+function renderProfileList() {
+  const container = document.getElementById('profileList');
+  container.innerHTML = TECHNIQUES.map(t => {
+    const p = abilityProfile[t.key].p_l;
+    const color = getPLColor(p);
+    return '<div class="profile-item"><span class="skill-name">' + t.key + '</span><span style="font-size:11px;color:var(--text-muted)">' + t.category + '</span><div class="skill-bar"><div class="skill-fill" style="width:' + (p*100) + '%;background:' + color.bar + '"></div></div><span class="skill-val" style="color:' + color.text + '">' + (p*100).toFixed(1) + '%</span><span class="skill-status" style="background:' + color.bar + '20;color:' + color.text + '">' + color.label + '</span></div>';
+  }).join('');
+}
+
+function renderSuggestions() {
+  const weakSkills = TECHNIQUES.filter(t => abilityProfile[t.key].p_l < 0.50).sort((a, b) => abilityProfile[a.key].p_l - abilityProfile[b.key].p_l);
+  const strongSkills = TECHNIQUES.filter(t => abilityProfile[t.key].p_l >= 0.60).sort((a, b) => abilityProfile[b.key].p_l - abilityProfile[a.key].p_l);
+  let html = '';
+  if (weakSkills.length > 0) {
+    html += '<div class="suggest-card"><div class="suggest-num">1</div><div class="suggest-content"><div class="suggest-title">优先补齐基础：' + weakSkills.slice(0, 2).map(s => s.key).join('、') + '</div><div class="suggest-desc">这些技法掌握度低于50%，系统已为你安排前置基础练习，建议先完成基础训练再挑战唱段。</div></div></div>';
+  }
+  if (strongSkills.length > 0) {
+    html += '<div class="suggest-card"><div class="suggest-num">2</div><div class="suggest-content"><div class="suggest-title">保持优势：' + strongSkills.slice(0, 2).map(s => s.key).join('、') + '</div><div class="suggest-desc">这些技法已有一定基础，可在练习中继续巩固，并尝试将其应用到完整唱段中。</div></div></div>';
+  }
+  html += '<div class="suggest-card"><div class="suggest-num">3</div><div class="suggest-content"><div class="suggest-title">推荐入门唱段</div><div class="suggest-desc">基于你的画像，系统推荐从《气息基础短句》和《音准感知训练》开始，难度匹配度 85%。</div></div></div>';
+  document.getElementById('suggestList').innerHTML = html;
+}
+
+function enterLearning() {
+  showToast('success', '🚀 进入学习', '正在为你生成个性化学习路径...');
+  setTimeout(() => { window.location.href = 'recommendation.html'; }, 1500);
+}
+
+function viewReport() {
+  showToast('info', '📊 详细报告', '完整诊断报告功能开发中...');
+}
+
+function showToast(type, title, msg) {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+  const iconMap = { success: '✅', info: 'ℹ️', warn: '⚠️' };
+  toast.innerHTML = '<div class="toast-icon">' + (iconMap[type] || 'ℹ️') + '</div><div class="toast-content"><div class="toast-title">' + title + '</div><div class="toast-msg">' + msg + '</div></div>';
+  container.appendChild(toast);
+  setTimeout(() => { if (toast.parentElement) toast.remove(); }, 4000);
+}
+
+renderStepDots();
+</script>
+</body>
+</html>

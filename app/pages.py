@@ -46,6 +46,7 @@ PROTECTED_PAGES = [
     "sing_along",
     "AI_teacher",
     "pitch_comparison",
+    "cat_test"
 ]
 
 
