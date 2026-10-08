@@ -394,7 +394,8 @@ body{
   padding:6px 10px;background:var(--bg-primary);border-radius:6px;border:1px solid var(--border-light);
   font-size:12px;color:var(--text-secondary);
 }
-.calib-item input[type="checkbox"]{width:16px;height:16px;accent-color:var(--primary)}
+.calib-item input[type="checkbox"],
+.calib-item input[type="radio"]{width:16px;height:16px;accent-color:var(--primary)}
 
 /* 终审 */
 .teacher-review textarea{
@@ -573,7 +574,7 @@ body{
 
             <!-- 校准 -->
             <div style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px">🎯 AI 评分校准（修正数据回流）</div>
-            <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">勾选 AI 评分偏差模式，帮助系统学习您的评分偏好：</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">选择 AI 评分偏差模式，帮助系统学习您的评分偏好：</div>
             <div class="calib-grid" id="calibGrid"></div>
 
             <!-- 终审 -->
@@ -990,13 +991,25 @@ function renderDetailFusion(d) {
   document.getElementById("fusionPass").textContent = "—";
 }
 
-// 功能 4.10（F7 的地盘）：F5 **不出校准**——那是 F7 的读职责。
-// 区块保留（4.10 是正式需求），出空态；要显示得先等 F7 定下校准项的取值集合
-// （DOC_ISSUES 第 37 条：校准项文档从未定义，且 score_calibrations 装不下页面的
-// 「按维度勾三项」）。
+// 功能 4.10（F7）：取值集合已定为三值整体模式，与 score_calibrations.bias_mode
+// 一一对应（F7 spec 3.1）。**不再按维度勾三项**——表里只有一列 bias_mode，
+// 「音准偏高」+「气息偏高」同时勾选存不下（DOC_ISSUES 第 37 条）。
+// d.calibration 为 null = 没校准过 → 三个都不选。
+const CALIB_OPTIONS = [
+  { value: "high", label: "AI 评分偏高" },
+  { value: "low",  label: "AI 评分偏低" },
+  { value: "ok",   label: "AI 评分合适" },
+];
+
 function renderDetailCalib(d) {
-  document.getElementById("calibGrid").innerHTML =
-    emptyBlock("暂无校准项（数据源待接入）");
+  // bias_mode 是后端透传的字符串，先按白名单收口再用——直接拿它比 value 的话，
+  // 库里若出现第四个值（历史数据/手改），三个 radio 会全不选中，看起来像「没校准过」。
+  const cur = (d.calibration && d.calibration.bias_mode) || null;
+  document.getElementById("calibGrid").innerHTML = CALIB_OPTIONS.map(o => `
+    <label class="calib-item">
+      <input type="radio" name="calibBias" value="${o.value}"${o.value === cur ? " checked" : ""}>
+      <span>${o.label}</span>
+    </label>`).join("");
 }
 
 // 点左侧待批卡片。角色判断不在这里（学生看不到卡片），在 fetchDetail 里——
@@ -1198,6 +1211,27 @@ async function submitReview() {
       // 0 到 100 之间」），原样显示比自己拼一句 HTTP xxx 有用——口径同 fetchDetail。
       const b = await res.json().catch(() => null);
       throw new Error((b && b.message) || `HTTP ${res.status}`);
+    }
+
+    // 功能 4.10：校准串在终审**之后**发（F7 spec 3.9）。顺序不能反——F7 的
+    // teacher_score 是从 submissions 读的，那正是上面这次 F6 刚写进去的值。
+    // 一项都没选就不发：不制造「撤销」（F7 的 bias_mode=null 会删行）。
+    const bias = document.querySelector('input[name="calibBias"]:checked')?.value;
+    if (bias) {
+      try {
+        const r2 = await fetch(`${API_BASE}/api/submissions/${id}/calibration`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bias_mode: bias }),
+        });
+        if (!r2.ok) throw new Error(String(r2.status));
+      } catch (e) {
+        // 终审已经落库、列表马上要刷新了，这时报「发布失败」是在说谎；教师会重复
+        // 点击，而 F6 是覆盖语义，重复点只会白刷一次 reviewed_at。所以只提示校准
+        // 这一半没成，不回滚、不重发（F7 spec 3.9）。
+        alert("⚠️ 终审已保存，但校准未保存");
+      }
     }
 
     // 成功。响应体不用（spec 3.11）：两条列表刷新完就是最新的。
