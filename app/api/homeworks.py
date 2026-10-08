@@ -36,11 +36,15 @@ def homeworks_submissions(homework_id):
     return ok(homework_service.list_pending_submissions(
         get_db(), homework_id).model_dump(mode="json"))
 
-@api_bp.route("/homeworks/<id>/detail",methods=["GET"])
+@api_bp.route("/submissions/<int:submission_id>/detail",methods=["GET"])
 @login_required
 @teacher_required
-def homeworks_detail(id):
-    return ok(id)
+def submissions_detail(submission_id):
+    # mode="json"：出参里有 datetime（submitted_at / reviewed_at）。默认 model_dump()
+    # 会给 Flask 一个 datetime 对象，而它按 RFC-822 序列化成
+    # "Sat, 01 Aug 2026 00:00:00 GMT"；mode="json" 出的是 ISO-8601。同 F1/F4。
+    return ok(homework_service.submission_detail(
+        get_db(), submission_id).model_dump(mode="json"))
 
 @api_bp.route("/submissions/<id>/review",methods=["POST"])
 @login_required
