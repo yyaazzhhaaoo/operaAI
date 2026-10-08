@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from app.common.errors import BusinessError
-from app.models import Homework
+from app.models import Homework, ScoreCalibration, Submission
 from app.repositories import audio_repo, homeworks_repo, user_repo
 from app.schemas.homework import (
     BktChange,
@@ -15,6 +15,8 @@ from app.schemas.homework import (
     #                        # 但它是 SubmissionDetailResponse.lyrics 的元素类型
     PendingSubmissionItem,
     PendingSubmissionListResponse,
+    SubmissionCalibration,
+    SubmissionCalibrationIn,
     SubmissionDetailResponse,
     SubmissionReviewIn,
     SubmissionReviewResponse,
@@ -312,6 +314,16 @@ def _overall_confidence(ai_detail: dict | None) -> float | None:
     return _num(ai_detail.get("overallConfidence"))
 
 
+def _calibration_of(db: Session, sub: Submission) -> SubmissionCalibration | None:
+    """F5 出参里的校准块（功能 4.10，F7 写入）。
+
+    没校准过返回 None（**不是空对象**）：页面靠 `null` 判「三个 radio 都不选」。
+    取最新一条的理由见 spec 3.6——本表没有唯一约束，多行是可能的。
+    """
+    row = homeworks_repo.get_latest_calibration(db, sub.id)
+    return None if row is None else SubmissionCalibration.model_validate(row)
+
+
 def submission_detail(db: Session, submission_id: int) -> SubmissionDetailResponse:
     """F5 批改详情（功能 4.4-4.7）。
 
@@ -355,6 +367,7 @@ def submission_detail(db: Session, submission_id: int) -> SubmissionDetailRespon
         voice_comment_text=sub.voice_comment_text,
         voice_comment_audio_id=sub.voice_comment_audio_id,
         reviewed_at=sub.reviewed_at,
+        calibration=_calibration_of(db, sub),
     )
 
 
@@ -413,5 +426,64 @@ def review_submission(
         reviewed_at=row.reviewed_at,
         **{f: getattr(row, f) for f in _REVIEW_FIELDS},
     )
+    db.commit()
+    return out
+
+
+def calibrate_submission(
+    db: Session, submission_id: int, data: SubmissionCalibrationIn, teacher_id: int
+) -> SubmissionCalibration | None:
+    """F7 教师 AI 评分校准（功能 4.10）。
+
+    提交不存在抛 404。按 (submission_id, teacher_id) **upsert**：有则更新并刷新
+    created_at，无则插入（spec 3.3）。`bias_mode` 显式给 null = **删除该行**
+    （撤销，spec 3.4），此时返回 None。
+
+    分数不由客户端传：ai_score 取 submissions.ai_score（AI 的原始分），teacher_score
+    取 submissions.teacher_score（F6 刚写进去的值）。前端把本接口串在 F6 之后发，
+    正是为了让 teacher_score 有值——先发的话这行记录的「偏差对比」就没有意义了
+    （spec 3.9）。
+
+    **本函数不碰 flask.session**：当前教师 id 由路由用 current_user_id() 取出后传进来。
+    这条不变量写在 app/api/auth.py 的模块文档里（为的是 service 能脱离请求上下文测试），
+    既有先例是 demos_segments_annotations.py:114 的 teacher_id=current_user_id()。
+    """
+    sub = homeworks_repo.get_submission(db, submission_id)
+    if sub is None:
+        raise BusinessError(404, "提交不存在")
+
+    # 这里**故意不校验 sub.status**（spec 3.5）：`ai_scored` 也能写校准，此时下面的
+    # teacher_score 读出来是 None（F6 还没写过）。别顺手加一个「必须 reviewed」的
+    # 前置判断——文档没把校准与终审绑定，加了会让「先勾校准再打分」这个顺序直接 422。
+
+    row = homeworks_repo.get_calibration(db, submission_id, teacher_id)
+
+    if data.bias_mode is None:
+        # 撤销：删行而不是写一行 null。写 null 会留下一条无意义的记录，且 F5 的
+        # 「取最新一条」会读到它、把有值的旧行盖掉（spec 3.4）。
+        if row is not None:
+            db.delete(row)
+            db.commit()
+        return None
+
+    if row is None:
+        row = ScoreCalibration(submission_id=submission_id, teacher_id=teacher_id)
+        homeworks_repo.add_calibration(db, row)
+
+    # 复用 apply_review：它的名字带 review，实现是通用的「把 changes 里的列写到 row 上」
+    # （见它自己的文档字符串）。不为 F7 改名——改名会波及已上线的 F6。
+    homeworks_repo.apply_review(db, row, {
+        "bias_mode": data.bias_mode,
+        "ai_score": sub.ai_score,
+        "teacher_score": sub.teacher_score,
+    })
+    # 刷新到本次，否则 F5 的「取最新一条」永远排到第一次勾选（spec 3.3）。
+    # 不用 func.now()：赋进属性后拿到的是表达式对象而不是 datetime，拿去构造出参会炸。
+    # 同 review_submission 对 reviewed_at 的处理。
+    row.created_at = datetime.now()
+
+    # 出参在 commit **之前**构造：commit 会让 ORM 实例的属性过期，之后再读会多发一条
+    # SELECT 把整行重新拉一遍。同 review_submission。
+    out = SubmissionCalibration.model_validate(row)
     db.commit()
     return out
