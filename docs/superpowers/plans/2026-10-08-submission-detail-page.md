@@ -125,7 +125,7 @@ PY
   - `async function fetchDetail(id: number): Promise<void>`
   - `function retryDetail(): void`
 
-- [ ] **Step 1: 写夹具 `harness.mjs`**
+- [x] **Step 1: 写夹具 `harness.mjs`**
 
 ```js
 // /tmp/f5fe/harness.mjs
@@ -199,7 +199,7 @@ export function report() {
 }
 ```
 
-- [ ] **Step 2: 写真接口客户端 `api.mjs`**
+- [x] **Step 2: 写真接口客户端 `api.mjs`**
 
 ```js
 // /tmp/f5fe/api.mjs
@@ -226,7 +226,7 @@ export async function login(username = 'teacher01', password = 'xiyun@2026') {
 }
 ```
 
-- [ ] **Step 3: 写测试 `t1.test.mjs`**
+- [x] **Step 3: 写测试 `t1.test.mjs`**
 
 ```js
 // /tmp/f5fe/t1.test.mjs
@@ -379,7 +379,7 @@ await acheck('重试：错误态点重试会重新发请求', async () => {
 report();
 ```
 
-- [ ] **Step 4: 跑测试，确认失败**
+- [x] **Step 4: 跑测试，确认失败**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -389,7 +389,7 @@ node /tmp/f5fe/t1.test.mjs
 Expected: 全部 `FAIL`（`renderDetail is not defined` 之类），末尾类似 `0 PASS / 12 FAIL`。**若出现 PASS，说明夹具没读到页面脚本，先查夹具。**
 夹具自检（应当通过）：`node -e "import('/tmp/f5fe/harness.mjs').then(m=>{const p=m.loadPage();console.log(p.run('fmtTime(\"2026-08-01T00:00:00\")'))})"` → 打印 `08-01 00:00`。
 
-- [ ] **Step 5: 改状态变量区（`homework.html:696`）**
+- [x] **Step 5: 改状态变量区（`homework.html:696`）**
 
 把这一行：
 
@@ -419,7 +419,7 @@ let detailError = "";            // error 态的原因文案（后端 message �
 let detailSeq = 0;
 ```
 
-- [ ] **Step 6: 重写 `selectSubmission` 并新增四个函数**
+- [x] **Step 6: 重写 `selectSubmission` 并新增四个函数**
 
 `selectSubmission` 现在这条「`SUBMISSIONS.find` → 找不到 return → 从 mock 填面板」的整段（`homework.html:917-1009`）要删掉。用 Read 确认边界：`:917` 是 `function selectSubmission(id) {`，`:1009` 是它的收尾 `}`（紧接着是空行与 `// ============` / `// 交互操作` 段头）。整段替换为：
 
@@ -544,7 +544,7 @@ function fillDetail(d) {
 }
 ```
 
-- [ ] **Step 7: 补初始化调用（`homework.html:1048-1058`）**
+- [x] **Step 7: 补初始化调用（`homework.html:1048-1058`）**
 
 把这一段：
 
@@ -571,7 +571,7 @@ renderSubmitList();
 renderDetail();
 ```
 
-- [ ] **Step 8: 跑测试，确认全部通过**
+- [x] **Step 8: 跑测试，确认全部通过**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -580,13 +580,13 @@ node /tmp/f5fe/t1.test.mjs
 
 Expected: 12 行 `PASS`，末尾 `12 PASS / 0 FAIL`（退出码 0）。
 
-- [ ] **Step 9: 浏览器确认骨架能跑**
+- [x] **Step 9: 浏览器确认骨架能跑**
 
 用 `/browse` 技能（项目约定：网页浏览一律用它，不用 chrome MCP）打开 `http://127.0.0.1:8877/login.html`，用 `teacher01` / `xiyun@2026` 登录，进入 `http://127.0.0.1:8877/homework.html`。
 
 Expected：页面不报错；左侧 5 条待批；右侧显示「📝 选择左侧提交进行批改」；点任一条 → 右侧先出「⏳ 加载中…」，随后变成**内容区空壳**（头像 🎭、姓名 `—`、AI初评分 `—`、各区块空着）——Tasks 2–4 才会把内容填上，这一步只验证状态机能跑通。
 
-- [ ] **Step 10: 提交**
+- [x] **Step 10: 提交**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -617,7 +617,7 @@ EOF
   - `function cdmItemHtml(t: object): string` —— 一条 CDM 标签的 HTML
   - `function renderDetailCdm(d: object): void`
 
-- [ ] **Step 1: 写测试 `t2.test.mjs`**
+- [x] **Step 1: 写测试 `t2.test.mjs`**
 
 ```js
 // /tmp/f5fe/t2.test.mjs
@@ -725,7 +725,7 @@ check('真数据：24 的 evidence 文本进得去、且按接口给的顺序（
 report();
 ```
 
-- [ ] **Step 2: 跑测试，确认失败**
+- [x] **Step 2: 跑测试，确认失败**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -735,7 +735,7 @@ node /tmp/f5fe/t2.test.mjs
 Expected: 纯函数那几条 `FAIL`（`cdmItemHtml is not defined`）；真数据那条也可能 `FAIL`。末尾 FAIL 数 > 0。
 （后端必须跑着，否则 `login()` 会抛。若报 `登录失败` / `fetch failed`，先起 `.venv/bin/python app-d.py`。）
 
-- [ ] **Step 3: 加 `emptyBlock` 与 CDM 三个函数**
+- [x] **Step 3: 加 `emptyBlock` 与 CDM 三个函数**
 
 在 `homework.html` 的 `renderSubmitList` 之后、`function selectSubmission` 之前插入：
 
@@ -786,7 +786,7 @@ function renderDetailCdm(d) {
 }
 ```
 
-- [ ] **Step 4: `fillDetail` 里接上 CDM**
+- [x] **Step 4: `fillDetail` 里接上 CDM**
 
 把 `fillDetail` 末尾这一行：
 
@@ -805,7 +805,7 @@ function renderDetailCdm(d) {
 }
 ```
 
-- [ ] **Step 5: 改 `:566` 的说明文案**
+- [x] **Step 5: 改 `:566` 的说明文案**
 
 把这一行（`homework.html:566`）：
 
@@ -821,7 +821,7 @@ function renderDetailCdm(d) {
 
 理由：后半句仍然成立；前半句在 F5 上是**反的**——批改页刻意不筛阈值（spec 3.10），真库有 3 条 ≤ 0.7 的标签会出现在这里。
 
-- [ ] **Step 6: 跑测试，确认全部通过**
+- [x] **Step 6: 跑测试，确认全部通过**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -830,13 +830,13 @@ node /tmp/f5fe/t2.test.mjs
 
 Expected: 12 行 `PASS`，末尾 `12 PASS / 0 FAIL`。
 
-- [ ] **Step 7: 浏览器确认**
+- [x] **Step 7: 浏览器确认**
 
 `/browse` 打开 `http://127.0.0.1:8877/homework.html`（已登录则直接进）。点左侧第 1 条（刘思琪）→ 右侧 CDM 区应出 **4** 条，末尾一条胶囊是 `52%`；再点第 5 条（周明轩）→ 2 条；点赵雨桐 → 1 条。
 
 Expected：卡片上的标签数比右侧少（24 卡片 3 个 vs 右侧 4 条）——差的正是 ≤ 0.7 的那条。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -866,7 +866,7 @@ EOF
   - `function bktItemHtml(b: object): string`
   - `function renderDetailBkt(d: object): void`
 
-- [ ] **Step 1: 写测试 `t3.test.mjs`**
+- [x] **Step 1: 写测试 `t3.test.mjs`**
 
 ```js
 // /tmp/f5fe/t3.test.mjs
@@ -956,7 +956,7 @@ check('真数据：25/26/27 三份都出「本次无 BKT 状态变化」', () =>
 report();
 ```
 
-- [ ] **Step 2: 跑测试，确认失败**
+- [x] **Step 2: 跑测试，确认失败**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -965,7 +965,7 @@ node /tmp/f5fe/t3.test.mjs
 
 Expected: 全部 `FAIL`（`bktItemHtml is not defined`），末尾 FAIL 数 > 0。
 
-- [ ] **Step 3: 加 BKT 两个函数**
+- [x] **Step 3: 加 BKT 两个函数**
 
 在 Task 2 的 `renderDetailCdm` 之后插入：
 
@@ -1014,7 +1014,7 @@ function renderDetailBkt(d) {
 }
 ```
 
-- [ ] **Step 4: `fillDetail` 里接上 BKT**
+- [x] **Step 4: `fillDetail` 里接上 BKT**
 
 把：
 
@@ -1031,7 +1031,7 @@ function renderDetailBkt(d) {
 }
 ```
 
-- [ ] **Step 5: 跑测试，确认全部通过**
+- [x] **Step 5: 跑测试，确认全部通过**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1040,11 +1040,11 @@ node /tmp/f5fe/t3.test.mjs
 
 Expected: 11 行 `PASS`，末尾 `11 PASS / 0 FAIL`。
 
-- [ ] **Step 6: 浏览器确认**
+- [x] **Step 6: 浏览器确认**
 
 `/browse` 打开 `http://127.0.0.1:8877/homework.html`。点刘思琪（24）→ BKT 区 2 条、都是 ↘、条形在缩；点李小燕（23）→ 3 条，其中「拖腔」是灰色 → 且无箭头；点孙志远/赵雨桐/周明轩 → 都出「本次无 BKT 状态变化」。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1071,7 +1071,7 @@ EOF
 - Consumes: `emptyBlock`（Task 2）、`fillDetail`（Task 1）
 - Produces: `renderDetailLyrics(d)` / `renderDetailFusion(d)` / `renderDetailCalib(d)`，均返回 `void`
 
-- [ ] **Step 1: 写测试 `t4.test.mjs`**
+- [x] **Step 1: 写测试 `t4.test.mjs`**
 
 ```js
 // /tmp/f5fe/t4.test.mjs
@@ -1150,7 +1150,7 @@ await acheck('真数据：5 份的 lyrics 都是 []、dimensions 都是 null', a
 report();
 ```
 
-- [ ] **Step 2: 跑测试，确认失败**
+- [x] **Step 2: 跑测试，确认失败**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1159,7 +1159,7 @@ node /tmp/f5fe/t4.test.mjs
 
 Expected: 前六条 `FAIL`（函数未定义 / 文案未改），末尾 FAIL 数 > 0。
 
-- [ ] **Step 3: 加三个空位区块的渲染函数**
+- [x] **Step 3: 加三个空位区块的渲染函数**
 
 在 Task 3 的 `renderDetailBkt` 之后插入：
 
@@ -1194,7 +1194,7 @@ function renderDetailCalib(d) {
 }
 ```
 
-- [ ] **Step 4: `fillDetail` 补齐五个调用**
+- [x] **Step 4: `fillDetail` 补齐五个调用**
 
 把：
 
@@ -1217,7 +1217,7 @@ function renderDetailCalib(d) {
 
 （`fillDetail` 至此定型：头部 + 终审区 + 五个区块，与 spec §4.2 的表一一对应。）
 
-- [ ] **Step 5: 删掉权重公式行（`homework.html:561`）**
+- [x] **Step 5: 删掉权重公式行（`homework.html:561`）**
 
 删除这一整行：
 
@@ -1229,7 +1229,7 @@ function renderDetailCalib(d) {
 
 （`.fusion-formula` 这条 CSS 规则本身**留着不动**——删 CSS 不在本次范围，且它没有别的使用者也不影响渲染。）
 
-- [ ] **Step 6: 跑测试，确认全部通过**
+- [x] **Step 6: 跑测试，确认全部通过**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1238,13 +1238,13 @@ node /tmp/f5fe/t4.test.mjs
 
 Expected: 8 行 `PASS`，末尾 `8 PASS / 0 FAIL`。
 
-- [ ] **Step 7: 浏览器确认**
+- [x] **Step 7: 浏览器确认**
 
 `/browse` 打开 `http://127.0.0.1:8877/homework.html`，逐份点开 24/26/27/23/25。
 
 Expected：五份的「🎵 歌词级偏差对比」都是「暂无逐字偏差数据（数据源待接入）」；「⚖️ 多维加权融合」格子是「暂无维度分与加权结果（数据源待接入）」、下面两格都是 `—`；**权重公式那一行整行不在了**；「🎯 AI 评分校准」是「暂无校准项（数据源待接入）」。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1272,7 +1272,7 @@ EOF
 - Consumes: `currentSubId` / `detailSeq` / `detailState` / `detailData` / `renderDetail()`（Task 1）
 - Produces: 无新函数（两处修改）
 
-- [ ] **Step 1: 写测试 `t5.test.mjs`**
+- [x] **Step 1: 写测试 `t5.test.mjs`**
 
 ```js
 // /tmp/f5fe/t5.test.mjs
@@ -1351,7 +1351,7 @@ check('切回原作业也不会自动重开上一份详情', () => {
 report();
 ```
 
-- [ ] **Step 2: 跑测试，确认失败**
+- [x] **Step 2: 跑测试，确认失败**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1360,7 +1360,7 @@ node /tmp/f5fe/t5.test.mjs
 
 Expected：`未选中时不该有高亮` 等几条 `FAIL`——因为 `renderSubmitList` 现在压根不产生 `active`；`selectHomework` 那几条 `FAIL`——右侧状态不会被复位。末尾 FAIL 数 ≥ 4。
 
-- [ ] **Step 3: `renderSubmitList` 接上高亮（`:890-902`）**
+- [x] **Step 3: `renderSubmitList` 接上高亮（`:890-902`）**
 
 把映射体开头这一段：
 
@@ -1400,7 +1400,7 @@ Expected：`未选中时不该有高亮` 等几条 `FAIL`——因为 `renderSub
       <div class="submit-item${active}" onclick="selectSubmission(${it.submission_id})">
 ```
 
-- [ ] **Step 4: `selectHomework` 补右侧复位（`:842-849`）**
+- [x] **Step 4: `selectHomework` 补右侧复位（`:842-849`）**
 
 把整个函数：
 
@@ -1439,7 +1439,7 @@ function selectHomework(hwId) {
 }
 ```
 
-- [ ] **Step 5: 跑测试，确认全部通过**
+- [x] **Step 5: 跑测试，确认全部通过**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1448,11 +1448,11 @@ node /tmp/f5fe/t5.test.mjs
 
 Expected: 7 行 `PASS`，末尾 `7 PASS / 0 FAIL`。
 
-- [ ] **Step 6: 浏览器确认**
+- [x] **Step 6: 浏览器确认**
 
 `/browse` 打开 `http://127.0.0.1:8877/homework.html`：点开刘思琪 → 左卡片有蓝色描边；点李小燕 → 描边跟过去且只剩一个；点左侧 hw13 → 右侧回「📝 选择左侧提交进行批改」、左下「暂无待批改提交」、左侧无任一卡片高亮；点回 hw12 → 左下 5 条回来、**右侧仍是空状态**（不会自动重开刘思琪）。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1479,7 +1479,7 @@ EOF
 - Consumes: 无（Task 1 已让两个常量失去全部使用点）
 - Produces: 无
 
-- [ ] **Step 1: 写测试 `t6.test.mjs`**
+- [x] **Step 1: 写测试 `t6.test.mjs`**
 
 ```js
 // /tmp/f5fe/t6.test.mjs
@@ -1522,7 +1522,7 @@ check('段头注释不再说这一页有 mock', () => {
 report();
 ```
 
-- [ ] **Step 2: 跑测试，确认失败**
+- [x] **Step 2: 跑测试，确认失败**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1531,7 +1531,7 @@ node /tmp/f5fe/t6.test.mjs
 
 Expected：`两个 mock 常量已从文件里消失`、`运行时确实取不到它们`、`段头注释` 三条 `FAIL`；桩函数与初始化两条应已 `PASS`。末尾 FAIL 数 = 3。
 
-- [ ] **Step 3: 删常量、改写段头注释（`:603-680`）**
+- [x] **Step 3: 删常量、改写段头注释（`:603-680`）**
 
 把从 `<script>` 之后到 `SUBMISSIONS` 结束的整段（`homework.html:604-680`，即「模拟数据」段头 + `HOMEWORKS` + `SUBMISSIONS`）：
 
@@ -1566,7 +1566,7 @@ const SUBMISSIONS = [ ... ];
 
 （用 Read 取 `:604-680` 的原文确认边界：`const HOMEWORKS = [` 起、`SUBMISSIONS` 的收尾 `];` 止。）
 
-- [ ] **Step 4: 跑测试，确认全部通过**
+- [x] **Step 4: 跑测试，确认全部通过**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1575,7 +1575,7 @@ node /tmp/f5fe/t6.test.mjs
 
 Expected: 5 行 `PASS`，末尾 `5 PASS / 0 FAIL`。
 
-- [ ] **Step 5: 跑前四轮的测试，确认没有回归**
+- [x] **Step 5: 跑前四轮的测试，确认没有回归**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1584,13 +1584,13 @@ for n in 1 2 3 4 5; do echo "--- t$n ---"; node /tmp/f5fe/t$n.test.mjs | tail -2
 
 Expected：五个都是 `N PASS / 0 FAIL`（N 依次 12 / 12 / 11 / 8 / 7）。
 
-- [ ] **Step 6: 浏览器确认**
+- [x] **Step 6: 浏览器确认**
 
 `/browse` 打开 `http://127.0.0.1:8877/homework.html`，开控制台执行 `typeof SUBMISSIONS` 与 `typeof HOMEWORKS`。
 
 Expected：两个都是 `"undefined"`；页面功能与 Task 5 结束时完全一致（这一轮只删数据，不改行为）。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1615,7 +1615,7 @@ EOF
 - Consumes: Tasks 1–6 的全部成果
 - Produces: 无
 
-- [ ] **Step 1: 跑全套测试**
+- [x] **Step 1: 跑全套测试**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1624,7 +1624,7 @@ for n in 1 2 3 4 5 6; do echo "--- t$n ---"; node /tmp/f5fe/t$n.test.mjs | tail 
 
 Expected：六个都 `0 FAIL`（12 / 12 / 11 / 8 / 7 / 5）。
 
-- [ ] **Step 2: 接口侧回归（确认前端这一轮没碰后端）**
+- [x] **Step 2: 接口侧回归（确认前端这一轮没碰后端）**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1649,7 +1649,7 @@ node regress.mjs
 
 Expected: `5 / 4 / 404 / 403`。
 
-- [ ] **Step 3: 浏览器逐份核对（spec §5 的第 2–8 条）**
+- [x] **Step 3: 浏览器逐份核对（spec §5 的第 2–8 条）**
 
 用 `/browse` 打开 `http://127.0.0.1:8877/login.html`，登录后进 `homework.html`，逐条确认：
 
@@ -1666,7 +1666,7 @@ Expected: `5 / 4 / 404 / 403`。
 11. **错误态**：停掉 Flask（Ctrl-C 那个终端）后点卡片 → 右侧「⚠️ 加载失败」+「重试」；重新起 `.venv/bin/python app-d.py` 后点「重试」→ 正常加载。
 12. **学生端**：登出后 `stu001` 登录 → 左侧「待批改提交仅教师可见」、右侧停在「选择左侧提交进行批改」、Network 面板里**没有** `/detail` 请求。
 
-- [ ] **Step 4: 确认库没被动过**
+- [x] **Step 4: 确认库没被动过**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
@@ -1675,7 +1675,7 @@ cd /Users/meiyazhao/Documents/lianshu/operaAI
 
 Expected：与基线一致（本项目在干净 main 上本就有既有漂移：`demo_versions` 表 + `teacher_demos` 三列）——**与本次改动前逐字相同**，本次不动库、不动模型。
 
-- [ ] **Step 5: 同步 DOC_ISSUES 的三处过时表述**
+- [x] **Step 5: 同步 DOC_ISSUES 的三处过时表述**
 
 三处都按本文档已有的体例**追加一行更新**，不改写原判断（保留决策史）。
 
@@ -1703,7 +1703,7 @@ F5 于 2026-10-08 实现（设计 `docs/superpowers/specs/2026-10-08-submission-
 F5 于 2026-10-08 实现（设计 `docs/superpowers/specs/2026-10-08-submission-detail-api-design.md`、计划 `docs/superpowers/plans/2026-10-08-submission-detail-api.md`、代码 `app/api/homeworks.py` / `app/services/homework_service.py` / `app/repositories/homeworks_repo.py` / `app/schemas/homework.py`）。**前端已于同日接入**（设计 `docs/superpowers/specs/2026-10-08-submission-detail-page-design.md`）——`homework.html` 右侧批改面板已走真接口，下面 36.1 / 36.2 / 36.4 三处的「无数据源 / 数据不全」在页面上表现为显式空态。
 ```
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 cd /Users/meiyazhao/Documents/lianshu/operaAI
