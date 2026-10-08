@@ -634,6 +634,8 @@ Demucs 分离 + librosa 提音高能给出的是 `pitch / note / time`（音高�
 
 另见第 21、24 条（同属 id 混用与「无班级概念」）。
 
+**2026-10-08 更新**：F6（`POST /api/submissions/<id>/review`）已落地，成为全项目第一处把 `submissions.status` 写成 `'reviewed'` 的代码。上段的连带表现至此消失——教师批完一份作业的全部提交后，「批改中」会正常下线（实测：真库 12 号作业的 5 条提交批完后，`grading` 变为 `closed`、`pending_review_count` 由 5 归 0）。详见第 38 条。
+
 ---
 
 ## 26. 曲目列表（C1）只有一句话描述，响应体字段/排序/分页全部未定义
@@ -1038,6 +1040,8 @@ F1 于 2026-09-30 实现（设计 `docs/superpowers/specs/2026-09-30-homeworks-l
 
 **一处连带表现（非本接口的 bug）**：`grading` 的判据是 `submissions.status != 'reviewed'`，而当前全项目没有任何代码会把该列写成 `reviewed`（F6 终审接口仍是空桩）。真库里 12 号作业的 5 条提交全是 `ai_scored`，所以它恒为「批改中」，教师无从消除。同第 25 条已记的连带表现，等 F6 落地即自动恢复。
 
+**2026-10-08 更新**：F6 已落地（见第 38 条），上段「当前全项目没有任何代码会把该列写成 `reviewed`」不再成立。实测真库 12 号作业的 5 条提交批完后，`grading` 如期退出、`pending_review_count` 归 0——第 25 条与本条预告的「等 F6 落地即自动恢复」兑现。
+
 ### 34.3 `POST /api/homeworks`（F2）的桩挂错了地址
 
 `app/api/homeworks.py:12-16`：
@@ -1227,6 +1231,37 @@ B 组分析确实算得出逐字偏差（`app/services/analyze_service.py::_word
 **当前处理**：F5（批改详情接口）**不出校准**——那是 F7 的读职责，本接口不把 F7 的回显口径提前拉进契约。页面的「🎯 AI 评分校准」区块因此保持空态。
 
 **待文档方确认**：① 校准项到底几项、粒度是「按维度」还是「整体偏高/偏低/合适」；② 若按维度，`score_calibrations` 需要加维度列（或改成一行一维），这是一次会影响 F7 写接口的 DDL 变更；③ 4.10 的「数据回流」靠什么触发——今天没有任何代码写这张表。
+
+---
+
+## 38. 教师终审批改（F6）只有一行描述，PATCH 语义/状态流转/错误码全自拟；4.11 的语音转文字无组件
+
+**涉及**：《5-接口清单》2.6 节 F6 / `app/api/homeworks.py` / `app/services/homework_service.py` / `app/repositories/homeworks_repo.py` / `app/schemas/homework.py`（设计见 `docs/superpowers/specs/2026-10-08-submission-review-api-design.md`）
+
+《5-接口清单》2.6 里 F6 的全部内容是「`POST /api/submissions/<id>/review` ｜ 教师 ｜ 终审评分/点评/语音点评（audio_id + text）（功能 4.8/4.9/4.11）」。请求体字段名、字段可空性、状态流转、幂等语义、错误码**一个字都没写**。以下口径本次自拟：
+
+| 项 | 口径 | 理由 |
+|---|---|---|
+| 只做终审 | 一调就写 `status='reviewed'`，**没有草稿态** | 文档只定义了终审（F6 是「终审…」，4.8/4.9/4.11 三个功能点里没有草稿）；前端虽有「💾 保存草稿」按钮，但把草稿收进来要先自造一套状态机 |
+| PATCH 语义 | 字段**不出现** = 保持原值；**显式 `null`** = 清空 | 教师只补一条语音点评时不该抹掉已填的分数与评语，但又必须能清空；靠 pydantic 的 `model_fields_set` 区分，**不能**写成 `if v is not None` |
+| 覆盖 | 已 `reviewed` 再调 = 覆盖更新，`reviewed_at` 刷新 | 库里没有退回/撤销接口，覆盖是唯一的修改途径 |
+| 空 body | `{}` 合法 = 「一键通过」，只推进状态，四个内容列全不动 | 对应同文档「五、移动端支持」里的「一键通过（终审保留）」 |
+| `teacher_score` | 限 0–100，越界 422 | 前端 `#finalScore` 的 `min/max` 就是这个范围 |
+| 音频不存在 | 回 **422**，不回 404 | 404 在本项目里留给「URL 里那个具名资源不存在」（F4/F5 的「作业不存在」「提交不存在」）；这是请求体引用了不存在的资源，属请求体不合法 |
+| 权限 | 教师即可，**不校验归属** | 库里没有师生归属边，见下第 4 点 |
+
+**六处文档/库表缺口**：
+
+1. **4.11「语音识别转文字」在本项目没有实现组件。** 项目里没有任何 ASR——同第 20 条与本文档第 439 行记的「要从音频得到汉字需要语音识别，而解析链路没有这一环」（那也是 `segments.lyrics_json` 恒为 NULL 的原因）。所以 **`voice_comment_text` 服务端造不出来**，本接口只能把它当客户端给的普通字符串收下，既不生成、也不校验它与音频是否对得上。教师只传音频不传文字时，结果是「有音频、无文字」的一条语音点评——这是当前唯一可实现的形态。
+2. **`submissions` 没有 `reviewer_id`，也没有任何指向 `users(id)` 的外键**，本接口**无法记录「是谁批的」**。终审在库里只留下「被批过」与「什么时候」，没有「谁」。**这不是全项目惯例，是一处不对称**：同一批批改功能里的 `score_calibrations` 就**有** `teacher_id`（真库那唯一一行是 `teacher_id=2`，见第 37 条）。「教师身份该不该落在批改结果上」，同一个 DDL 里已经给了两种答案。
+3. **`status` 没有 CHECK 约束，也没有枚举类型。** `submitted / ai_scored / reviewed` 三个取值只活在 DDL 的行尾注释里，写错值不会报错。全文唯二的 `CHECK` 在 `users.role` 与 `annotations.tolerance` 上。另：`submitted` 这一档**全项目没有任何代码写它**（F3 提交接口仍是空桩），本接口也不写。
+4. **没有教师归属模型。** `schema.sql` 里没有 `classes` 表，`students` 只有 `user_id/level/avatar/enrolled_at`，`users` 只有 `role`——任何教师与任何学生之间**没有任何归属边**。所以「这位教师能不能批这条提交」在库里无据可查，本接口与 F4/F5 一样不按教师过滤：**任何教师登录后都能批任何学生的任何提交**。
+5. **覆盖语义下 `reviewed_at` ≠ 首次终审时间**，它会随每次覆盖刷新。库里没有 `updated_at`，也没有第二列可以存「首次终审时间」。
+6. **「终审 = `status='reviewed'`」是本项目的推断**（承第 35 条已记的同一推断），F6 落地后这个推断第一次被执行，此后 `status` 成了 F4 待批列表与作业「批改中」两处判据的唯一输入。
+
+**一处已知的英文报错（本次照实接受）**：`teacher_score` 给非数字（如 `"abc"`）时，pydantic 抛 `float_parsing`，而 `app/common/errors.py` 的 `_MSG_CN` 只有 missing / string_too_short / string_too_long / int_parsing 四条，**没有** `float_parsing`，于是回退成英文原文（实测报 `teacher_score: Input should be a valid number, unable to parse string as a number`）。同理，越界能报中文是靠 F6 **自己**的 `field_validator` 抛 `ValueError` 实现的，而不是靠 `Field(ge=, le=)`——`_MSG_CN` 也缺 `greater_than_equal` / `less_than_equal`（C5 的 `AnnotationIn.tolerance` 今天就是英文）。**没有改这个共享 dict**：加键会顺带改掉 C5 等接口现在的越界文案，属本任务范围外的行为变更。
+
+**待文档方确认**：① 4.11 的「语音识别转文字」由谁实现——服务端没有 ASR，若将来要服务端转写，本接口的入参形态要改；② 要不要加 `reviewer_id` 列（加列要改 `schema.sql`，且历史数据只能为 NULL）；③ 4.8 的终审分与 `ai_score` 是否该有相对约束（本接口只设 0–100 的绝对范围，不限制教师把 75.2 改成 10 或 100）；④ 草稿态要不要做（前端已有按钮）；⑤ 退回/撤销终审要不要做（现在终审后无法把一条改回待批改）；⑥ `status` 该不该加 CHECK 约束；⑦ 教师与学生的归属关系何时进库；⑧ `_MSG_CN` 要不要补齐 pydantic 的其余错误类型（含 `float_parsing`）。
 
 ---
 
