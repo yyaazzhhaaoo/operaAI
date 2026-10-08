@@ -1,7 +1,7 @@
 from sqlalchemy import Date, cast, distinct, func, select, tuple_
 from sqlalchemy.orm import Session
 
-from app.models import Homework, Student, Submission, TeacherDemo, User
+from app.models import Homework, ScoreCalibration, Student, Submission, TeacherDemo, User
 
 
 def get_open_homeworks(db:Session,status:str) -> Homework:
@@ -206,3 +206,41 @@ def apply_review(db: Session, row: Submission, changes: dict) -> None:
     """
     for field, value in changes.items():
         setattr(row, field, value)
+
+
+def get_calibration(
+    db: Session, submission_id: int, teacher_id: int
+) -> ScoreCalibration | None:
+    """取某教师对某提交的校准行，没有返回 None。供 F7 判「更新还是插入」（spec 3.3）。"""
+    return db.scalar(
+        select(ScoreCalibration).where(
+            ScoreCalibration.submission_id == submission_id,
+            ScoreCalibration.teacher_id == teacher_id,
+        )
+    )
+
+
+def get_latest_calibration(
+    db: Session, submission_id: int
+) -> ScoreCalibration | None:
+    """取某提交最新的一条校准行，没有返回 None。供 F5 出参（spec 3.6）。
+
+    为什么是「最新一条」而不是「唯一一条」：本表在 (submission_id, teacher_id) 上
+    **没有唯一约束**（spec 2.4），历史数据与并发下都可能有多行。id 做第二排序键是为了
+    created_at 相同时（同一秒内的两次写）结果稳定。
+    """
+    return db.scalar(
+        select(ScoreCalibration)
+        .where(ScoreCalibration.submission_id == submission_id)
+        .order_by(ScoreCalibration.created_at.desc(), ScoreCalibration.id.desc())
+        .limit(1)
+    )
+
+
+def add_calibration(db: Session, row: ScoreCalibration) -> None:
+    """插入一行校准记录。
+
+    不 flush：本次没有自增 id 要拿（`annotations_repo.add` 要 flush 是为了拿 id），
+    脏对象由 service 的 commit 一并写回。与 `apply_review` 同一口径。
+    """
+    db.add(row)
