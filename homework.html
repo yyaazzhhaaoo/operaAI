@@ -563,7 +563,7 @@ body{
             <!-- CDM -->
             <div style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px">🔍 CDM 归因诊断（缺陷标签）</div>
             <div class="cdm-list" id="cdmList"></div>
-            <div style="font-size:10px;color:var(--text-muted);margin-top:4px">只展示置信度 &gt; 0.7 的标签 · 老师可修正，数据回流优化模型</div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:4px">按置信度降序展示全部标签（不筛阈值） · 老师可修正，数据回流优化模型</div>
 
             <!-- BKT -->
             <div style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px">📈 本次练习后 BKT 状态更新</div>
@@ -930,6 +930,51 @@ function renderSubmitList() {
   if (summary) summary.textContent = `${submitItems.length}条待批`;
 }
 
+// 区块级空态。样式内联、**不新增 CSS**——与 fetchHomeworks 和 renderSubmitList
+// 的空态同一套写法。
+function emptyBlock(text) {
+  return `<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:11px">${esc(text)}</div>`;
+}
+
+// severity → 两个 CSS 类。**两套映射不是笔误**：.cdm-item 只定义了 high/medium
+// 两档描边，而 .conf 三档都有。所以 low 与未知档在 item 上不加修饰类（回落基类的
+// 中性描边）、在胶囊上 low 用现成的 .conf.low。**不给 .cdm-item 补 .low/.unknown
+// 规则**——低档真正需要区分的是胶囊颜色（spec 3.5）。
+const CDM_ITEM_CLS = { high: " high", medium: " medium" };
+const CDM_CONF_CLS = { high: " high", medium: " medium", low: " low" };
+// spec 3.5 的「其它（含后端的 unknown）」要兜住**任意**字符串：severity 是后端透传的，
+// 直接拿它查表会被 Object 原型上的成员命中（"constructor" 能查到一个函数），
+// 拼出 class="cdm-itemundefined"。所以先用三个已知档白名单收口。
+const CDM_SEV_KNOWN = ["high", "medium", "low"];
+
+// 一条 CDM 标签的 HTML。**纯函数**（只吃数据、只吐字符串，不碰 DOM），
+// 这样能在 node 里直接测——confidence 与 severity 为空的那些分支真库里一次都
+// 不出现，手工点页面覆盖不到。
+function cdmItemHtml(t) {
+  const sev = CDM_SEV_KNOWN.includes(t.severity) ? t.severity : "unknown";
+  // confidence 可能是 null（F5 刻意不丢这类元素）：**不能 .toFixed**——null.toFixed
+  // 会抛 TypeError 打断整个 map，一条坏数据让整块渲染不出来。
+  const conf = (t.confidence == null) ? "—" : `${Math.round(t.confidence * 100)}%`;
+  return `
+    <div class="cdm-item${CDM_ITEM_CLS[sev] ?? ""}">
+      <div class="label">${esc(t.label)}</div>
+      <span class="conf${CDM_CONF_CLS[sev] ?? ""}">${conf}</span>
+      <span class="evidence">${esc(t.evidence || "")}</span>
+      <div class="actions">
+        <button class="confirm" onclick="confirmCDM(this)">✓</button>
+        <button onclick="rejectCDM(this)">✗</button>
+      </div>
+    </div>`;
+}
+
+// 功能 4.6。接口出**全量**、不套 F4 卡片那条 0.7 阈值（spec 3.1），顺序也照接口
+// 给的（后端已按置信度降序排好，页面不再排一次）。
+function renderDetailCdm(d) {
+  const tags = d.cdm_tags || [];
+  document.getElementById("cdmList").innerHTML =
+    tags.length ? tags.map(cdmItemHtml).join("") : emptyBlock("暂无归因标签");
+}
+
 // 点左侧待批卡片。角色判断不在这里（学生看不到卡片），在 fetchDetail 里——
 // 与 F4「明知会 403 就不发请求」同一处口径。
 function selectSubmission(id) {
@@ -1047,6 +1092,9 @@ function fillDetail(d) {
   document.getElementById("teacherComment").value = d.teacher_comment || "";
   document.getElementById("finalScore").value = (d.teacher_score ?? d.ai_score ?? "");
   document.getElementById("aiSuggestedScore").textContent = (d.ai_score == null) ? "—" : d.ai_score;
+
+  // 各内容区块只写自己那一块（spec 4.2）：一块里的坏数据或异常不会让其它块渲染不出来。
+  renderDetailCdm(d);
 }
 
 // ============================================
