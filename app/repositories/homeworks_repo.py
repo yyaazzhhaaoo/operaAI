@@ -137,3 +137,45 @@ def get_pending_submissions(
         .order_by(Submission.submitted_at.asc().nulls_last(), Submission.id.asc())
     )
     return [tuple(row) for row in db.execute(stmt).all()]
+
+
+def get_submission_detail(
+    db: Session, submission_id: int
+) -> tuple[Submission, str | None, str | None, str | None, str | None] | None:
+    """一条提交的批改详情原始行，(提交, 姓名, 等级, 头像, 作业标题)，不存在返回 None。
+
+    供 F5 判 404。**返回的是单行元组不是列表**——F5 查的是一个具名资源，与
+    `get_pending_submissions` 的集合语义不同（那个查的是集合，空集合是合法结果）。
+
+    三层 join **全必须 LEFT**：`submissions.student_id` / `submissions.homework_id`
+    列本身可空，INNER JOIN 会让这两种提交整条 404——教师点开一个真存在的提交却被
+    告知「不存在」。`students.user_id` 那层用 LEFT 则保证 students 有行而 users
+    缺失时至少还能出 student_id 与头像。
+
+    姓名必须按 `students.user_id` 拐一次取，**不能** `db.get(User, student_id)`：
+    submissions.student_id 指的是 students.id，与 users.id 只是偶尔数值相同，直接
+    当 users.id 用会静默取到另一个人的名字（DOC_ISSUES 第 21 条）。
+
+    **元组的列顺序是 (提交, 姓名, 等级, 头像, 作业标题)，与上面
+    `get_pending_submissions` 的前四列顺序刻意保持一致**（那个是 `(提交, 姓名, 等级,
+    头像)`）。中间四个都是 str，解包写错不会报错，pydantic 照收，只是把头像显示成
+    姓名——本文件第 171 行有同一条警告。改这里的 SELECT 顺序必须同步改 service 的解包。
+
+    不用 `db.get(Submission, submission_id)`：本接口要四张表的字段，单独 get 会触发
+    三条懒加载 SQL，不如一条 join。
+    """
+    stmt = (
+        select(
+            Submission,
+            User.display_name,
+            Student.level,
+            Student.avatar,
+            Homework.title,
+        )
+        .outerjoin(Student, Student.id == Submission.student_id)
+        .outerjoin(User, User.id == Student.user_id)
+        .outerjoin(Homework, Homework.id == Submission.homework_id)
+        .where(Submission.id == submission_id)
+    )
+    row = db.execute(stmt).first()
+    return tuple(row) if row is not None else None
