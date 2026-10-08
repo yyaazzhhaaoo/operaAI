@@ -7,10 +7,15 @@ from app.common.errors import BusinessError
 from app.models import Homework
 from app.repositories import homeworks_repo, user_repo
 from app.schemas.homework import (
+    BktChange,
+    CdmTag,
     HomeworkListItem,
     HomeworkListResponse,
+    LyricWord,  # noqa: F401  # 本次无使用点（lyrics 恒为 []），
+    #                        # 但它是 SubmissionDetailResponse.lyrics 的元素类型
     PendingSubmissionItem,
     PendingSubmissionListResponse,
+    SubmissionDetailResponse,
     SubmissionTag,
 )
 
@@ -188,4 +193,164 @@ def list_pending_submissions(db: Session, homework_id: int) -> PendingSubmission
         homework_id=hw.id,
         homework_title=hw.title,
         submissions=items,
+    )
+
+
+def _cdm_tags(ai_detail: dict | None) -> list[CdmTag]:
+    """F5 的功能 4.6：`ai_detail.defects` 的**全量**，按置信度降序。
+
+    **与上面 _tags_of 有一处刻意的不同：不套 confidence > 0.7 的阈值。** 那条阈值是
+    待批卡片自己的展示口径（F4 spec 3.5）；批改页是教师逐条判断 AI 对不对的地方，
+    低置信度的标签恰恰是最该被质疑、因而最该被看见的一条。真库里 23 的 0.45、
+    24 的 0.52、26 的 0.65 三条会因此出现在这里而不出现在卡片上。
+
+    **另一处不同：confidence 取不到的元素不丢**，给 None 排末尾。F4 是拿它排序筛选
+    的，缺了没法定位；这里只是把它带出去，藏起来比带个 null 严重。
+
+    防御式取值同 _tags_of：ai_detail 可空、结构由 AI 侧写入不受本服务约束，一条坏
+    数据不该让教师打不开批改面板——ai_detail 不是 dict / defects 不是 list / 元素
+    不是 dict，一律跳过（最坏出 []，仍是 200）。
+
+    label 缺失或空串的整条丢弃——构造不出标签文字，前端会渲染成一个空胶囊。
+
+    排序：有 confidence 的按降序在前，无 confidence 的按**原始数组序**沉底
+    （Python 的 list.sort 稳定，同 key 保持原序）。
+    """
+    if not isinstance(ai_detail, dict):
+        return []
+    defects = ai_detail.get("defects")
+    if not isinstance(defects, list):
+        return []
+
+    scored: list[tuple[int, float, CdmTag]] = []
+    for d in defects:
+        if not isinstance(d, dict):
+            continue
+        label = d.get("label")
+        if not isinstance(label, str) or not label:
+            continue
+
+        conf = _num(d.get("confidence"))
+        sev = d.get("status")
+        cid = d.get("id")
+        cat = d.get("category")
+        ev = d.get("evidence")
+        feats = d.get("features")
+
+        scored.append((
+            # 无 confidence 的沉底；同组内按置信度降序
+            0 if conf is not None else 1,
+            -conf if conf is not None else 0.0,
+            CdmTag(
+                id=cid if isinstance(cid, str) and cid else None,
+                label=label,
+                # severity 原样透传、不做白名单；取不到给 "unknown"，前端按中性色渲染
+                severity=sev if isinstance(sev, str) and sev else "unknown",
+                confidence=conf,
+                category=cat if isinstance(cat, str) and cat else None,
+                evidence=ev if isinstance(ev, str) and ev else None,
+                features=feats if isinstance(feats, dict) else None,
+            ),
+        ))
+
+    scored.sort(key=lambda t: (t[0], t[1]))
+    return [tag for _, _, tag in scored]
+
+
+def _bkt_changes(before: dict | None, after: dict | None) -> list[BktChange]:
+    """F5 的功能 4.7：`bkt_before` / `bkt_after` 两个扁平字典合并成前后对比。
+
+    两个字典的形状是「技法名 → P(L)」，取**两侧 key 的并集**，一侧没有的技法给 None。
+
+    delta 由后端算并 round 到 4 位：`0.48 - 0.46` 在浮点下是 0.020000000000000018，
+    直接出会给前端一个 18 位小数。仅两侧都是数值时才算，否则 None。
+
+    只放行真正的数值（复用 _num，bool 要单独排除——`isinstance(True, int)` 是 True）：
+    JSONB 列没有类型约束，字符串 `"0.82"` 混进来会让 delta 变成字符串拼接或抛
+    TypeError。
+
+    排序按 skill 名升序。**不依赖 JSONB 的键序**——PostgreSQL 的 jsonb 有规范键序
+    （短键先、同长按字节序），当前真库里恰好与技法的教学顺序观感一致，但那是实现
+    细节，不该被契约依赖。要改成「最弱技法在前」（按 before 升序）只需动这一行。
+
+    两侧都无值 → `[]`（真库 25/26/27 就是这种），**不是 None**：空数组表示「查了，
+    没有」，与 dimensions 的 None（表示「这块没实现」）语义不同。任一侧不是 dict
+    （脏数据）按该侧无值处理。
+    """
+    a = before if isinstance(before, dict) else {}
+    b = after if isinstance(after, dict) else {}
+
+    out: list[BktChange] = []
+    for skill in sorted(set(a) | set(b)):
+        bv = _num(a.get(skill))
+        av = _num(b.get(skill))
+        delta = round(av - bv, 4) if (av is not None and bv is not None) else None
+        out.append(BktChange(skill=skill, before=bv, after=av, delta=delta))
+    return out
+
+
+def _feature_matrix(ai_detail: dict | None) -> dict | None:
+    """F5 的功能 4.5：原样透传 `ai_detail.featureMatrix`（9 个原始声学量）。
+
+    键名保留 AI 侧的驼峰（pitchStd 等），不做 snake_case 转换——这是 AI 内部特征包，
+    改名会让它和写入方对不上，查问题时两边对不上号。
+
+    不做结构校验：ai_detail 不是 dict 或该键不是 dict 就出 None，不抛错。
+    """
+    if not isinstance(ai_detail, dict):
+        return None
+    fm = ai_detail.get("featureMatrix")
+    return fm if isinstance(fm, dict) else None
+
+
+def _overall_confidence(ai_detail: dict | None) -> float | None:
+    """`ai_detail.overallConfidence`，过一遍 _num 挡掉 `"0.68"` 这类字符串。"""
+    if not isinstance(ai_detail, dict):
+        return None
+    return _num(ai_detail.get("overallConfidence"))
+
+
+def submission_detail(db: Session, submission_id: int) -> SubmissionDetailResponse:
+    """F5 批改详情（功能 4.4-4.7）。
+
+    提交不存在抛 404。取数与 join 口径全在 `homeworks_repo.get_submission_detail`
+    （内含三层 LEFT 与「姓名必须拐 students.user_id」的说明），这里只做 JSONB 解析
+    与装配。
+
+    `lyrics` 与 `dimensions` 是**显式空位**——功能 4.4 与 4.5 在库里没有数据源，理由
+    见 spec 2.5 与 `SubmissionDetailResponse` 的文档字符串。它们不是本次没做，是数据
+    不存在，所以出 `[]` 与 `None` 而不是省略键。
+    """
+    row = homeworks_repo.get_submission_detail(db, submission_id)
+    if row is None:
+        raise BusinessError(404, "提交不存在")
+
+    # 元组顺序是 (提交, 姓名, 等级, 头像, 作业标题)——**中间四个都是 str，解包写错
+    # 不会报错**，pydantic 照收，只是把头像显示成姓名。与仓储函数的 SELECT 逐列对齐，
+    # 也与 F4 list_pending_submissions 的解包顺序一致。
+    sub, name, level, avatar, hw_title = row
+
+    return SubmissionDetailResponse(
+        submission_id=sub.id,
+        homework_id=sub.homework_id,
+        homework_title=hw_title,
+        student_id=sub.student_id,
+        student_name=name,
+        student_avatar=avatar,
+        student_level=level,
+        submitted_at=sub.submitted_at,
+        audio_id=sub.audio_id,
+        ai_score=sub.ai_score,
+        overall_confidence=_overall_confidence(sub.ai_detail),
+        feature_matrix=_feature_matrix(sub.ai_detail),
+        dimensions=None,          # 功能 4.5 四维分数无数据源，显式空位
+        lyrics=[],                # 功能 4.4 逐字偏差无数据源，显式空位
+        cdm_tags=_cdm_tags(sub.ai_detail),
+        bkt=_bkt_changes(sub.bkt_before, sub.bkt_after),
+        status=sub.status,
+        teacher_score=sub.teacher_score,
+        teacher_comment=sub.teacher_comment,
+        voice_comment_text=sub.voice_comment_text,
+        voice_comment_audio_id=sub.voice_comment_audio_id,
+        reviewed_at=sub.reviewed_at,
     )
