@@ -1,8 +1,21 @@
+from flask import request
+
 from app.api import api_bp
 from app.common.decorators import login_required, teacher_required, student_required
 from app.db import get_db
 from app.response import ok
+from app.schemas.homework import SubmissionReviewIn
 from app.services import homework_service
+
+
+def _payload() -> dict:
+    """取 JSON 请求体。
+
+    客户端没带 Content-Type: application/json 时 get_json() 会抛 415；
+    silent=True 把它压成 None，这里再兜成 {}，让 pydantic 报「字段必填」
+    而不是让 Flask 抛一个前端看不懂的 415。
+    """
+    return request.get_json(silent=True) or {}
 
 
 @api_bp.route("/homeworks",methods=["GET"])
@@ -46,11 +59,21 @@ def submissions_detail(submission_id):
     return ok(homework_service.submission_detail(
         get_db(), submission_id).model_dump(mode="json"))
 
-@api_bp.route("/submissions/<id>/review",methods=["POST"])
+@api_bp.route("/submissions/<int:submission_id>/review",methods=["POST"])
 @login_required
 @teacher_required
-def submissions_review(id):
-    return ok(id)
+def submissions_review(submission_id):
+    # 路径参数用 <int:...> 而不是 <id>：<id> 是字符串转换器，会把
+    # /submissions/abc/review 也匹配进来再进视图去查库；<int:...> 让 Werkzeug 在
+    # 路由层就挡掉（IntegerConverter 的正则是 \d+，连负数都不收），走 errors.py
+    # 的统一 404「接口不存在」。同文件 F1/F4/F5。
+    #
+    # mode="json"：出参里有 datetime（reviewed_at）。默认 model_dump() 会给 Flask
+    # 一个 datetime 对象，它按 RFC-822 序列化成 "Thu, 08 Oct 2026 00:00:00 GMT"；
+    # mode="json" 出的是 ISO-8601。同 F1/F4/F5。
+    data = SubmissionReviewIn.model_validate(_payload())
+    return ok(homework_service.review_submission(
+        get_db(), submission_id, data).model_dump(mode="json"))
 
 @api_bp.route("/submissions/<id>/calibration",methods=["POST"])
 @login_required
