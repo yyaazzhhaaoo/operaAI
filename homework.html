@@ -693,7 +693,23 @@ let currentHwId = null;
 // F1 列表的最近一次结果。点 hw-item 切换作业时要重渲一次作业列表来刷选中态，
 // 数据从这儿取，不再请求一遍接口。
 let hwItems = [];
+// ===== 批改详情（F5）=====
+// 首帧原文（idle 态），必须在任何代码改写 #emptyState 之前抓。回 idle 时原样
+// 写回，这样「选择左侧提交进行批改」那段文案只有一个来源（HTML），不在 JS 里
+// 再抄一份（spec 3.3）。
+const DETAIL_IDLE_HTML = document.getElementById("emptyState").innerHTML;
+
+// 选中的提交 id。F4 就引入了它，但 renderSubmitList 从没读过（卡片高亮一直没接），
+// F5 让点击真的换出右侧内容，这一步才接上（spec 3.8）。
 let currentSubId = null;
+// 右侧面板的状态机。四个状态各自完整渲染两块，见 renderDetail()（spec 3.2）。
+let detailState = "idle";        // idle | loading | error | content
+let detailData = null;           // content 态的数据；与 detailState==="content" 同进同出
+let detailError = "";            // error 态的原因文案（后端 message 或网络异常）
+// 自增序号，用来作废在飞的请求（spec 3.4）。**不用 currentSubId 比 id**：教师双击
+// 同一张卡片会发两个同 id 的请求，比 id 两个都通过，后回来的会覆盖先回来的。
+// selectHomework 里一句 detailSeq++ 也就顺带作废了切作业时在飞的请求。
+let detailSeq = 0;
 // 待批提交（F4）。这两个变量是 #submitList 的唯一数据源，改完都要调
 // renderSubmitList()——渲染逻辑只在那一个函数里，别处不要再直接写 innerHTML。
 //   submitNotice 非空 → 整块显示这句提示（仅教师可见 / 加载失败）
@@ -914,98 +930,123 @@ function renderSubmitList() {
   if (summary) summary.textContent = `${submitItems.length}条待批`;
 }
 
+// 点左侧待批卡片。角色判断不在这里（学生看不到卡片），在 fetchDetail 里——
+// 与 F4「明知会 403 就不发请求」同一处口径。
 function selectSubmission(id) {
-  // F4 出的 id（23/24/…）与 mock 的 sub01/sub02 永不相交，所以真列表里点任何
-  // 一条都会在这里 return——批改详情是 F5 的内容，本次不做（spec 3.2）。
-  // **必须在设 currentSubId 之前 return**：先设再退的话，卡片高亮会跟着移到
-  // 真提交上，而右侧面板还停在上一次的 mock 内容——教师会以为右边那份就是
-  // 自己刚点的那名学生。宁可完全不动。
-  const sub = SUBMISSIONS.find(s => s.id === id);
-  if (!sub) return;
-
   currentSubId = id;
-  renderSubmitList();
+  renderSubmitList();            // 高亮跟过来（spec 3.8）
 
-  document.getElementById("emptyState").style.display = "none";
-  document.getElementById("reviewContent").style.display = "block";
+  detailState = "loading";
+  detailError = "";
+  detailData = null;             // 与 loading 同进同出（spec 4.1）
+  renderDetail();                // 先把上一名的内容藏起来，再显示加载态
 
-  // 学生信息
-  document.getElementById("detailAvatar").textContent = sub.student.avatar;
-  document.getElementById("detailName").textContent = sub.student.name;
-  document.getElementById("detailMeta").textContent = `${HOMEWORKS[0].title} · 提交于 ${sub.time}`;
-  document.getElementById("detailScore").textContent = sub.ai_score;
-  document.getElementById("aiSuggestedScore").textContent = sub.ai_score;
-  document.getElementById("finalScore").value = sub.ai_score;
-  document.getElementById("teacherComment").value = sub.comment;
+  fetchDetail(id);
+}
 
-  // 歌词
-  const lyricsHtml = sub.lyrics.map(l => {
-    if (l.st === "punct") return `<div class="lyric-cell punct"><span class="char">${l.char}</span></div>`;
-    const diffText = (l.diff > 0 ? "+" : "") + l.diff + "c";
-    return `<div class="lyric-cell"><span class="char">${l.char}</span><span class="diff ${l.st}">${diffText}</span></div>`;
-  }).join("");
-  document.getElementById("lyricsCompare").innerHTML = lyricsHtml;
+// F5 批改详情：GET /api/submissions/<id>/detail（统一信封）。
+// 竞态用自增序号，理由见 detailSeq 的声明处（spec 3.4）。
+async function fetchDetail(id) {
+  const seq = ++detailSeq;
 
-  // 融合
-  const dims = sub.dimensions;
-  const names = { pitch: "音准", rhythm: "节奏", breath: "气息", articulation: "咬字" };
-  const weights = { pitch: 0.40, rhythm: 0.30, breath: 0.20, articulation: 0.10 };
-  document.getElementById("fusionGrid").innerHTML = Object.keys(dims).map(k => `
-    <div class="fusion-item">
-      <div class="dim">${names[k]}</div>
-      <div class="score">${dims[k]}</div>
-      <div class="weight">权重 ${(weights[k]*100).toFixed(0)}%</div>
-    </div>
-  `).join("");
+  // 接口挂 @teacher_required，学生调必 403，明知会被拒就不发（与 F4 同源）。
+  // 这条分支当前走不到（学生看不到待批卡片、没有入口），是照 F4 的原则加的防御：
+  // 万一列表将来对学生开放，右侧第一句该说的是权限，而不是让它去撞 403。
+  if (!currentUser || currentUser.role !== "teacher") {
+    detailState = "error";
+    detailError = "批改详情仅教师可见";
+    renderDetail();
+    return;
+  }
 
-  const total = sub.fusion.total;
-  document.getElementById("fusionTotal").textContent = (total * 100).toFixed(1) + "%";
-  document.getElementById("fusionTotal").style.color = total >= 0.6 ? "#4A8F6B" : "#B83A2F";
-  document.getElementById("fusionPass").innerHTML = total >= 0.6
-    ? '<span class="pass">通过 ✓</span>'
-    : '<span class="fail">未通过 ✗</span>';
+  // 取数与渲染分开：catch 只包住取数，renderDetail 放在 try 外面，
+  // 免得渲染里的异常被当成「加载失败」盖掉真正的原因。
+  let data = null;
+  let error = "";
+  try {
+    const res = await fetch(`${API_BASE}/api/submissions/${id}/detail`,
+      { credentials: "same-origin" });
+    if (seq !== detailSeq) return;
+    if (!res.ok) {
+      // 错误信封里后端自己写了 message（404「提交不存在」/ 403「需要教师权限」），
+      // 原样显示比自己拼一句 HTTP xxx 有用。
+      const b = await res.json().catch(() => null);
+      throw new Error((b && b.message) || `HTTP ${res.status}`);
+    }
+    const body = await res.json();
+    if (seq !== detailSeq) return;          // res.json() 也是异步的，再判一次
+    data = body.data || null;
+    if (!data) error = "响应里没有 data";
+  } catch (e) {
+    error = e.message || "网络异常";
+  }
 
-  // CDM
-  document.getElementById("cdmList").innerHTML = sub.cdm.map(c => `
-    <div class="cdm-item ${c.status}">
-      <div class="label">${c.label}</div>
-      <span class="conf ${c.status}">${(c.confidence*100).toFixed(0)}%</span>
-      <span class="evidence">${c.evidence}</span>
-      <div class="actions">
-        <button class="confirm" onclick="confirmCDM(this)">✓</button>
-        <button onclick="rejectCDM(this)">✗</button>
-      </div>
-    </div>
-  `).join("");
+  if (seq !== detailSeq) return;            // 迟到的失败不该盖掉后一次的成功
+  detailData = data;
+  detailError = error;
+  detailState = data ? "content" : "error";
+  renderDetail();
+}
 
-  // BKT
-  document.getElementById("bktList").innerHTML = sub.bkt.map(b => {
-    const cls = b.delta > 0 ? "up" : (b.delta < 0 ? "down" : "flat");
-    const arrow = b.delta > 0 ? "↗" : (b.delta < 0 ? "↘" : "→");
-    const color = b.after >= 0.85 ? "#4A8F6B" : (b.after >= 0.60 ? "#0066B3" : (b.after >= 0.40 ? "#C9A84C" : "#B83A2F"));
-    return `
-      <div class="bkt-item">
-        <span class="skill">${b.skill}</span>
-        <div class="bar-wrap">
-          <div class="before" style="width:${b.before*100}%"></div>
-          <div class="after" style="width:${b.after*100}%;background:${color}"></div>
-        </div>
-        <div class="vals">
-          <span class="before">${(b.before*100).toFixed(0)}%</span>
-          <span class="arrow">→</span>
-          <span class="after ${cls}">${(b.after*100).toFixed(0)}% ${arrow}</span>
-        </div>
-      </div>
-    `;
-  }).join("");
+// 错误态的「重试」。currentSubId 为 null 说明没有可重试的目标（错误态必然有它，
+// 这一句防的是从控制台直接调）。
+function retryDetail() {
+  if (currentSubId == null) return;
+  selectSubmission(currentSubId);
+}
 
-  // 校准
-  document.getElementById("calibGrid").innerHTML = sub.calib.map(c => `
-    <label class="calib-item">
-      <input type="checkbox" ${c.checked ? 'checked' : ''}>
-      ${c.label}
-    </label>
-  `).join("");
+// 右侧面板的**唯一绘制入口**。四个状态各自完整渲染两块（spec 3.2）——
+// 从 content 切到 loading 时必须先把 #reviewContent 藏起来，否则点第二名学生的
+// 瞬间右侧还挂着上一名的分数与评语，教师会读成「正在刷新这名学生的数据」。
+function renderDetail() {
+  const empty = document.getElementById("emptyState");
+  const content = document.getElementById("reviewContent");
+
+  // content 态但数据为空时**不当 content 渲染**，回落 idle：两者必须同进同出，
+  // 否则会显示一个所有格子都是「—」的空壳，看起来像「这名学生什么数据都没有」。
+  if (detailState === "content" && detailData) {
+    empty.style.display = "none";
+    content.style.display = "block";
+    fillDetail(detailData);
+    return;
+  }
+
+  empty.style.display = "";
+  content.style.display = "none";
+
+  if (detailState === "loading") {
+    empty.innerHTML = `
+      <div class="icon">⏳</div>
+      <div class="title">加载中…</div>
+      <div class="desc">正在读取批改详情</div>`;
+  } else if (detailState === "error") {
+    // 重试按钮复用终审区同款的 .btn-secondary，不新增 CSS（spec 3.2）。
+    empty.innerHTML = `
+      <div class="icon">⚠️</div>
+      <div class="title">加载失败</div>
+      <div class="desc">${esc(detailError)}</div>
+      <div style="margin-top:12px"><button class="btn-secondary" onclick="retryDetail()">重试</button></div>`;
+  } else {
+    empty.innerHTML = DETAIL_IDLE_HTML;     // idle：回首帧原文
+  }
+}
+
+// 头部 + 终审区。五个内容区块由各自的 renderDetail* 负责（后续任务往里加调用）。
+function fillDetail(d) {
+  // 头像可能是**空串**不是 null（students.avatar），必须用 || 兜，?? 兜不到空串。
+  document.getElementById("detailAvatar").textContent = d.student_avatar || "🎭";
+  document.getElementById("detailName").textContent = d.student_name || "未知学生";
+  document.getElementById("detailMeta").textContent =
+    `${d.homework_title || "未知作业"} · 提交于 ${fmtTime(d.submitted_at)}`;
+  // ai_score 可能是合法的 0，所以用 == null 判而不是 ||（spec 3.7）。
+  document.getElementById("detailScore").textContent = (d.ai_score == null) ? "—" : d.ai_score;
+
+  // 终审区只回显，**不按 status/reviewed_at 推断「还能不能改」**（spec 3.7）：
+  // 真库 23/24 已有 teacher_score 与评语，status 却还是 ai_scored——页面若自己
+  // 按 status 认定「还没批过」并盖掉已存在的评语，就等于替 F6 定了终审状态机。
+  document.getElementById("teacherComment").value = d.teacher_comment || "";
+  document.getElementById("finalScore").value = (d.teacher_score ?? d.ai_score ?? "");
+  document.getElementById("aiSuggestedScore").textContent = (d.ai_score == null) ? "—" : d.ai_score;
 }
 
 // ============================================
@@ -1048,14 +1089,13 @@ function showAssignModal() {
 // ============================================
 // 初始化
 // ============================================
+// 两个面板各画一次自己的初始态：左下进「加载中…」，右侧进 idle（F5 之后右侧
+// 不再有任何 mock，空状态就是它的真实初始态）。
 // 作业列表**不在这里渲染**：fetchHomeworks 要读 currentUser，而它要等第二段
 // <script> 的 /api/auth/me 回来才有值，同步调会被误判成学生。调用点在那里。
-// 这里只把待批列表画成加载态，真数据由 fetchHomeworks → selectHomework →
-// fetchSubmissions 那条链接上。
+// 真数据由 fetchHomeworks → selectHomework → fetchSubmissions 那条链接上。
 renderSubmitList();
-// 不调 selectSubmission("sub01")：右侧批改详情是 F5 的内容，F4 不出详情字段。
-// 主动渲染 mock 会让面板常驻显示某一名的**假**数据，而真列表里有 5 名学生——
-// 那不是演示，是误导。右侧停在它自己的空状态，直到 F5 落地（spec 3.3）。
+renderDetail();
 </script>
 <!-- ==== 登录用户条 + 登出（页面鉴权配套，见 docs/superpowers/specs/2026-09-15-page-auth-design.md）==== -->
 <!-- 页面已被服务端保护，能加载出来就说明会话有效。这段脚本不做守卫，
