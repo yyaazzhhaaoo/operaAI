@@ -589,7 +589,6 @@ body{
               </div>
               <div class="action-btns">
                 <button class="btn-success" id="btnSubmitReview" onclick="submitReview()">✅ 通过并发布</button>
-                <button class="btn-secondary" onclick="saveDraft()">💾 保存草稿</button>
                 <button class="btn-secondary" style="flex:0.6" onclick="playVoiceComment()">🎙️ 语音</button>
               </div>
             </div>
@@ -1219,10 +1218,6 @@ async function submitReview() {
     // （按钮不可见），但元素还在、文案照样写回，下次进 content 态时是正常样子。
     if (btn) { btn.disabled = false; btn.textContent = "✅ 通过并发布"; }
   }
-}
-
-function saveDraft() {
-  alert("💾 草稿已保存");
 }
 
 function playVoiceComment() {
