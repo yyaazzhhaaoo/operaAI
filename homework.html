@@ -588,7 +588,7 @@ body{
                 <span class="hint">AI建议: <span id="aiSuggestedScore">82.5</span>分（可修改）</span>
               </div>
               <div class="action-btns">
-                <button class="btn-success" onclick="submitReview()">✅ 通过并发布</button>
+                <button class="btn-success" id="btnSubmitReview" onclick="submitReview()">✅ 通过并发布</button>
                 <button class="btn-secondary" onclick="saveDraft()">💾 保存草稿</button>
                 <button class="btn-secondary" style="flex:0.6" onclick="playVoiceComment()">🎙️ 语音</button>
               </div>
@@ -1162,9 +1162,63 @@ function rejectCDM(btn) {
   }
 }
 
-function submitReview() {
-  const score = document.getElementById("finalScore").value;
-  alert(`✅ 终审已发布\n终审评分: ${score}分\n点评已保存，BKT 状态已更新`);
+// 教师终审：POST /api/submissions/<id>/review（F6，统一信封）。
+// 只发终审区那两个字段——语音点评本轮不做（spec 3.1）。
+// 原来这里那句 alert 宣称「点评已保存，BKT 状态已更新」，而实际什么都没发生
+// （BKT 更不归本接口管），换成真调用后它连同假文案一起消失。
+async function submitReview() {
+  // 没有选中提交就不发。按钮在 #reviewContent 里，idle/error/loading 三态整块
+  // 是 display:none，正常点不到；这一句防的是从控制台直接调，口径同 retryDetail。
+  if (currentSubId == null) return;
+
+  // 记下本次提交的目标 id：await 期间教师可能已经点了别人（spec 3.6）。
+  const id = currentSubId;
+  const btn = document.getElementById("btnSubmitReview");
+  const payload = {
+    teacher_score: scoreOrNull(document.getElementById("finalScore").value),
+    teacher_comment: textOrNull(document.getElementById("teacherComment").value),
+  };
+
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 发布中…"; }
+  try {
+    const res = await fetch(`${API_BASE}/api/submissions/${id}/review`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    // 401 单独走：会话失效不是「操作错了」，弹一句「未登录」会让人以为是自己点错。
+    // 本页对 401 的既有处理就是跳登录页（第二段 <script> 的 /api/auth/me 失败）。
+    if (res.status === 401) {
+      location.replace("/login.html");
+      return;
+    }
+    if (!res.ok) {
+      // 错误信封里后端自己写了 message（404「提交不存在」/ 422「终审评分必须在
+      // 0 到 100 之间」），原样显示比自己拼一句 HTTP xxx 有用——口径同 fetchDetail。
+      const b = await res.json().catch(() => null);
+      throw new Error((b && b.message) || `HTTP ${res.status}`);
+    }
+
+    // 成功。响应体不用（spec 3.11）：两条列表刷新完就是最新的。
+    if (currentSubId === id) {
+      // 教师还停在被批的那条 → 右侧整块复位回 idle（spec 3.4）。它已经从待批
+      // 列表里消失，留着内容会让左下没有对应的高亮卡片。selectHomework 会
+      // 顺带重拉一次 F4，所以这条分支里不再单独调 fetchSubmissions。
+      selectHomework(currentHwId);
+    } else {
+      // 提交期间教师已经点了别人或换了作业 → 只刷左侧，别把他正在看的那一份清掉。
+      fetchSubmissions(currentHwId);
+    }
+    fetchHomeworks(true);        // F1 的待批数与作业状态（spec 3.5）
+  } catch (e) {
+    alert(`❌ 终审发布失败\n${e.message || "网络异常"}`);
+  } finally {
+    // 复位按钮。上面可能已经把右侧复位成 idle，#reviewContent 整块藏了起来
+    // （按钮不可见），但元素还在、文案照样写回，下次进 content 态时是正常样子。
+    if (btn) { btn.disabled = false; btn.textContent = "✅ 通过并发布"; }
+  }
 }
 
 function saveDraft() {
