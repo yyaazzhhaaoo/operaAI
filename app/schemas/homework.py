@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class HomeworkListItem(BaseModel):
@@ -235,8 +235,9 @@ class SubmissionDetailResponse(BaseModel):
     提前拉进 F5。
 
     真库里的一个反常照实透传、不替它推断：23/24 的 teacher_score 与 teacher_comment
-    已有值，但 status 仍是 `ai_scored`、reviewed_at 仍是 NULL（「写了分数但没走终审」，
-    DOC_ISSUES 第 622 行记过全项目还没有代码把 status 写成 reviewed）。
+    已有值，但 status 仍是 `ai_scored`、reviewed_at 仍是 NULL（「写了分数但没走终审」）。
+    F6（`POST /api/submissions/<id>/review`）落地后已有代码会写 reviewed，但这两行是
+    种子数据、从没走过终审接口，所以照旧透传——不替种子数据补一次「事后终审」。
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -268,3 +269,63 @@ class SubmissionDetailResponse(BaseModel):
     voice_comment_text: str | None
     voice_comment_audio_id: int | None
     reviewed_at: datetime | None
+
+
+class SubmissionReviewIn(BaseModel):
+    """F6 入参（`POST /api/submissions/<id>/review`，功能 4.8/4.9/4.11）。
+
+    四个字段全部可选，且**「字段不出现」与「显式给 null」是两件不同的事**：
+      - 字段不出现 → 该列保持原值
+      - 字段显式 null → 该列清空
+    service 靠 `model_fields_set` 判，**不能**写成 `if v is not None`——那会把两者
+    混成一种，「清空某个字段」就永远做不到（spec 3.2）。
+
+    四个字段都不出现（`{}`）也合法，语义是「一键通过」：只推进状态，一个内容列都
+    不动（spec 3.5，对应 mobile 文档的「一键通过（终审保留）」）。
+    """
+
+    teacher_score: float | None = None
+    teacher_comment: str | None = None
+    voice_comment_text: str | None = None
+    voice_comment_audio_id: int | None = None
+
+    @field_validator("teacher_score")
+    @classmethod
+    def _score_in_range(cls, v: float | None) -> float | None:
+        """终审分限 0–100（前端 `#finalScore` 的 min/max 就是这个范围）。
+
+        不用 `Field(ge=0, le=100)`：`app/common/errors.py` 的 `_MSG_CN` 只有
+        missing / string_too_short / string_too_long / int_parsing 四条，**没有**
+        `greater_than_equal` / `less_than_equal`，用 Field 越界时回的是 pydantic 的
+        英文原文。这里抛中文，`_format_validation_error` 会去掉 "Value error, "
+        前缀后原样展示（同 app/schemas/demo.py 的 `AnnotationIn._known_tag`）。
+
+        另：给非数字（如 `"abc"`）时会在到达这里之前就被 pydantic 挡下，报的是
+        英文的 `float_parsing`——`_MSG_CN` 同样没有这个键。照实接受，理由见 spec 3.7。
+        """
+        if v is not None and not 0 <= v <= 100:
+            raise ValueError("终审评分必须在 0 到 100 之间")
+        return v
+
+
+class SubmissionReviewResponse(BaseModel):
+    """F6 出参：**只回本接口写下去的那几个字段**，不是 F5 的全量详情。
+
+    不复用 F5 的 `SubmissionDetailResponse`：那个带着 lyrics / cdm_tags / bkt /
+    feature_matrix 等一堆本接口用不上的形状，复用它会让 F6 的契约跟着 F5 一起变。
+    前端写完要拿全量详情，再调一次 F5（spec 4.4）。
+    """
+
+    # from_attributes 在本模型上其实**用不到**——service 是用关键字参数构造的
+    # （submission_id 与 ORM 的 row.id 不同名，`model_validate(row)` 走不通）。
+    # 留着是为了与本文件另外 8 个响应模型一致：9 个里 8 个有它，独缺这个才是会
+    # 被挑出来的不一致。
+    model_config = ConfigDict(from_attributes=True)
+
+    submission_id: int
+    status: str | None
+    reviewed_at: datetime | None
+    teacher_score: float | None
+    teacher_comment: str | None
+    voice_comment_text: str | None
+    voice_comment_audio_id: int | None
