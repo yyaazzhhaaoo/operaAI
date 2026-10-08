@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.common.errors import BusinessError
 from app.models import Homework
-from app.repositories import homeworks_repo, user_repo
+from app.repositories import audio_repo, homeworks_repo, user_repo
 from app.schemas.homework import (
     BktChange,
     CdmTag,
@@ -16,6 +16,8 @@ from app.schemas.homework import (
     PendingSubmissionItem,
     PendingSubmissionListResponse,
     SubmissionDetailResponse,
+    SubmissionReviewIn,
+    SubmissionReviewResponse,
     SubmissionTag,
 )
 
@@ -354,3 +356,62 @@ def submission_detail(db: Session, submission_id: int) -> SubmissionDetailRespon
         voice_comment_audio_id=sub.voice_comment_audio_id,
         reviewed_at=sub.reviewed_at,
     )
+
+
+# F6 入参字段名 → submissions 列名。四个字段与四个列现在一一同名，这张表因此看着
+# 冗余，但它是**唯一的映射声明点**：将来对外字段要改名（比如对外叫 audio_id、对内
+# 叫 voice_comment_audio_id）只改这里，不用去 review_submission 里逐个 setattr 找。
+_REVIEW_FIELDS = (
+    "teacher_score",
+    "teacher_comment",
+    "voice_comment_text",
+    "voice_comment_audio_id",
+)
+
+
+def review_submission(
+    db: Session, submission_id: int, data: SubmissionReviewIn
+) -> SubmissionReviewResponse:
+    """F6 教师终审（功能 4.8 终审评分 / 4.9 终审点评 / 4.11 语音点评）。
+
+    提交不存在抛 404。已 `reviewed` 的再调用 = **覆盖更新**，`reviewed_at` 刷新到
+    本次（spec 3.3）——库里没有「退回/撤销终审」的接口，所以覆盖是唯一的修改途径。
+
+    只写**请求里显式出现过**的字段：没出现 = 保持原值，显式 null = 清空。用
+    `model_fields_set` 判，不用 `is not None`（spec 3.2）。
+
+    这是全项目**第一处**把 `submissions.status` 写成 `'reviewed'` 的代码，落地后
+    F4 的待批列表与 F1 的「批改中」判据才会真正流转起来（DOC_ISSUES 第 25/34 条
+    都记着「等 F6 落地即自动恢复」）。
+    """
+    row = homeworks_repo.get_submission(db, submission_id)
+    if row is None:
+        raise BusinessError(404, "提交不存在")
+
+    changes = {
+        f: getattr(data, f) for f in _REVIEW_FIELDS if f in data.model_fields_set
+    }
+
+    # 引用的音频必须存在。查不到回 422 而不是 404——404 在本项目里留给「URL 里那个
+    # 具名资源不存在」（F4/F5 的「作业不存在」「提交不存在」），而这是请求体里引用了
+    # 一个不存在的资源，属请求体不合法（spec 3.8）。
+    if changes.get("voice_comment_audio_id") is not None:
+        if audio_repo.get_by_id(db, changes["voice_comment_audio_id"]) is None:
+            raise BusinessError(422, "语音点评音频不存在")
+
+    homeworks_repo.apply_review(db, row, changes)
+    row.status = "reviewed"
+    # 不用 func.now()：那是 SQL 表达式，赋进属性后 row.reviewed_at 拿到的是表达式
+    # 对象而不是 datetime，拿去装出参会炸。落库格式一致（TIMESTAMP，无时区）。
+    row.reviewed_at = datetime.now()
+
+    # 出参在 commit **之前**组装：commit 会让 ORM 实例的属性过期，之后再读
+    # row.teacher_score 会多发一条 SELECT 把整行重新拉一遍。同 C5 的注释。
+    out = SubmissionReviewResponse(
+        submission_id=row.id,
+        status=row.status,
+        reviewed_at=row.reviewed_at,
+        **{f: getattr(row, f) for f in _REVIEW_FIELDS},
+    )
+    db.commit()
+    return out
