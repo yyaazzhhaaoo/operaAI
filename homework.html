@@ -1126,6 +1126,22 @@ function fillDetail(d) {
 // 交互操作
 // ============================================
 
+// 终审区两个输入框的空值口径（spec 3.10）。都 trim 后判空、一律发 null 而不是空串：
+// 空串会往 TEXT 列里写一个长度 0 的字符串，「老师没写」与「老师写了个空」在库里
+// 就成了两种值，而后端 PATCH 的「显式 null」正好是清空。
+function textOrNull(v) {
+  const s = (v || "").trim();
+  return s === "" ? null : s;
+}
+
+// #finalScore 是 <input type="number">，清空时 .value 是**空串**（不是 "0"）。
+// 空串不能喂给 Number()——那得到的是 0，等于替教师打了一个 0 分。
+// 越界（手输 101）不在这里拦，交给后端 422（spec 3.9）。
+function scoreOrNull(v) {
+  const s = (v || "").trim();
+  return s === "" ? null : Number(s);
+}
+
 function confirmCDM(btn) {
   btn.style.borderColor = "#4A8F6B";
   btn.style.color = "#4A8F6B";
