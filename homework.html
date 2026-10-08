@@ -725,7 +725,7 @@ function renderHwSummary(items) {
 // 直接按 currentUser.role 分支（同 demo_library.html 的 fetchDemos）。
 // 调用点在第二段 <script> 的 currentUser 赋值之后：本函数读角色，若在页面加载时
 // 同步调它，currentUser 还是 null，教师会被误判成学生、列表永不加载。
-async function fetchHomeworks() {
+async function fetchHomeworks(keepSelection = false) {
   if (!currentUser || currentUser.role !== "teacher") {
     const el = document.getElementById("hwList");
     if (el) el.innerHTML =
@@ -748,7 +748,11 @@ async function fetchHomeworks() {
     // 两边漂移时默认作业会不一致（spec 3.1）。
     // items 为空（教师一份作业都没布置）时不调：那会发一个
     // homework_id=undefined 的请求。
-    if (items.length) selectHomework(items[0].homework_id);
+    // keepSelection：终审成功后刷新用。默认（页面加载时那句 fetchHomeworks()）
+    // 要自动选中第一份；刷新时若照做，教师正看着 hw13 会被跳回 hw12——items[0]
+    // 与 currentHwId 无关。renderHwList 自己会按 currentHwId 刷选中态，
+    // 所以刷新时只重渲列表就够。
+    if (items.length && !keepSelection) selectHomework(items[0].homework_id);
   } catch (e) {
     const el = document.getElementById("hwList");
     if (el) el.innerHTML =
