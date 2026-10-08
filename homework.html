@@ -270,6 +270,7 @@ body{
 .submit-item .tags .tag.danger{background:rgba(184,58,47,0.10);color:var(--danger)}
 .submit-item .tags .tag.warn{background:rgba(201,168,76,0.10);color:var(--warning)}
 .submit-item .tags .tag.info{background:rgba(0,102,179,0.10);color:var(--primary)}
+.submit-item .tags .tag.neutral{background:var(--bg-secondary);color:var(--text-muted)}
 
 /* ===== 右侧 - 批改详情 ===== */
 .review-panel .empty-state{
@@ -508,7 +509,7 @@ body{
               <div class="icon" style="background:rgba(0,102,179,0.10);color:var(--primary)">📋</div>
               待批改提交
             </div>
-            <span style="font-size:11px;color:var(--text-muted)">AI已初评</span>
+            <span style="font-size:11px;color:var(--text-muted)" id="subSummary"></span>
           </div>
           <div class="card-body">
             <div class="submit-list" id="submitList"></div>
@@ -603,10 +604,12 @@ body{
 // ============================================
 // 模拟数据
 // ============================================
-// 作业列表已接真接口 GET /api/homeworks（见下方 fetchHomeworks / renderHwList）。
-// 这个常量保留是因为**待批改提交**那一块仍是 mock（F4/F5 尚未实现），
-// selectSubmission 还要读 HOMEWORKS[0].title 填批改详情页的标题。
-// 等 F4 落地、SUBMISSIONS 一起换掉时，这个常量与 SUBMISSIONS 一并删除。
+// 作业列表已接真接口 GET /api/homeworks，待批改提交已接
+// GET /api/homeworks/<id>/submissions（见下方 fetchHomeworks / renderHwList /
+// fetchSubmissions / renderSubmitList）。
+// 这两个常量保留是因为**批改详情页**（右侧面板）仍是 mock——逐字偏差、加权融合、
+// CDM、BKT、校准、评语都是 F5 的内容，尚未实现，selectSubmission 仍靠它们填右侧。
+// 等 F5 落地时，这两个常量连同 selectSubmission 的函数体一并删除。
 const HOMEWORKS = [
   { id: "h01", title: "《穆桂英挂帅》· 辕门外三声炮", deadline: "2026-08-02", demo: "王老师标准版", submitted: 18, total: 24, status: "grading" },
   { id: "h02", title: "《贵妃醉酒》· 海岛冰轮初转腾", deadline: "2026-08-05", demo: "王老师标准版", submitted: 12, total: 24, status: "ongoing" },
@@ -684,7 +687,21 @@ const API_BASE = "";
 // 取不到 session，唯一赋值点在那里。页面加载时它还是 null。
 let currentUser = null;
 
+// 当前选中的作业（F1 的 homework_id）。默认取 F1 列表第一份，由 fetchHomeworks
+// 在拿到列表后调 selectHomework 设定。
+let currentHwId = null;
+// F1 列表的最近一次结果。点 hw-item 切换作业时要重渲一次作业列表来刷选中态，
+// 数据从这儿取，不再请求一遍接口。
+let hwItems = [];
 let currentSubId = null;
+// 待批提交（F4）。这两个变量是 #submitList 的唯一数据源，改完都要调
+// renderSubmitList()——渲染逻辑只在那一个函数里，别处不要再直接写 innerHTML。
+//   submitNotice 非空 → 整块显示这句提示（仅教师可见 / 加载失败）
+//   submitItems 为 null → 「加载中…」
+//   submitItems 为 []   → 「暂无待批改提交」
+//   submitItems 有元素 → 渲染列表
+let submitItems = null;
+let submitNotice = "";
 
 // ============================================
 // 渲染函数
@@ -703,6 +720,7 @@ function esc(s) {
 }
 
 function renderHwList(items) {
+  hwItems = items;                 // 存一份，selectHomework 刷选中态时复渲
   const container = document.getElementById("hwList");
   if (!items.length) {
     container.innerHTML =
@@ -718,8 +736,11 @@ function renderHwList(items) {
       // 再把曲目名拼上去会与卡片标题重复。库里没有「版本名」这个字段
       // （mock 里的「王老师标准版」是演示页自拟的），口径见 spec 3.4。
       const demo = [hw.demo_role, hw.demo_banshi].filter(Boolean).join(" · ") || "未挂曲目";
+      // 选中态与点击：.hw-item 的 cursor:pointer 与 .hw-item.active 样式本来
+      // 就写好了（:229、:232），只是从来没接过线（spec 3.1）。
+      const active = hw.homework_id === currentHwId ? " active" : "";
       return `
-        <div class="hw-item">
+        <div class="hw-item${active}" onclick="selectHomework(${hw.homework_id})">
           <div class="top">
             <div class="title">${esc(hw.title)}</div>
             <span class="status ${status}">${HW_STATUS_TEXT[status]}</span>
@@ -769,7 +790,15 @@ async function fetchHomeworks() {
     const res = await fetch(`${API_BASE}/api/homeworks`, { credentials: "same-origin" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();
-    renderHwList(body.data && body.data.homeworks ? body.data.homeworks : []);
+    const items = body.data && body.data.homeworks ? body.data.homeworks : [];
+    renderHwList(items);
+    // 默认拉第一份作业的待批提交。F1 的排序是「待办优先」（grading → ongoing
+    // → closed），第一份通常就是有待批的那份，但这里**不刻意去找**「第一份
+    // pending_review_count > 0 的作业」——那等于把 F1 的排序口径在前端复制一份，
+    // 两边漂移时默认作业会不一致（spec 3.1）。
+    // items 为空（教师一份作业都没布置）时不调：那会发一个
+    // homework_id=undefined 的请求。
+    if (items.length) selectHomework(items[0].homework_id);
   } catch (e) {
     const el = document.getElementById("hwList");
     if (el) el.innerHTML =
@@ -779,30 +808,123 @@ async function fetchHomeworks() {
   }
 }
 
+// 待批提交列表：真接口 GET /api/homeworks/<id>/submissions（统一信封）。
+// 与 fetchHomeworks 同：学生不发这个请求——接口挂 @teacher_required，学生调必
+// 403，明知会被拒就不发，直接按 currentUser.role 分支。
+async function fetchSubmissions(hwId) {
+  if (!currentUser || currentUser.role !== "teacher") {
+    submitItems = null;
+    submitNotice = "待批改提交仅教师可见";
+    renderSubmitList();
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/api/homeworks/${hwId}/submissions`,
+      { credentials: "same-origin" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    // 竞态兜底：慢请求回来时教师可能已经切到别的作业了，此时必须丢弃，
+    // 否则会把 A 作业的提交画到 B 作业的列表下面。接口回显 homework_id 就是
+    // 为了这个（接口 spec §3.7）。
+    if (currentHwId !== hwId) return;
+    submitNotice = "";
+    submitItems = (body.data && body.data.submissions) ? body.data.submissions : [];
+    renderSubmitList();
+  } catch (e) {
+    if (currentHwId !== hwId) return;
+    submitItems = null;            // 别留半截数据
+    submitNotice = "加载失败，请刷新重试";
+    renderSubmitList();
+  }
+}
+
+// 切换当前作业。点 hw-item 触发；页面初始化时由 fetchHomeworks 调一次。
+function selectHomework(hwId) {
+  currentHwId = hwId;
+  renderHwList(hwItems);           // 刷 hw-item 的选中态
+  submitItems = null;              // 先进加载态，否则会短暂显示上一份作业的提交
+  submitNotice = "";
+  renderSubmitList();
+  fetchSubmissions(hwId);
+}
+
+// severity → CSS 类。接口透传语义值（high/medium/low），配色是页面的事（spec 3.4）。
+// 取到不认识的档用 neutral 渲染，**不做白名单过滤**——滤掉一个未预期的分级
+// 会让标签凭空消失。
+const SEV_CLS = { high: "danger", medium: "warn", low: "info" };
+
+// "2026-08-01T00:00:00" → "08-01 00:00"，null → "—"。
+// **不走 new Date()**：串里没有时区后缀，而库里存的本来就是北京时间
+// （PostgreSQL server timezone = Asia/Shanghai）。Date 会按浏览器本地时区解析、
+// 再按本地时区输出，非 +08:00 的机器上显示会漂。切片没有这个问题（spec 3.5）。
+function fmtTime(s) {
+  return s ? String(s).slice(5, 16).replace("T", " ") : "—";
+}
+
 function renderSubmitList() {
   const container = document.getElementById("submitList");
-  container.innerHTML = SUBMISSIONS.map((sub, idx) => {
-    const tagsHtml = sub.tags.map(t => `<span class="tag ${t.cls}">${t.text}</span>`).join("");
+  const summary = document.getElementById("subSummary");
+  if (!container) return;
+
+  // 空态/提示态一律清空右上角计数：留一个数字会与「仅教师可见」并排出现，
+  // 读起来像「确实没有待批」，而实际是「没权限看」（与 fetchHomeworks 同源）。
+  if (submitNotice) {
+    container.innerHTML =
+      `<div style="padding:32px;text-align:center;color:var(--text-muted)">${esc(submitNotice)}</div>`;
+    if (summary) summary.textContent = "";
+    return;
+  }
+  if (submitItems === null) {
+    container.innerHTML =
+      `<div style="padding:32px;text-align:center;color:var(--text-muted)">加载中…</div>`;
+    if (summary) summary.textContent = "";
+    return;
+  }
+  if (!submitItems.length) {
+    container.innerHTML =
+      `<div style="padding:32px;text-align:center;color:var(--text-muted)">暂无待批改提交</div>`;
+    if (summary) summary.textContent = "";
+    return;
+  }
+
+  container.innerHTML = submitItems.map(it => {
+    // tags 不截断：接口按置信度降序给全量（刘思琪 3 条）。.tags 本就是
+    // flex-wrap，让它换行，不要 slice——截掉哪条纯看运气（spec 3.6）。
+    const tagsHtml = (it.tags || []).map(t =>
+      `<span class="tag ${SEV_CLS[t.severity] || "neutral"}">${esc(t.label)}</span>`
+    ).join("");
+    // avatar 可能是**空串不是 NULL**（students.id=2 张三那个种子），必须用 ||
+    // 兜——?? 只兜 null/undefined，兜不到空串（spec 3.6）。
+    const avatar = it.student_avatar || "🎭";
+    const name = it.student_name || "未知学生";
+    const score = (it.ai_score === null || it.ai_score === undefined) ? "—" : it.ai_score;
     return `
-      <div class="submit-item ${sub.id === currentSubId ? 'active' : ''}" onclick="selectSubmission('${sub.id}')">
-        <div class="avatar">${sub.student.avatar}</div>
+      <div class="submit-item" onclick="selectSubmission(${it.submission_id})">
+        <div class="avatar">${esc(avatar)}</div>
         <div class="info">
-          <div class="name">${sub.student.name}</div>
-          <div class="sub">${sub.time}</div>
+          <div class="name">${esc(name)}</div>
+          <div class="sub">${esc(fmtTime(it.submitted_at))}</div>
           <div class="tags">${tagsHtml}</div>
         </div>
-        <div class="score">${sub.ai_score}</div>
+        <div class="score">${esc(score)}</div>
       </div>
     `;
   }).join("");
+
+  if (summary) summary.textContent = `${submitItems.length}条待批`;
 }
 
 function selectSubmission(id) {
-  currentSubId = id;
-  renderSubmitList();
-
+  // F4 出的 id（23/24/…）与 mock 的 sub01/sub02 永不相交，所以真列表里点任何
+  // 一条都会在这里 return——批改详情是 F5 的内容，本次不做（spec 3.2）。
+  // **必须在设 currentSubId 之前 return**：先设再退的话，卡片高亮会跟着移到
+  // 真提交上，而右侧面板还停在上一次的 mock 内容——教师会以为右边那份就是
+  // 自己刚点的那名学生。宁可完全不动。
   const sub = SUBMISSIONS.find(s => s.id === id);
   if (!sub) return;
+
+  currentSubId = id;
+  renderSubmitList();
 
   document.getElementById("emptyState").style.display = "none";
   document.getElementById("reviewContent").style.display = "block";
@@ -928,9 +1050,12 @@ function showAssignModal() {
 // ============================================
 // 作业列表**不在这里渲染**：fetchHomeworks 要读 currentUser，而它要等第二段
 // <script> 的 /api/auth/me 回来才有值，同步调会被误判成学生。调用点在那里。
+// 这里只把待批列表画成加载态，真数据由 fetchHomeworks → selectHomework →
+// fetchSubmissions 那条链接上。
 renderSubmitList();
-// 默认选中第一个提交
-selectSubmission("sub01");
+// 不调 selectSubmission("sub01")：右侧批改详情是 F5 的内容，F4 不出详情字段。
+// 主动渲染 mock 会让面板常驻显示某一名的**假**数据，而真列表里有 5 名学生——
+// 那不是演示，是误导。右侧停在它自己的空状态，直到 F5 落地（spec 3.3）。
 </script>
 <!-- ==== 登录用户条 + 登出（页面鉴权配套，见 docs/superpowers/specs/2026-09-15-page-auth-design.md）==== -->
 <!-- 页面已被服务端保护，能加载出来就说明会话有效。这段脚本不做守卫，
