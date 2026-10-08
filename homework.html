@@ -558,7 +558,9 @@ body{
               <span class="label">二元判定:</span>
               <span id="fusionPass">—</span>
             </div>
-            <div class="fusion-formula">公式: Σ(wᵢ × dimᵢ_score) ≥ 0.6 ? "通过" : "未通过" · 当前权重: 音准40% 节奏30% 气息20% 咬字10%</div>
+            <!-- 原来这里有一行把各维度分按权重加权、再与通过阈值比较的公式说明，
+                 已删：dimensions 与 fusion 接口都不出，权重与阈值文档也从未定义，
+                 摆在一排「—」底下等于页面自己发明了一套算法（见 F5 设计 spec 3.10）。 -->
 
             <!-- CDM -->
             <div style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px">🔍 CDM 归因诊断（缺陷标签）</div>
@@ -1018,6 +1020,35 @@ function renderDetailBkt(d) {
     rows.length ? rows.map(bktItemHtml).join("") : emptyBlock("本次无 BKT 状态变化");
 }
 
+// 功能 4.4 逐字偏差：本接口当前**恒出 []**（后端显式空位）。
+// **非空分支故意不写**——从当前接口拿到非空数组是不可能的（service 里写死 []），
+// 为看不见的形状写渲染代码只会写错。等把 B 组结果落进 ai_detail 之后，在这里补
+// 真渲染，并把下面这句降级成 if (!d.lyrics.length) 的分支。
+function renderDetailLyrics(d) {
+  document.getElementById("lyricsCompare").innerHTML =
+    emptyBlock("暂无逐字偏差数据（数据源待接入）");
+}
+
+// 功能 4.5：dimensions 恒为 null（接口显式空位）。
+// feature_matrix 与 overall_confidence 有值但**不上屏**：9 个驼峰键没有中文标签，
+// 而最接近的槽位 #fusionTotal 写的是「加权总分」，overall_confidence 是置信度不是
+// 分数，放进去就是错标（spec 3.11）。总分由 ai_score 承担，它在头部与终审区已有。
+function renderDetailFusion(d) {
+  document.getElementById("fusionGrid").innerHTML =
+    emptyBlock("暂无维度分与加权结果（数据源待接入）");
+  document.getElementById("fusionTotal").textContent = "—";
+  document.getElementById("fusionPass").textContent = "—";
+}
+
+// 功能 4.10（F7 的地盘）：F5 **不出校准**——那是 F7 的读职责。
+// 区块保留（4.10 是正式需求），出空态；要显示得先等 F7 定下校准项的取值集合
+// （DOC_ISSUES 第 37 条：校准项文档从未定义，且 score_calibrations 装不下页面的
+// 「按维度勾三项」）。
+function renderDetailCalib(d) {
+  document.getElementById("calibGrid").innerHTML =
+    emptyBlock("暂无校准项（数据源待接入）");
+}
+
 // 点左侧待批卡片。角色判断不在这里（学生看不到卡片），在 fetchDetail 里——
 // 与 F4「明知会 403 就不发请求」同一处口径。
 function selectSubmission(id) {
@@ -1139,6 +1170,9 @@ function fillDetail(d) {
   // 各内容区块只写自己那一块（spec 4.2）：一块里的坏数据或异常不会让其它块渲染不出来。
   renderDetailCdm(d);
   renderDetailBkt(d);
+  renderDetailLyrics(d);
+  renderDetailFusion(d);
+  renderDetailCalib(d);
 }
 
 // ============================================
