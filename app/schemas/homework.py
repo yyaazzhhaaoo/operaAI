@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -206,6 +207,41 @@ class LyricWord(BaseModel):
     warning: bool | None
 
 
+class SubmissionCalibration(BaseModel):
+    """一条 AI 评分校准记录（功能 4.10）。
+
+    **F7 的响应体与 F5 详情里的 `calibration` 字段共用本类**——两处必须是同一个形状，
+    否则页面「刚写完」与「重新打开」会渲染出两种结果。
+
+    from_attributes=True：F7 与 F5 都从 ORM 行直接 `model_validate(row)` 构造，
+    不手抄四个字段（抄漏一个不会有任何报错，只会安静地少一个键）。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    bias_mode: str
+    ai_score: float | None
+    teacher_score: float | None
+    created_at: datetime
+
+
+class SubmissionCalibrationIn(BaseModel):
+    """F7 入参（`POST /api/submissions/<id>/calibration`，功能 4.10）。
+
+    只有一项——`ai_score` / `teacher_score` / `teacher_id` 全由服务端取（spec 3.2），
+    客户端传不了。
+
+    `bias_mode` **没有默认值**，这是有意的：缺省要报「必填」（422），只有显式传
+    `null` 才表示「撤销该校准」（spec 3.4）。写成 `= None` 会让缺省也变成合法，
+    两种情形就分不开了。
+
+    取值集合是封闭的三值，用 `Literal` 表达。代价：非法值抛 `literal_error`，
+    不在 `app/common/errors.py` 的 `_MSG_CN` 里，message 回退英文原文（spec 3.8）。
+    """
+
+    bias_mode: Literal["high", "low", "ok"] | None
+
+
 class SubmissionDetailResponse(BaseModel):
     """F5 批改详情（功能 4.4-4.7）。
 
@@ -231,8 +267,11 @@ class SubmissionDetailResponse(BaseModel):
     `voice_comment_audio_id` 不给的话，功能 4.11 的语音点评音频就取不回来（前端要拿
     它走 B5 `GET /api/audio/<file_id>`）。
 
-    校准现状（`score_calibrations`）**不出**——那是 F7 的读职责，不把 F7 的回显口径
-    提前拉进 F5。
+    `calibration` 是**第七个**批改现状字段，但它来自另一张表（`score_calibrations`，
+    功能 4.10 / F7）——上面六个是 F6 写在 `submissions` 上的列。这里原来写的是「不出
+    校准，那是 F7 的读职责」，2026-10-08 推翻：F7 在《5-接口清单》里只有 POST，读职责
+    没有落点；不出的话教师打开一条已批改的提交，看不到自己勾过什么。取值口径见 F7 spec
+    §3.6（同一提交多行时取最新一条），没校准过是 `None` 而不是空对象。
 
     真库里的一个反常照实透传、不替它推断：23/24 的 teacher_score 与 teacher_comment
     已有值，但 status 仍是 `ai_scored`、reviewed_at 仍是 NULL（「写了分数但没走终审」）。
@@ -269,6 +308,8 @@ class SubmissionDetailResponse(BaseModel):
     voice_comment_text: str | None
     voice_comment_audio_id: int | None
     reviewed_at: datetime | None
+    # 4.10 AI 评分校准（F7 写入，读侧归本接口）
+    calibration: SubmissionCalibration | None
 
 
 class SubmissionReviewIn(BaseModel):
