@@ -124,3 +124,147 @@ class PendingSubmissionListResponse(BaseModel):
     homework_id: int
     homework_title: str
     submissions: list[PendingSubmissionItem]
+
+
+class CdmTag(BaseModel):
+    """F5 批改详情里的一条 CDM 归因诊断标签（功能 4.6）。
+
+    与 F4 的 `SubmissionTag` **不是同一个模型，也不要合并**：F4 只出 label + severity
+    两个字段（卡片上就显示这两样），这里出全字段。两处的字段面会各自演化，共用一个
+    模型会逼着它们同步，而它们需要的本来就不是一回事。
+
+    **与 F4 的关键差异一：confidence 不设阈值。** F4 的 tags 只取 > 0.7，那条阈值是
+    待批卡片自己的展示口径（F4 spec 3.5）；批改页是教师逐条判断 AI 对不对的地方，
+    低置信度的标签恰恰是最该被质疑、因而最该被看见的一条。真库里 23 的 0.45、
+    24 的 0.52、26 的 0.65 三条会因此出现在这里而不出现在卡片上，这是**有意的**。
+
+    **与 F4 的关键差异二：confidence 取不到的元素不丢。** F4 是拿它排序筛选的，缺了
+    没法定位；这里只是把它带出去，藏起来比带个 `null` 严重。这类元素给 None 排末尾。
+
+    `severity` 是 `defects[].status` 的原文透传（high/medium/low），不是 CSS 类名，
+    取不到给 `"unknown"`——同 F4 spec 3.11，不做白名单过滤（滤掉一个未预期的分级会
+    让标签凭空消失）。
+
+    `category` / `evidence` / `features` 是 AI 侧写入、F4 刻意不出的字段（F4 spec
+    第 1090 行已声明它们是「批改详情页（F5）的内容」）。
+    `id` 与 `defects[].id` 同名透传，供将来的逐条确认/驳回定位。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+    id: str | None
+    label: str
+    severity: str
+    confidence: float | None
+    category: str | None
+    evidence: str | None
+    features: dict | None
+
+
+class BktChange(BaseModel):
+    """F5 的 BKT 前后对比一条（功能 4.7）。
+
+    由 `submissions.bkt_before` / `bkt_after` 两个扁平字典（技法名 → P(L)）按 key
+    并集合并而来，一侧没有的技法给 None。
+
+    `delta` 由**后端**算（教师端只做展示，不该在前端算业务量），且 round 到 4 位：
+    `0.48 - 0.46` 在浮点下是 0.020000000000000018，直接出会给前端一个 18 位小数。
+    仅 before / after 都是数值时才算，否则 None。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+    skill: str
+    before: float | None
+    after: float | None
+    delta: float | None
+
+
+class LyricWord(BaseModel):
+    """F5 的歌词级偏差对比里的一个字（功能 4.4）。
+
+    **当前恒为空数组**：`submissions` 没有逐字列，`ai_detail` 也没有 lyrics/words
+    键——库里无数据源（spec 2.5）。契约现在就定死，等 F3 把 B 组结果落进 ai_detail
+    时直接读。
+
+    元素对齐 B 组 `words[]` 的**子集**（`app/services/analyze_service.py::_words`），
+    字段名用 B 组的 `word` 而不是前端 mock 的 `char`：同一份逐字偏差在 B4 与 F5 两条
+    接口上形状必须一致，将来落库时不必再翻译一次。
+
+    **不出展示层的着色档**（excellent/good/fair/punct）：《5-接口清单》3.2 的原文是
+    「着色规则在**前端**按 regions.level 渲染」。后端只出 deviation_cents 与 warning
+    （B 组已按红黄阈值算好）。
+
+    B 组 words 的另外三个字段 teacher_freq / student_freq / octave_fixed 不出——它们
+    服务于音准曲线对比图，不是「歌词级偏差对比」的最小集；将来要加是非破坏性变更。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+    index: int
+    word: str | None
+    start: float | None
+    end: float | None
+    deviation_cents: float | None
+    warning: bool | None
+
+
+class SubmissionDetailResponse(BaseModel):
+    """F5 批改详情（功能 4.4-4.7）。
+
+    学生字段平铺不嵌套，同 F4 spec 3.9（不为一个四字段对象破例）。
+
+    **三处显式空位，都是「库里没有数据源」而不是「本次没做」：**
+
+    - `lyrics` 恒为 `[]`（功能 4.4 逐字偏差无数据源，spec 2.5 / 3.5）
+    - `dimensions` 恒为 `None`（功能 4.5 四维分数无数据源，spec 2.5 / 3.6）
+    - **不出 `fusion` 键**：前端 mock 的 fusion.total（0.72）按 40/30/20/10 加权它
+      自己的 dimensions（84/84/86/80）算出来是 0.84，两数不符，真实语义文档从未
+      定义。凭空造一个只会把 mock 的错误固化进契约。总分由 `ai_score` 承担。
+      40/30/20/10 这套权重也**不进接口**——没有任何数据能与它相乘。
+
+    功能 4.5 的四块里唯一有数据的是 `feature_matrix` 与 `overall_confidence`，原样
+    透传；键名保留 AI 侧的驼峰（pitchStd 等），不做 snake_case 转换——改名会让它和
+    写入方对不上，查问题时两边对不上号。
+
+    批改现状那六个字段（status / teacher_score / teacher_comment / voice_comment_text
+    / voice_comment_audio_id / reviewed_at）是 F6 写入的列，严格说不属功能 4.4-4.7。
+    放进来是因为**没有它们本接口不可用**：status 是判「这份还批不批」的唯一依据；
+    一个「批改详情」GET 若不回当前批改结果，F6 提交完还得另调接口才知道自己写了什么；
+    `voice_comment_audio_id` 不给的话，功能 4.11 的语音点评音频就取不回来（前端要拿
+    它走 B5 `GET /api/audio/<file_id>`）。
+
+    校准现状（`score_calibrations`）**不出**——那是 F7 的读职责，不把 F7 的回显口径
+    提前拉进 F5。
+
+    真库里的一个反常照实透传、不替它推断：23/24 的 teacher_score 与 teacher_comment
+    已有值，但 status 仍是 `ai_scored`、reviewed_at 仍是 NULL（「写了分数但没走终审」，
+    DOC_ISSUES 第 622 行记过全项目还没有代码把 status 写成 reviewed）。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+    # 头部
+    submission_id: int
+    homework_id: int | None
+    homework_title: str | None
+    student_id: int | None
+    student_name: str | None
+    student_avatar: str | None
+    student_level: str | None
+    submitted_at: datetime | None
+    audio_id: int | None
+    # 4.5 多维加权融合评分
+    ai_score: float | None
+    overall_confidence: float | None
+    feature_matrix: dict | None
+    dimensions: dict | None
+    # 4.4 歌词级偏差对比
+    lyrics: list[LyricWord]
+    # 4.6 CDM 归因诊断标签
+    cdm_tags: list[CdmTag]
+    # 4.7 BKT 状态更新对比
+    bkt: list[BktChange]
+    # 批改现状
+    status: str | None
+    teacher_score: float | None
+    teacher_comment: str | None
+    voice_comment_text: str | None
+    voice_comment_audio_id: int | None
+    reviewed_at: datetime | None
