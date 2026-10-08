@@ -1010,6 +1010,8 @@ C7 落地后本次的回答：**要 `char` 与曲目/唱段归属，不要教师
 
 F1 于 2026-09-30 实现（设计 `docs/superpowers/specs/2026-09-30-homeworks-list-api-design.md`、计划 `docs/superpowers/plans/2026-09-30-homeworks-list-api.md`、代码 `app/schemas/homework.py` / `app/services/homework_service.py` / `app/api/homeworks.py`）。**前端与接口同批交付**——`homework.html` 的作业列表已接真接口，同一文件里「待批改提交」那一块仍是 mock（F4/F5 未实现）。
 
+**2026-10-08 更新**：上句已不成立——F4（待批提交列表）与 F5（右侧批改详情面板）先后接入，`HOMEWORKS` / `SUBMISSIONS` 两个 mock 常量**已随 F5 落地删除**（`homework.html:614` 留有注记），整页现在都是真数据。上句是 F1 交付当日（2026-09-30）的文件状态记录，保留原文。同一件事的后续见本条 34.5 与第 35.4 条。
+
 ### 34.1 F1 与 G7 的重叠（本轮最重要的发现）
 
 | 编号 | 接口 | 权限 | 说明 | 状态 |
