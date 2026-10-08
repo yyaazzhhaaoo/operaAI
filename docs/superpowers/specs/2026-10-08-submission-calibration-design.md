@@ -199,10 +199,21 @@ DDL 注释里 `bias_mode` 的值域就是这三个词，且 4.10 用的词是「
 | 未登录 | 401 | （走既有 `login_required`） |
 | 已登录但非教师 | 403 | （走既有 `teacher_required`） |
 | 提交不存在 | 404 | `提交不存在` |
-| `bias_mode` 非三值之一 | 400 | pydantic 校验信息（`Literal` 不给过） |
-| `bias_mode` 键缺失 | 400 | pydantic「字段必填」 |
+| `bias_mode` 非三值之一 | 422 | `bias_mode: ...`（pydantic `literal_error`，见下） |
+| `bias_mode` 键缺失 | 422 | `bias_mode: 必填` |
 
-`bias_mode: null` 是合法输入（撤销），**不是** 400。
+**校验错误一律是 422，不是 400**：`app/common/errors.py:88-90` 把 pydantic 的
+`ValidationError` 统一转成 `fail(422, ...)`，F6 的评分越界也是 422。
+
+`bias_mode: null` 是合法输入（撤销），**不会**报错。
+
+非法值那条的 message 是**英文**：`_MSG_CN`（`errors.py:34-39`）只映射了
+`missing` / `string_too_short` / `string_too_long` / `int_parsing` 四种 type，`Literal`
+ 抛的 `literal_error` 不在其中，按 `errors.py:62` 的既定原则回退英文原文（「宁可给英文，
+也不要用『参数错误』四个字把信息吞掉」）。本次不动 `_MSG_CN`——它在 `app/common/`、
+属公共层，为一个前端根本产生不出的输入动用公共层不划算。若要中文，得把
+`bias_mode` 从 `Literal` 改成 `str` + 自定义 validator 抛中文（F6 的评分越界就是这么做的），
+本次不选：取值集合是**封闭**的，`Literal` 是它的正确类型表达。
 
 ### 3.9 前端：随终审提交，F7 失败不回滚终审
 
@@ -374,7 +385,7 @@ class SubmissionCalibrationIn(BaseModel):
 ```
 
 注意用的是**无默认值**的 `bias_mode: ... | None`：字段不出现时 pydantic 报「字段必填」
-（400），显式传 `null` 才得到 `None`。这与 F6 四个字段的写法不同（那边四个都是
+（**422**，见 §3.8），显式传 `null` 才得到 `None`。这与 F6 四个字段的写法不同（那边四个都是
 `= None`，缺省合法），因为 F7 只有一个字段、没有「只改其中一项」的场景。
 
 ### 4.5 出参模型（`app/schemas/homework.py`）
@@ -383,11 +394,17 @@ class SubmissionCalibrationIn(BaseModel):
 class SubmissionCalibration(BaseModel):
     """一条校准记录。F7 的响应体与 F5 详情里的 `calibration` 字段同构，共用本类。"""
 
+    model_config = ConfigDict(from_attributes=True)
+
     bias_mode: str
     ai_score: float | None
     teacher_score: float | None
     created_at: datetime
 ```
+
+`from_attributes=True` 是必需的：F7 与 F5 都是 `model_validate(<ORM 行>)` 直接构造，
+不手抄四个字段（抄漏一个不会有任何报错，只会安静地少一个键）。`SubmissionDetailResponse`
+自己也是这个写法（`app/schemas/homework.py:243`）。
 
 `SubmissionDetailResponse`（`:209`）新增一个字段：
 
@@ -510,8 +527,8 @@ python app-d.py            # 8877；F7 不需要 celery worker
 | 6 | 学生 POST submission 25 `{"bias_mode":"high"}` | 403 |
 | 7 | 未登录 POST | 401 |
 | 8 | 教师 POST submission 99999 | 404 `提交不存在` |
-| 9 | 教师 POST submission 25 `{"bias_mode":"x"}` | 400 |
-| 10 | 教师 POST submission 25 `{}` | 400（字段必填） |
+| 9 | 教师 POST submission 25 `{"bias_mode":"x"}` | 422（message 为英文 `literal_error`，见 §3.8） |
+| 10 | 教师 POST submission 25 `{}` | 422 `bias_mode: 必填` |
 | 11 | 教师 POST `/api/submissions/abc/calibration` | 404（`<int:>` 在路由层挡掉） |
 | 12 | 教师 GET F5 详情（submission 24） | `data.calibration` 非 null，`bias_mode` 与库一致 |
 | 13 | 教师 GET F5 详情（submission 25，用例 4 之后） | `data.calibration` 为 `null` |
