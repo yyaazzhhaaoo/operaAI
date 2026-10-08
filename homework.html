@@ -975,6 +975,49 @@ function renderDetailCdm(d) {
     tags.length ? tags.map(cdmItemHtml).join("") : emptyBlock("暂无归因标签");
 }
 
+// 一条 BKT 前后对比的 HTML。**纯函数**，理由同 cdmItemHtml。
+// before / after / delta 都可能为 null——接口对两侧 skill 取并集，一侧没有就是
+// null；(null).toFixed(0) 会抛，所以每一步都先判数值再算。
+function bktItemHtml(b) {
+  const num = (v) => (typeof v === "number" && isFinite(v)) ? v : null;
+  const before = num(b.before);
+  const after = num(b.after);
+  const delta = num(b.delta);
+
+  // delta 为 null 时走 flat。**显式判**，不靠「null > 0 为假」落到 flat——那只是
+  // 巧合（null < 0 同样为假），三目一改就成未定义行为（spec 3.6）。
+  const dir = delta === null ? "flat" : (delta > 0 ? "up" : (delta < 0 ? "down" : "flat"));
+  const arrow = delta === null ? "" : (delta > 0 ? "↗" : (delta < 0 ? "↘" : "→"));
+  const pct = (v) => v === null ? "—" : `${Math.round(v * 100)}%`;
+  // 宽度直接乘：值是概率，超界的值由 .bar-wrap 的 overflow:hidden 裁掉。
+  const width = (v) => v === null ? 0 : v * 100;
+  // after 取不到时那串阈值算不出意义，用中性色兜（spec 3.6）。
+  const color = after === null ? "var(--text-muted)"
+    : (after >= 0.85 ? "#4A8F6B" : (after >= 0.60 ? "#0066B3" : (after >= 0.40 ? "#C9A84C" : "#B83A2F")));
+
+  return `
+    <div class="bkt-item">
+      <span class="skill">${esc(b.skill)}</span>
+      <div class="bar-wrap">
+        <div class="before" style="width:${width(before)}%"></div>
+        <div class="after" style="width:${width(after)}%;background:${color}"></div>
+      </div>
+      <div class="vals">
+        <span class="before">${pct(before)}</span>
+        <span class="arrow">→</span>
+        <span class="after ${dir}">${pct(after)} ${arrow}</span>
+      </div>
+    </div>`;
+}
+
+// 功能 4.7。空数组是**真库常态**（5 份里 3 份），文案要说清「本次没有」，
+// 不能与「加载失败」共用一句话（spec 3.6）。
+function renderDetailBkt(d) {
+  const rows = d.bkt || [];
+  document.getElementById("bktList").innerHTML =
+    rows.length ? rows.map(bktItemHtml).join("") : emptyBlock("本次无 BKT 状态变化");
+}
+
 // 点左侧待批卡片。角色判断不在这里（学生看不到卡片），在 fetchDetail 里——
 // 与 F4「明知会 403 就不发请求」同一处口径。
 function selectSubmission(id) {
@@ -1095,6 +1138,7 @@ function fillDetail(d) {
 
   // 各内容区块只写自己那一块（spec 4.2）：一块里的坏数据或异常不会让其它块渲染不出来。
   renderDetailCdm(d);
+  renderDetailBkt(d);
 }
 
 // ============================================
