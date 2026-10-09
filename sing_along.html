@@ -508,11 +508,9 @@ body{
       <div class="control-bar">
         <div class="control-group">
           <label>🎵 曲目</label>
-          <select id="pieceSelect" onchange="changePiece()">
-            <option value="mu">《穆桂英挂帅》· 辕门外三声炮</option>
-            <option value="guifei">《贵妃醉酒》· 海岛冰轮初转腾</option>
-            <option value="bawang">《霸王别姬》· 看大王在帐中</option>
-          </select>
+          <!-- 选项全部由 loadDemos() 从 C1 灌入。这里不放静态兜底项：
+               列表拉不到时留空态，胜过留一组 value 不是合法 demo id 的假曲目。 -->
+          <select id="pieceSelect" onchange="changePiece()"></select>
         </div>
         <div style="margin-left:auto;display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn-secondary" id="btnPlayDemo" onclick="playDemo()">▶️ 播放示范</button>
