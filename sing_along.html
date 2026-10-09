@@ -518,9 +518,9 @@ body{
         </div>
         <div style="margin-left:auto;display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn-secondary" id="btnPlayDemo" onclick="playDemo()">▶️ 播放示范</button>
-          <!-- 播放示范的停止，与分段练习标题栏里那枚 #btnStop 分开：那枚管录音
-               （开始跟唱 ↔ 停止 原位互换）。两者各自贴着自己的启动按钮，
-               不共用一枚元素在两处之间来回跳。两枚都调 stopAll()。 -->
+          <!-- 播放示范的停止。与 #btnStop 是两枚元素，各管各的流程：
+               这里 播放示范 ↔ 停止 原位互换，分段练习标题栏那枚管录音。
+               两枚都调 stopAll()，它一次把两处都换回启动态。 -->
           <button class="btn-danger" id="btnStopDemo" onclick="stopAll()" style="display:none">⏹️ 停止</button>
         </div>
       </div>
@@ -1347,9 +1347,10 @@ async function playDemo() {
   // 先进入播放态再 play()：play() 既可能被浏览器的自动播放策略拒绝，
   // 也可能因取不到音频而 reject，两条路都要能从「播放中」退回。
   isPlaying = true;
-  document.getElementById("btnPlayDemo").disabled = true;
-  document.getElementById("btnRecord").disabled = true;
+  // 与录音那边的「开始跟唱 ↔ 停止」同一套：按钮原位换成「停止」，不并排多一个
+  document.getElementById("btnPlayDemo").style.display = "none";
   document.getElementById("btnStopDemo").style.display = "inline-flex";
+  document.getElementById("btnRecord").disabled = true;
   addLog("▶️ 播放示范音频…", "info");
 
   try {
@@ -1384,8 +1385,9 @@ function stopAll() {
   if (coachingTimer) { clearTimeout(coachingTimer); coachingTimer = null; }
   document.getElementById("btnPlayDemo").disabled = false;
   document.getElementById("btnRecord").disabled = false;
+  // 两处都换回启动按钮：曲目行 停止→播放示范，分段练习标题栏 停止→开始跟唱
+  document.getElementById("btnPlayDemo").style.display = "inline-flex";
   document.getElementById("btnRecord").style.display = "inline-flex";
-  // 两枚停止都收：录音那枚（分段练习标题栏）与播放示范那枚（曲目行）
   document.getElementById("btnStop").style.display = "none";
   document.getElementById("btnStopDemo").style.display = "none";
   document.getElementById("recIndicator").style.display = "none";
