@@ -145,7 +145,11 @@ body{
   margin-left:auto;background:var(--danger);color:#fff;
   font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600;
 }
-.main-content{margin-left:200px;flex:1;padding:20px;max-width:1600px}
+/* min-width:0 不能删：它是 flex item 的默认值 auto 的覆盖。auto 让本块不能
+   窄于内容的 min-content，而 .segment-list 是横向滚动的一行卡片——段落一多
+   （demo 16 有 10 段），min-content 就大到把本块顶到 max-width，整页横向溢出
+   （实测视口 1440 撑到 1800）。归零后本块恒定收住，溢出交给卡片区自己滚。 */
+.main-content{margin-left:200px;flex:1;min-width:0;padding:20px;max-width:1600px}
 
 /* ===== 页面头部 ===== */
 .page-header{margin-bottom:16px}
