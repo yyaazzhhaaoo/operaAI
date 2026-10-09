@@ -622,130 +622,12 @@ body{
 
 <script>
 // ============================================================
-// 曲目数据
-// ============================================================
-const PIECES = {
-  mu: {
-    title: "《穆桂英挂帅》· 辕门外三声炮",
-    bpm: 128, key: "E调",
-    segments: [
-      { id: "s1", title: "段落 1", subtitle: "辕门外三声炮", duration: 2.8,
-        lyrics: [
-          {char:"辕", pinyin:"yuan", start:0.0, dur:0.4, teacherPitch:64},
-          {char:"门", pinyin:"men", start:0.4, dur:0.35, teacherPitch:66},
-          {char:"外", pinyin:"wai", start:0.75, dur:0.5, teacherPitch:67},
-          {char:"三", pinyin:"san", start:1.25, dur:0.35, teacherPitch:69},
-          {char:"声", pinyin:"sheng", start:1.6, dur:0.4, teacherPitch:71},
-          {char:"炮", pinyin:"pao", start:2.0, dur:0.8, teacherPitch:72},
-        ],
-        // 为每个字添加教师提示
-        coachingTips: [
-          { char: "辕", technique: "起音", tip: "起音稳，气息下沉，喉头放松" },
-          { char: "门", technique: "咬字", tip: "唇齿用力，声音集中，归韵到'en'" },
-          { char: "外", technique: "归韵", tip: "字头清晰，归韵'ai'，口腔打开" },
-          { char: "三", technique: "音准", tip: "舌尖抵上颚，声音明亮，音准要准" },
-          { char: "声", technique: "发音", tip: "声母稳，韵母拉开，保持气息" },
-          { char: "炮", technique: "力度", tip: "腹部用力，爆发力足，声音有穿透力" },
-        ] },
-      { id: "s2", title: "段落 2", subtitle: "如同雷震", duration: 2.4,
-        lyrics: [
-          {char:"如", pinyin:"ru", start:0.0, dur:0.4, teacherPitch:69},
-          {char:"同", pinyin:"tong", start:0.4, dur:0.4, teacherPitch:67},
-          {char:"雷", pinyin:"lei", start:0.8, dur:0.7, teacherPitch:71},
-          {char:"震", pinyin:"zhen", start:1.5, dur:0.9, teacherPitch:69},
-        ],
-        coachingTips: [
-          { char: "如", technique: "起音", tip: "轻起，柔和进入" },
-          { char: "同", technique: "咬字", tip: "舌尖抵上颚，清晰" },
-          { char: "雷", technique: "强音", tip: "收腹用力，用横膈膜给一个爆发力" },
-          { char: "震", technique: "拖腔", tip: "保持气息，声音稳定" },
-        ] },
-      { id: "s3", title: "段落 3", subtitle: "天波府走出来", duration: 2.8,
-        lyrics: [
-          {char:"天", pinyin:"tian", start:0.0, dur:0.35, teacherPitch:67},
-          {char:"波", pinyin:"bo", start:0.35, dur:0.35, teacherPitch:66},
-          {char:"府", pinyin:"fu", start:0.7, dur:0.5, teacherPitch:64},
-          {char:"走", pinyin:"zou", start:1.2, dur:0.35, teacherPitch:67},
-          {char:"出", pinyin:"chu", start:1.55, dur:0.35, teacherPitch:69},
-          {char:"来", pinyin:"lai", start:1.9, dur:0.9, teacherPitch:71},
-        ],
-        coachingTips: [
-          { char: "天", technique: "起音", tip: "气息下沉，声音通透" },
-          { char: "波", technique: "咬字", tip: "唇齿配合，圆润" },
-          { char: "府", technique: "归韵", tip: "归韵'u'，口型保持" },
-          { char: "走", technique: "音准", tip: "音准要稳，不要滑" },
-          { char: "出", technique: "发音", tip: "声母清晰，韵母饱满" },
-          { char: "来", technique: "拖腔", tip: "气息支撑，保持音高" },
-        ] },
-      { id: "s4", title: "段落 4", subtitle: "保国臣", duration: 2.2,
-        lyrics: [
-          {char:"保", pinyin:"bao", start:0.0, dur:0.7, teacherPitch:72},
-          {char:"国", pinyin:"guo", start:0.7, dur:0.4, teacherPitch:71},
-          {char:"臣", pinyin:"chen", start:1.1, dur:1.1, teacherPitch:69},
-        ],
-        coachingTips: [
-          { char: "保", technique: "强音", tip: "'保'字要唱出气势，口腔打开，声音送出去" },
-          { char: "国", technique: "归韵", tip: "归韵'uo'，声音饱满" },
-          { char: "臣", technique: "拖腔", tip: "保持气息，声音稳定收尾" },
-        ] },
-    ] },
-  guifei: {
-    title: "《贵妃醉酒》· 海岛冰轮初转腾",
-    bpm: 96, key: "G调",
-    segments: [
-      { id:"g1", title:"段落 1", subtitle:"海岛冰轮", duration:3.5,
-        lyrics: [
-          {char:"海", pinyin:"hai", start:0.0, dur:0.5, teacherPitch:67},
-          {char:"岛", pinyin:"dao", start:0.5, dur:0.5, teacherPitch:69},
-          {char:"冰", pinyin:"bing", start:1.0, dur:0.5, teacherPitch:71},
-          {char:"轮", pinyin:"lun", start:1.5, dur:2.0, teacherPitch:72},
-        ],
-        coachingTips: [
-          { char: "海", technique: "起音", tip: "起音要稳，想象声音从海底升起" },
-          { char: "岛", technique: "咬字", tip: "舌尖抵上颚，清晰" },
-          { char: "冰", technique: "音准", tip: "音准要准，声音明亮" },
-          { char: "轮", technique: "拖腔", tip: "'轮'字拖腔要圆润，像月亮在空中缓缓转动" },
-        ] },
-      { id:"g2", title:"段落 2", subtitle:"初转腾", duration:3.0,
-        lyrics: [
-          {char:"初", pinyin:"chu", start:0.0, dur:0.5, teacherPitch:71},
-          {char:"转", pinyin:"zhuan", start:0.5, dur:0.8, teacherPitch:69},
-          {char:"腾", pinyin:"teng", start:1.3, dur:1.7, teacherPitch:67},
-        ],
-        coachingTips: [
-          { char: "初", technique: "起音", tip: "轻起，柔和" },
-          { char: "转", technique: "咬字", tip: "舌尖抵上颚，清晰" },
-          { char: "腾", technique: "拖腔", tip: "保持气息，声音稳定" },
-        ] }
-    ] },
-  bawang: {
-    title: "《霸王别姬》· 看大王在帐中",
-    bpm: 110, key: "D调",
-    segments: [
-      { id:"b1", title:"段落 1", subtitle:"看大王在帐中", duration:4.0,
-        lyrics: [
-          {char:"看", pinyin:"kan", start:0.0, dur:0.5, teacherPitch:62},
-          {char:"大", pinyin:"da", start:0.5, dur:0.4, teacherPitch:64},
-          {char:"王", pinyin:"wang", start:0.9, dur:0.8, teacherPitch:66},
-          {char:"在", pinyin:"zai", start:1.7, dur:0.4, teacherPitch:64},
-          {char:"帐", pinyin:"zhang", start:2.1, dur:0.6, teacherPitch:62},
-          {char:"中", pinyin:"zhong", start:2.7, dur:1.3, teacherPitch:61},
-        ],
-        coachingTips: [
-          { char: "看", technique: "起音", tip: "'看'字要唱出英雄气概，声音要有穿透力" },
-          { char: "大", technique: "咬字", tip: "口腔打开，声音饱满" },
-          { char: "王", technique: "拖腔", tip: "'王'字拖腔要稳，像霸王举鼎一般沉稳" },
-          { char: "在", technique: "音准", tip: "音准要稳" },
-          { char: "帐", technique: "归韵", tip: "归韵'ang'，口腔打开" },
-          { char: "中", technique: "拖腔", tip: "保持气息，声音稳定" },
-        ] }
-    ] }
-};
-
-// ============================================================
 // 全局状态
 // ============================================================
-let currentPiece = "mu";
+let demos = [];              // C1 GET /api/demos
+let segments = [];           // C2 当前曲目的分段
+let currentLyrics = [];      // C3 当前段落的逐字歌词
+let currentDemoId = null;    // 当前曲目 id（数字，null = 还没选）
 let currentSegmentIdx = -1;
 let isPlaying = false;
 let isRecording = false;
@@ -773,6 +655,69 @@ const timeCurrent = document.getElementById("timeCurrent");
 const timeTotal = document.getElementById("timeTotal");
 const logPanel = document.getElementById("logPanel");
 const tipsGrid = document.getElementById("tipsGrid");
+
+function demoTitle() {
+  const d = demos.find(x => x.id === currentDemoId);
+  return d ? d.title : "";
+}
+
+// ============================================================
+// 数据加载
+// ============================================================
+async function loadDemos() {
+  demos = await apiGet("/api/demos");
+  const sel = document.getElementById("pieceSelect");
+  if (demos.length === 0) {
+    const o = document.createElement("option");
+    o.value = "";
+    o.textContent = "（库里还没有曲目）";
+    sel.replaceChildren(o);
+    return;
+  }
+  // 用 createElement + textContent 而不是 innerHTML：title 来自数据库
+  sel.replaceChildren(...demos.map(d => {
+    const o = document.createElement("option");
+    o.value = String(d.id);
+    o.textContent = d.title;
+    return o;
+  }));
+  sel.value = String(demos[0].id);
+}
+
+async function loadSegments(demoId) {
+  segments = await apiGet(`/api/demos/${demoId}/segments`);
+  currentSegmentIdx = -1;
+  currentLyrics = [];
+  renderSegments();
+  segmentInfo.textContent = demoTitle() + " · 请选择段落";
+  renderTeacherTips();
+  drawEmptyState();
+}
+
+// ============================================================
+// 取数与转义
+// ============================================================
+// 渲染数据库文本必须转义：曲目名/唱词/提示都来自库里，直接拼进 innerHTML
+// 就是注入面。同文件顶部登录条对 display_name 用的是 textContent，这里因为
+// 要用模板字符串拼结构，改用等价的转义。
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+// 统一取数：同源相对路径（经 nginx 代理到 Flask），必须带 Cookie——跨源 fetch
+// 默认不带 Cookie，后端 login_required 只会看到空 session 并回 401。
+// 统一信封 {code, message, data}：HTTP 非 2xx 或 code !== 0 都当失败抛出，
+// 调用方只需 try/catch 一处，不必各自拆信封。
+async function apiGet(path) {
+  const r = await fetch(path, { credentials: "same-origin" });
+  let body = null;
+  try { body = await r.json(); } catch (e) { /* 非 JSON（如 nginx 的 502 页） */ }
+  if (!r.ok) throw new Error((body && body.message) || ("HTTP " + r.status));
+  if (!body || body.code !== 0) throw new Error((body && body.message) || "响应格式错误");
+  return body.data;
+}
 
 // ============================================================
 // 工具函数
@@ -823,9 +768,11 @@ function drawGrid() {
   }
 }
 function drawLyricsAndGrid() {
-  const seg = PIECES[currentPiece].segments[currentSegmentIdx];
-  if (!seg || !seg.lyrics) return;
-  seg.lyrics.forEach((ly, idx) => {
+  if (currentLyrics.length === 0) return;
+  currentLyrics.forEach((ly, idx) => {
+    // start 可空（C2/C3 spec）：没有时间点的字画不出来，跳过即可——
+    // 不能让一个脏条目打断整条渲染。
+    if (!Number.isFinite(ly.start)) return;
     const x = timeToX(ly.start);
     if (x >= 0 && x <= canvasWidth) {
       const isActive = (idx === currentWordIndex);
@@ -844,14 +791,7 @@ function drawLyricsAndGrid() {
       ctx.textBaseline = "bottom";
       ctx.font = isActive ? "bold 18px sans-serif" : "15px sans-serif";
       ctx.fillStyle = isActive ? "#0066B3" : (isPassed ? "#4A8F6B" : "#8A7A6A");
-      ctx.fillText(ly.char, x, TOP_OFFSET - 4);
-      ctx.restore();
-      ctx.save();
-      ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.font = "10px sans-serif";
-      ctx.fillStyle = isActive ? "rgba(0,102,179,0.7)" : "rgba(140,125,110,0.5)";
-      ctx.fillText(ly.pinyin, x, TOP_OFFSET - 20);
+      ctx.fillText(ly.char || "", x, TOP_OFFSET - 4);
       ctx.restore();
     }
   });
@@ -995,85 +935,105 @@ function drawTimeline() {
 // ============================================================
 // 教师提示渲染 (新功能)
 // ============================================================
-function renderTeacherTips(seg) {
-  if (!seg) {
+function renderTeacherTips() {
+  if (currentSegmentIdx < 0) {
     tipsGrid.innerHTML = `<span style="color:var(--text-muted);font-size:14px;">请选择一个分段，查看对应的技巧提示。</span>`;
     return;
   }
-  const tipsMap = {};
-  if (seg.coachingTips) {
-    seg.coachingTips.forEach(t => { tipsMap[t.char] = t.tip; });
+  if (currentLyrics.length === 0) {
+    tipsGrid.innerHTML = `<span style="color:var(--text-muted);font-size:14px;">该唱段还没有歌词数据。</span>`;
+    return;
   }
-  let html = '';
-  seg.lyrics.forEach(ly => {
-    const hint = tipsMap[ly.char] || '';
-    html += `
+  // tip 是逐字的（C3 的 lyrics[].tip），不再按字查 coachingTips 表——
+  // 原来的按字建 map 在同段出现重复字时会互相覆盖。
+  tipsGrid.innerHTML = currentLyrics.map(ly => `
       <div class="tip-item">
-        <span class="char">${ly.char}</span>
-        <span class="hint">${hint}</span>
+        <span class="char">${escapeHtml(ly.char || "")}</span>
+        <span class="hint">${escapeHtml(ly.tip || "")}</span>
       </div>
-    `;
-  });
-  tipsGrid.innerHTML = html;
+    `).join("");
 }
 
 // ============================================================
 // 曲目 / 段落 / 歌词渲染
 // ============================================================
 function renderSegments() {
-  const piece = PIECES[currentPiece];
   const container = document.getElementById("segmentList");
-  container.innerHTML = piece.segments.map((seg, idx) => {
+  if (currentDemoId === null) {
+    container.innerHTML = `<span style="color:var(--text-muted);font-size:14px;">请先选择曲目。</span>`;
+    return;
+  }
+  if (segments.length === 0) {
+    container.innerHTML = `<span style="color:var(--text-muted);font-size:14px;">该曲目还没解析出唱段。</span>`;
+    return;
+  }
+  container.innerHTML = segments.map((seg, idx) => {
     const isActive = idx === currentSegmentIdx;
-    const isCompleted = seg.completed;
-    const statusCls = isCompleted ? "done" : (isActive ? "ready" : "pending");
-    const statusText = isCompleted ? "✅ 已完成" : (isActive ? "▶ 当前" : "待练习");
+    const seq = (seg.seq != null) ? seg.seq : (idx + 1);
+    // duration 在 DDL 上可空：null 上直接 .toFixed 会抛 TypeError 打断整个 map，
+    // 整张列表渲染不出来。库里有真实数据命中这条。
+    const dur = Number.isFinite(seg.duration) ? (seg.duration.toFixed(1) + "s") : "时长未知";
     return `
-      <div class="segment-item ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}" onclick="selectSegment(${idx})">
-        <div class="segment-title">${seg.title}</div>
-        <div class="segment-meta">${seg.subtitle} · ${seg.duration.toFixed(1)}s</div>
-        <span class="segment-status ${statusCls}">${statusText}</span>
+      <div class="segment-item ${isActive ? 'active' : ''}" onclick="selectSegment(${idx})">
+        <div class="segment-title">第 ${seq} 段 · ${escapeHtml(seg.title || "")}</div>
+        <div class="segment-meta">${dur}</div>
+        <span class="segment-status ${isActive ? 'ready' : 'pending'}">${isActive ? "▶ 当前" : "待练习"}</span>
       </div>
     `;
   }).join("");
 }
-function selectSegment(idx) {
+async function selectSegment(idx) {
   if (isRecording || isPlaying) stopAll();
   currentSegmentIdx = idx;
   renderSegments();
-  const seg = PIECES[currentPiece].segments[idx];
-  segmentInfo.textContent = `${PIECES[currentPiece].title} · ${seg.title} · ${seg.subtitle}`;
-  prepareTeacherCurve(seg);
-  // 加载教师提示
-  renderTeacherTips(seg);
+  const seg = segments[idx];
+  try {
+    const detail = await apiGet(`/api/segments/${seg.id}`);
+    currentLyrics = Array.isArray(detail.lyrics) ? detail.lyrics : [];
+  } catch (e) {
+    currentLyrics = [];
+    addLog(`加载唱段详情失败：${e.message}`, "error");
+  }
+  const seq = (seg.seq != null) ? seg.seq : (idx + 1);
+  segmentInfo.textContent = `${demoTitle()} · 第 ${seq} 段 · ${seg.title || ""}`;
+  prepareTeacherCurve();
+  renderTeacherTips();
   currentWordIndex = -1;
   studentPoints = [];
   syncCurrentTime = 0;
   drawTimeline();
-  addLog(`选择段落: ${seg.title} (${seg.subtitle})`, "info");
+  addLog(`选择段落: 第 ${seq} 段 ${seg.title || ""}`, "info");
 }
-function prepareTeacherCurve(seg) {
+function prepareTeacherCurve() {
   teacherPoints = [];
-  segmentDuration = seg.duration;
+  const seg = segments[currentSegmentIdx];
+  segmentDuration = (seg && Number.isFinite(seg.duration)) ? seg.duration : 0;
   const sampleRate = 0.02;
-  for (let t = 0; t <= seg.duration; t += sampleRate) {
+  for (let t = 0; t <= segmentDuration; t += sampleRate) {
     let pitch = null;
-    for (let i = 0; i < seg.lyrics.length; i++) {
-      const ly = seg.lyrics[i];
-      if (t >= ly.start && t < ly.start + ly.dur) {
-        pitch = ly.teacherPitch;
+    for (let i = 0; i < currentLyrics.length; i++) {
+      const ly = currentLyrics[i];
+      // pitch === null 表示这是标点（C3 spec）；start/duration 可空。
+      // 三者任一不成立就跳过这一格，不参与曲线。
+      if (ly.pitch === null || !Number.isFinite(ly.pitch)
+          || !Number.isFinite(ly.start) || !Number.isFinite(ly.duration)) continue;
+      if (t >= ly.start && t < ly.start + ly.duration) {
+        pitch = ly.pitch;
         const edge = 0.03;
         if (i > 0 && t < ly.start + edge) {
-          const prev = seg.lyrics[i-1];
-          const ratio = (t - ly.start) / edge;
-          pitch = prev.teacherPitch + (ly.teacherPitch - prev.teacherPitch) * ratio;
+          const prev = currentLyrics[i - 1];
+          // 前一个字可能是标点（pitch 为 null），那样就算不出过渡，直接用本字音高
+          if (Number.isFinite(prev.pitch)) {
+            const ratio = (t - ly.start) / edge;
+            pitch = prev.pitch + (ly.pitch - prev.pitch) * ratio;
+          }
         }
         break;
       }
     }
-    if (pitch !== null) teacherPoints.push({t, pitch});
+    if (pitch !== null) teacherPoints.push({ t, pitch });
   }
-  timeTotal.textContent = seg.duration.toFixed(2) + "s";
+  timeTotal.textContent = segmentDuration.toFixed(2) + "s";
 }
 
 // ============================================================
@@ -1136,18 +1096,21 @@ async function toggleRecord() {
 function recordLoop(now) {
   if (!isRecording) return;
   const elapsed = (now - recordStartTime) / 1000;
-  const seg = PIECES[currentPiece].segments[currentSegmentIdx];
-  if (elapsed > seg.duration + 0.5) {
+  const seg = segments[currentSegmentIdx];
+  if (!seg) { stopRecordingAndAnalyze(); return; }
+  if (elapsed > ((Number.isFinite(seg.duration) ? seg.duration : 0) + 0.5)) {
     stopRecordingAndAnalyze();
     return;
   }
 
   let widx = -1;
   let teacherPitchNow = null;
-  for (let i = 0; i < seg.lyrics.length; i++) {
-    if (elapsed >= seg.lyrics[i].start && elapsed < seg.lyrics[i].start + seg.lyrics[i].dur) {
+  for (let i = 0; i < currentLyrics.length; i++) {
+    const ly = currentLyrics[i];
+    if (Number.isFinite(ly.start) && Number.isFinite(ly.duration)
+        && elapsed >= ly.start && elapsed < ly.start + ly.duration) {
       widx = i;
-      teacherPitchNow = seg.lyrics[i].teacherPitch;
+      teacherPitchNow = ly.pitch;
       break;
     }
   }
@@ -1167,10 +1130,8 @@ function recordLoop(now) {
   if (widx !== currentWordIndex) {
     currentWordIndex = widx;
     if (widx >= 0) {
-      const currentLyric = seg.lyrics[widx];
-      // 从静态提示中查找动态提示（备用）
-      const tip = seg.coachingTips?.find(t => t.char === currentLyric.char);
-      if (tip) showCoaching(tip.tip, tip.char);
+      const currentLyric = currentLyrics[widx];
+      if (currentLyric.tip) showCoaching(currentLyric.tip, currentLyric.char);
     }
     updateMetrics(elapsed, seg, widx);
   }
@@ -1184,8 +1145,10 @@ function recordLoop(now) {
 
 function updateMetrics(elapsed, seg, widx) {
   if (widx < 0) return;
-  const ly = seg.lyrics[widx];
-  const teacherP = ly.teacherPitch;
+  const ly = currentLyrics[widx];
+  // 标点没有音高（pitch 为 null），算不出偏差，直接不更新读数
+  if (!ly || !Number.isFinite(ly.pitch)) return;
+  const teacherP = ly.pitch;
 
   let nearest = null;
   for (let i = studentPoints.length - 1; i >= 0; i--) {
@@ -1321,10 +1284,13 @@ function playDemo() {
       addLog("示范播放完成", "success");
       return;
     }
-    const seg = PIECES[currentPiece].segments[currentSegmentIdx];
+    const seg = segments[currentSegmentIdx];
+    if (!seg) { stopAll(); return; }
     let widx = -1;
-    for (let i = 0; i < seg.lyrics.length; i++) {
-      if (elapsed >= seg.lyrics[i].start && elapsed < seg.lyrics[i].start + seg.lyrics[i].dur) {
+    for (let i = 0; i < currentLyrics.length; i++) {
+      const ly = currentLyrics[i];
+      if (Number.isFinite(ly.start) && Number.isFinite(ly.duration)
+          && elapsed >= ly.start && elapsed < ly.start + ly.duration) {
         widx = i; break;
       }
     }
@@ -1379,16 +1345,27 @@ function stopAll() {
   addLog("⏹️ 已停止", "info");
 }
 
-function changePiece() {
-  currentPiece = document.getElementById("pieceSelect").value;
-  currentSegmentIdx = -1;
+async function changePiece() {
+  const sel = document.getElementById("pieceSelect");
+  currentDemoId = sel.value ? Number(sel.value) : null;
+  currentLyrics = [];
+  segments = [];
   stopAll();
-  renderSegments();
-  segmentInfo.textContent = PIECES[currentPiece].title + " · 请选择段落";
-  // 清空教师提示
-  renderTeacherTips(null);
-  drawEmptyState();
-  addLog(`切换曲目: ${PIECES[currentPiece].title}`, "info");
+  if (currentDemoId === null) {
+    renderSegments();
+    segmentInfo.textContent = "请选择曲目";
+    renderTeacherTips();
+    drawEmptyState();
+    return;
+  }
+  try {
+    await loadSegments(currentDemoId);
+    addLog(`切换曲目: ${demoTitle()}`, "info");
+  } catch (e) {
+    segments = [];
+    renderSegments();
+    addLog(`加载分段失败：${e.message}`, "error");
+  }
 }
 
 // ============================================================
@@ -1403,12 +1380,17 @@ window.addEventListener("resize", () => {
 // ============================================================
 // 初始化
 // ============================================================
-function init() {
+async function init() {
   initCanvas();
   drawEmptyState();
   renderSegments();
-  renderTeacherTips(null);
-  addLog("🚀 智能陪练已加载，选择曲目和段落开始练习", "info");
+  renderTeacherTips();
+  try {
+    await loadDemos();
+    addLog("🚀 智能陪练已加载，选择曲目和段落开始练习", "info");
+  } catch (e) {
+    addLog(`加载曲目列表失败：${e.message}`, "error");
+  }
 }
 init();
 </script>
