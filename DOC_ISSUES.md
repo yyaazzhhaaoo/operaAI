@@ -1384,68 +1384,73 @@ F6 之后，一份截止日期还没到的作业只要批完全部提交就会�
 关联列是 `teacher_demos.audio_id → audio_files.id`（**没有 `demos` 表**，查库时别写错表名）。
 `400` 的响应体是统一信封的 `{"code":400,"message":"非法的音频文件名"}`。
 
-### 40.2 两个互相独立的缺陷
+### 40.2 根因：代码只实现了一个平铺目录，没实现「示范音频单独放 `uploads/demos/`」这个分层
 
-**① `file_path` 形状与代码约定不符（数据错，不是代码错）。**
+**产品口径（2026-10-09 确认）**：`uploads/` 下平铺的 wav 是**学生练习录音**，
+`uploads/demos/` 下的是**示范库音频**，两者要有意分开。
 
-上传链路（`app/common/storage.py` 的 `save`）生成的是**裸文件名**（`uuid4().hex + 后缀`），
-`storage.resolve()` 就按「相对 `upload_dir` 的名字」拼路径：
+但 `app/common/storage.py` 是**单目录模型**，表达不了这个分层：
 
 ```python
+# save()：一律写到 uploads/ 根，文件名是 uuid——没有任何目录参数
+dest = settings.upload_dir / stored_name
+
+# resolve()：守卫要求父目录「正好」是 uploads/
 root = settings.upload_dir.resolve()
 path = (root / stored_name).resolve()
 if path.parent != root:
     raise BusinessError(400, "非法的音频文件名")
 ```
 
-而这 4 条数据的 `file_path` 带了 `uploads/` 前缀，被拼成 `uploads/uploads/demos/…`，
-父目录不等于 `uploads/`，于是 400。**`resolve()` 的行为与它的文档字符串一致，它没错**——
-错的是种进库里的那些值：它们记的是「相对项目根」的路径，而列的约定是「相对 `upload_dir`」。
+- `save()` 没有目标目录参数，产出的永远是裸名 → 示范音频**不可能**落到 `demos/` 下。
+- `resolve()` 的 `path.parent != root` 让**任何子目录都不合法**：就算把前缀去掉、
+  写成 `demos/muguaying_yuanmenwai.wav`（解读自洽、文件也真在那儿），照样 400。
 
-源头大概率是 `schema.sql` 第 48 行那句注释——`file_path VARCHAR(255) NOT NULL, -- uploads/ 相对路径`。
-「uploads/ 相对路径」两种读法都成立（相对 uploads/、还是有一层 uploads/ 的相对路径），
-灌种子数据的人按后一种理解了。**改数据时要顺手把这句注释改明确**，否则同一个坑会再踩一次。
+全仓 grep `uploads/demos`，**代码与 SQL 里一次都没有出现**（只有本次的文档提到）。
+所以那 4 行的值是**手工插入**的，按「相对项目根」的写法，表达的正是代码不支持的那个分层。
 
-**② 文件本身也不在（或不在该在的位置）。**
+三种 `file_path` 形态的实测：
 
-`uploads/demos/` 下**只有** `muguaying_yuanmenwai.wav` 一个文件（demo 16 那条）；
-76/77/78 指向的文件在磁盘上根本不存在。audio 74 那个裸名文件同样不在 `uploads/` 下，故 404。
-
-**③ `resolve()` 的契约是「文件名直接躺在 `uploads/` 下」，不接受任何子目录。**
-
-守卫是 `if path.parent != root: raise 400`，`path.parent` 必须**正好**是 `uploads/`。
-所以 `demos/` 这一层目录本身就不被支持——即使把前缀 `uploads/` 去掉、
-写成 `demos/muguaying_yuanmenwai.wav`（这个相对路径的解读是自洽的、文件也真的在那儿），
-仍然 400。
-
-三者叠起来，demo 16 是**双重卡死**：值既有前缀错误，又指进了子目录。实测三种形态：
-
-| `file_path` 写法 | 守卫 | 文件在不在 |
+| 写法 | 守卫 | 文件在不在 |
 |---|---|---|
-| `uploads/demos/muguaying_yuanmenwai.wav`（现值） | **400** | — |
-| `muguaying_yuanmenwai.wav`（上传链路产出的裸名形态） | 通过 | **False** |
+| `uploads/demos/muguaying_yuanmenwai.wav`（75–78 现值） | **400** | demo 16 有 |
+| `muguaying_yuanmenwai.wav`（`save()` 产出的形态） | 通过 | **False**（它在 `demos/` 下） |
 | `demos/muguaying_yuanmenwai.wav` | **400** | True |
 
-**所以只把 ① 的路径形状改对，demo 16 只是从 400 变成 404，仍然一首都放不出**——
-还得同时把文件挪到 `uploads/` 根下。修 ① 不等于修好。
+**没有任何一种现有写法能让 demo 16 出声**，所以这不是「把数据改对」能了结的事，得改代码。
+（上一版本条把它记成「数据错、代码没错」，是错的：方向反了。）
 
-### 40.3 影响与当前口径
+### 40.3 连带：Demucs 解析链路用同一个 `resolve()`，同样断
 
-- 影响面不止跟唱页：`demo_library.html` 的详情区、`pitch_comparison.html` 的分析链路
-  （基准音频）只要走到「按 `file_id` 取示范音频」这一步，同样拿不到音频。
+`app/services/parse_service.py:246` 也是 `storage.resolve(audio.file_path)`。
+按现值它同样抛 400，**示范库上传后的解析今天跑不通**。demo 16 现有那 10 个分段
+可能产生于这些 `file_path` 被改成带前缀之前——`segments` 表没有时间戳列，
+无法据此判断，**不能拿它当「解析链路还活着」的证据**。
+
+### 40.4 影响
+
+- `sing_along.html` 的播放示范、`demo_library.html` 的详情区、`pitch_comparison.html`
+  的分析链路（基准音频），只要走到「按 `file_id` 取示范音频」这一步，全部拿不到音频。
+- 示范库上传后的解析同样断（见 40.3）。
 - **本轮（`docs/superpowers/specs/2026-10-09-sing-along-list-and-demo-playback-design.md`）
   不改后端、不改库、不动磁盘文件**：前端按 `<audio>` 的 `error` 事件降级为日志提示，
   播放链路的代码路径完整可验，但听不到声音。
-- 修复要**三件事一起做**，少一件都还是放不出（见 40.2）：
-  1. 把 `file_path` 改成裸文件名。`resolve()` 不要放宽——给脏数据开口子会连带
-     放行 `../` 一类的路径穿越，倾向于改数据。
-  2. 把音频文件**平铺到 `uploads/` 根下**（现在的 `uploads/demos/` 这一层不被支持）。
-     **这一步需要音频源文件，目前不在仓库里**（`../艺校_docs/` 只有另几个素材）。
-     仓库里现存的只有 demo 16 那一个 wav，挪个位置就有。
-  3. 其余 3 条的源文件补进来，否则它们永远是 404。
-- 想先只验通链路，最小动作是第 1 + 2 步只做 demo 16 那一条：
-  `file_path` 改 `muguaying_yuanmenwai.wav`，文件从 `uploads/demos/` 挪到 `uploads/`。
-  这不会让别的曲目变好，也不会更坏。
+
+### 40.5 修复方向（改代码，不是挪文件）
+
+1. `resolve()` 的守卫从「父目录正好是 root」放宽到「解析结果必须落在 root 之内」
+   （`root in path.parents` 之类）。**`..` 逃逸仍然要挡**，路径穿越防护不能丢——
+   这是放宽守卫时最容易顺手弄坏的地方。
+2. `save()` 加目标子目录参数：示范音频落 `demos/`，学生录音仍落根目录。
+   调用方是 `audio_service.save_upload`，要能区分这两种。
+3. `schema.sql` 第 48 行那句注释要说清楚列约定：**相对 `upload_dir`、可含一层 `demos/`、
+   不带 `uploads/` 前缀**。现在那句「uploads/ 相对路径」两种读法都成立，
+   正是脏值能进来的口子。
+4. 数据改成 `demos/muguaying_yuanmenwai.wav` 这类形态。
+5. **76/77/78 的源文件本身仍然缺失**，补文件需要仓库里没有的素材
+   （`../艺校_docs/` 只有另几个素材）。这一步与代码修复无关，1–4 做完它们还是 404。
+
+改完 1–4，只有 demo 16 一首能真正出声。
 
 ---
 
