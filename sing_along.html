@@ -661,6 +661,51 @@ function demoTitle() {
   return d ? d.title : "";
 }
 
+// 示范音频：游离的 Audio 实例，不往 DOM 塞 <audio> 元素——页面没有播放器控件的
+// 设计位，一切播控都走既有的 btnPlayDemo / btnStop。
+const demoAudio = new Audio();
+demoAudio.preload = "none";
+const audioUrlCache = new Map();   // demoId -> url|null，懒加载后缓存
+let audioError = false;            // 本次播放是否已由 error 事件报过错，防重复日志
+let playToken = 0;                 // playDemo 的重入令牌，见该函数
+
+// 音频 url 懒加载：C1 的曲目列表不含音频地址，带 url 的是示范库详情。
+// 该接口只需登录（学生可调）。取一次就缓存，同一曲目不再重复请求。
+async function resolveAudioUrl(demoId) {
+  if (audioUrlCache.has(demoId)) return audioUrlCache.get(demoId);
+  const detail = await apiGet(`/api/demo/library/${demoId}`);
+  const url = detail.url || null;
+  audioUrlCache.set(demoId, url);
+  return url;
+}
+
+// 时长要等 loadedmetadata——play() 返回时 duration 常常还是 NaN
+demoAudio.addEventListener("loadedmetadata", () => {
+  if (Number.isFinite(demoAudio.duration)) {
+    timeTotal.textContent = demoAudio.duration.toFixed(2) + "s";
+  }
+});
+// 进度条与时间由音频真实的 currentTime 驱动（播放示范时画布不动，
+// 但进度条反映整首的播放进度）
+demoAudio.addEventListener("timeupdate", () => {
+  if (!isPlaying) return;
+  const d = demoAudio.duration;
+  if (Number.isFinite(d) && d > 0) {
+    progressFill.style.width = Math.min(100, (demoAudio.currentTime / d) * 100) + "%";
+  }
+  timeCurrent.textContent = demoAudio.currentTime.toFixed(2) + "s";
+});
+demoAudio.addEventListener("ended", () => {
+  stopAll();
+  addLog("示范播放完成", "success");
+});
+// 当前后端还不能提供示范音频（DOC_ISSUES 第 40 条），这条是常态路径而非边角
+demoAudio.addEventListener("error", () => {
+  audioError = true;
+  addLog("示范音频加载失败：后端未能提供该音频", "error");
+  stopAll();
+});
+
 // ============================================================
 // 数据加载
 // ============================================================
@@ -1266,43 +1311,50 @@ function simulateAnalysisAfterRecord() {
 // ============================================================
 // 示范播放
 // ============================================================
-function playDemo() {
-  if (currentSegmentIdx < 0) { alert("请先选择一个练习段落"); return; }
+async function playDemo() {
+  // 播的是整首，与段落无关——不再要求「先选一个练习段落」
+  if (currentDemoId === null) { alert("请先选择曲目"); return; }
   if (isRecording) stopAll();
+
+  // 连点两次时两次调用都在 await 里，后者会设 src 打断前者的 play()。
+  // 用令牌让先到的那次在 await 之后直接放弃，只剩最后一次真正落地。
+  const token = ++playToken;
+
+  let url;
+  try {
+    url = await resolveAudioUrl(currentDemoId);
+  } catch (e) {
+    if (token === playToken) addLog(`获取示范音频失败：${e.message}`, "error");
+    return;
+  }
+  if (token !== playToken) return;
+  if (!url) {
+    addLog("该曲目没有示范音频", "warn");
+    document.getElementById("btnPlayDemo").disabled = true;
+    return;
+  }
+
+  audioError = false;
+  demoAudio.src = url;
+  demoAudio.currentTime = 0;
+
+  // 先进入播放态再 play()：play() 既可能被浏览器的自动播放策略拒绝，
+  // 也可能因取不到音频而 reject，两条路都要能从「播放中」退回。
   isPlaying = true;
-  const startTime = performance.now();
   document.getElementById("btnPlayDemo").disabled = true;
   document.getElementById("btnRecord").disabled = true;
   document.getElementById("btnStop").style.display = "inline-flex";
-  addLog("▶️ 播放示范音频...", "info");
+  addLog("▶️ 播放示范音频…", "info");
 
-  function demoLoop(now) {
-    if (!isPlaying) return;
-    const elapsed = (now - startTime) / 1000;
-    if (elapsed >= segmentDuration) {
-      stopAll();
-      addLog("示范播放完成", "success");
-      return;
-    }
-    const seg = segments[currentSegmentIdx];
-    if (!seg) { stopAll(); return; }
-    let widx = -1;
-    for (let i = 0; i < currentLyrics.length; i++) {
-      const ly = currentLyrics[i];
-      if (Number.isFinite(ly.start) && Number.isFinite(ly.duration)
-          && elapsed >= ly.start && elapsed < ly.start + ly.duration) {
-        widx = i; break;
-      }
-    }
-    if (widx !== currentWordIndex) {
-      currentWordIndex = widx;
-    }
-    syncCurrentTime = elapsed;
-    drawTimeline();
-    updateProgress(elapsed);
-    requestAnimationFrame(demoLoop);
+  try {
+    await demoAudio.play();
+  } catch (e) {
+    // AbortError 是「被打断」（用户按了停止、或又点了播放），不是播放失败
+    if (e.name === "AbortError") return;
+    // 取不到音频时 error 事件已接管并打过日志；这里只兜「自动播放被拒」
+    if (!audioError) addLog(`播放失败：${e.message}`, "error");
+    if (isPlaying) stopAll();
   }
-  requestAnimationFrame(demoLoop);
 }
 
 // ============================================================
@@ -1311,6 +1363,11 @@ function playDemo() {
 function stopAll() {
   isPlaying = false;
   isRecording = false;
+  // src 为空时设 currentTime 无意义，跳过
+  if (demoAudio.src) {
+    demoAudio.pause();
+    demoAudio.currentTime = 0;
+  }
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop();
   }
