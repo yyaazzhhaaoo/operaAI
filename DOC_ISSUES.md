@@ -1452,6 +1452,50 @@ if path.parent != root:
 
 改完 1–4，只有 demo 16 一首能真正出声。
 
+### 40.6 修复进展（2026-10-09）
+
+代码侧与数据侧都已修，见 `docs/superpowers/specs/2026-10-09-upload-storage-subdir-design.md`
+与 `docs/superpowers/plans/2026-10-09-upload-storage-subdir.md`：
+
+- `storage.resolve()` 守卫由 `path.parent != root` 放宽为 `root in path.parents`
+  ——允许子目录，`..` 逃逸、绝对路径、指向 root 之外的软链仍全部挡住（四种
+  形态都实测过，见下）。`storage.save()` 加 `subdir` 参数，返回值改为相对
+  `uploads/` 的路径（`demos/<hex>.wav`）。
+- `audio_service.save_upload` 透传 `subdir`；示范库上传（`demo_library.py`）传
+  `"demos"`，B1 学生录音不传、仍落 `uploads/` 根。落点由调用方显式给，
+  **不从 `access` 推导**（`access` 在接口层是 `request.form.get` 出来的，客户端可控）。
+- `schema.sql` 的列注释写明确（**实际在第 46 行**，40.5 第 3 条写成 48 是笔误）；
+  `audio_repo.create` 的 docstring 同样只说了「文件名」，一并写明确。
+- 新增 `scripts/fix_demo_audio_paths.py`（幂等可重放），把 5 行 `file_path`
+  由 `uploads/demos/…` 与裸名统一成 `demos/<文件名>`。
+- `analyze_service._require_file` 的 404 文案原本把 `file_path` 拼进去，
+  现在只报 audio id——子目录名不再透给前端。
+
+**实测结果**：
+
+| audio id | demo | 修复后 `file_path` | B5 |
+|---|---|---|---|
+| 74 | 15 | `demos/090e52c9fb8642ab95d3c7e431e0e2b5.wav` | 404（缺文件） |
+| 75 | 16 | `demos/muguaying_yuanmenwai.wav` | **200**，19,748,692 字节的真 WAVE |
+| 76 | 17 | `demos/guifeizuijiu_haidaobinglun.wav` | 404（缺文件） |
+| 77 | 18 | `demos/bawangbieji_kandawang.wav` | 404（缺文件） |
+| 78 | 19 | `demos/hongniang_jiaozhangsheng.wav` | 404（缺文件） |
+
+守卫的四条边界实测：`abc.wav` 通过、`demos/abc.wav` 通过、`../etc/passwd` 400、
+`/etc/passwd` 400、`""` 与 `"."` 400、`uploads/` 下指向 `/tmp` 的软链 400。
+
+浏览器实测（`stu001` / `sing_along.html`）：选 demo 16 点播放，日志无失败提示、
+`timeTotal=111.93s`（19.7MB ÷ 111.93s = 176KB/s，与 44.1kHz/16bit/立体声 WAV
+对得上）、进度条从 1.73s 真实推进到 15.02s；点停止后 `currentTime=0.00s`、
+`fill=0%`、按钮复位。选 demo 17 点播放走失败降级，日志出现「示范音频加载失败：
+后端未能提供该音频」后按钮同样复位。B1 回归：上传 1 秒静音 wav，`file_path`
+仍是裸名、`access=private`、落在 `uploads/` 根、B5 取回 200。`check_db.py`
+无新增差异（只有既有的 `demo_versions` 与 `teacher_demos` 三列漂移）。
+
+**仍未解决**：76/77/78（外加 74）的音频源文件不在仓库里，补文件需要素材。
+在那之前，**「播放示范能听」只对 demo 16 一首成立**，其余仍走前端失败降级——
+演示口径里要说清，别让人当成随机偶发。
+
 ---
 
 ## 待核实
