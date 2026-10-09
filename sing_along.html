@@ -685,22 +685,9 @@ async function resolveAudioUrl(demoId) {
   return url;
 }
 
-// 时长要等 loadedmetadata——play() 返回时 duration 常常还是 NaN
-demoAudio.addEventListener("loadedmetadata", () => {
-  if (Number.isFinite(demoAudio.duration)) {
-    timeTotal.textContent = demoAudio.duration.toFixed(2) + "s";
-  }
-});
-// 进度条与时间由音频真实的 currentTime 驱动（播放示范时画布不动，
-// 但进度条反映整首的播放进度）
-demoAudio.addEventListener("timeupdate", () => {
-  if (!isPlaying) return;
-  const d = demoAudio.duration;
-  if (Number.isFinite(d) && d > 0) {
-    progressFill.style.width = Math.min(100, (demoAudio.currentTime / d) * 100) + "%";
-  }
-  timeCurrent.textContent = demoAudio.currentTime.toFixed(2) + "s";
-});
+// 播放示范不碰进度条与时间读数。它们属于跟唱：分母是 segmentDuration
+// （选段时由 prepareTeacherCurve 设定），与画布 X 轴同一时间基准，
+// 由 updateProgress() 按录音时长推。示范播的是整首，喂进来会串基准。
 demoAudio.addEventListener("ended", () => {
   stopAll();
   addLog("示范播放完成", "success");
@@ -1034,7 +1021,10 @@ function renderSegments() {
   }).join("");
 }
 async function selectSegment(idx) {
-  if (isRecording || isPlaying) stopAll();
+  // 只停录音：录音与段落的教师曲线同步，换段落必须重来。
+  // 示范播放（isPlaying）不停——播的是整首，与选哪一段无关（见 playDemo 注释），
+  // 选段只是跟唱前的准备动作（加载歌词/曲线/提示），不打断播放。
+  if (isRecording) stopAll();
   currentSegmentIdx = idx;
   renderSegments();
   const seg = segments[idx];
