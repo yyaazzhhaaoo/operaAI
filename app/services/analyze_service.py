@@ -177,7 +177,9 @@ def _require_file(audio: AudioFile) -> Path:
     """
     path = storage.resolve(audio.file_path)
     if not path.is_file():
-        raise BusinessError(404, f"音频文件已丢失：{audio.file_path}")
+        # 不回显 file_path：它可能带 demos/ 这类服务端目录结构，而这条消息
+        # 是照原样回给前端的（见 app/common/errors.py 的 handler）
+        raise BusinessError(404, f"音频文件已丢失（audio id={audio.id}）")
     return path
 
 

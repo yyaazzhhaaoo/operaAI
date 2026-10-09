@@ -20,7 +20,8 @@ def create(
     file_size: int,
     access: str,
 ) -> AudioFile:
-    """登记一条上传记录。file_path 存的是文件名，不是绝对路径（见 common/storage.py）。"""
+    """登记一条上传记录。file_path 存的是**相对 uploads/ 的路径**（可含一层
+    demos/ 这样的子目录），不是绝对路径，也不是裸文件名（见 common/storage.py）。"""
     audio = AudioFile(
         uploader_id=uploader_id,
         file_path=file_path,

@@ -43,7 +43,7 @@ CREATE TABLE students (
 CREATE TABLE audio_files (
   id SERIAL PRIMARY KEY,
   uploader_id INT REFERENCES users(id),
-  file_path VARCHAR(255) NOT NULL,       -- uploads/ 相对路径
+  file_path VARCHAR(255) NOT NULL,       -- 相对 uploads/ 的路径，可含一层目录（如 demos/<uuid>.wav），不带 uploads/ 前缀
   original_name VARCHAR(255),
   file_size INT,
   duration_sec FLOAT,
