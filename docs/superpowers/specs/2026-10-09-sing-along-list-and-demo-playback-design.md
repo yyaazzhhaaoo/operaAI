@@ -94,6 +94,13 @@ GET /api/demo/library/<int:demo_id>   → data.url = url_for("api.audio_download
 | 78 | demo 19 红娘 | `uploads/demos/hongniang_jiaozhangsheng.wav` | 无 | **400** |
 | 74 | demo 15 `01_xipi_1931` | `090e52c9fb8642ab95d3c7e431e0e2b5.wav` | 无 | **404** |
 
+> **本节结论已于 2026-10-09 推翻**，以 `DOC_ISSUES.md` 第 40 条为准。
+> 根因不是「数据写错了形状」，而是 `storage` 只实现了单目录模型，
+> 没能表达「学生录音平铺在 `uploads/`、示范音频放 `uploads/demos/`」这个产品口径
+> （`resolve()` 的 `path.parent != root` 拒绝任何子目录，`save()`也没有目录参数）。
+> 连带 `parse_service.py:246` 用同一个 `resolve()`，上传后的解析同样断。
+> 下面两段保留原样，只作当时的记录。
+
 两个**互相独立**的缺陷：
 
 1. **`file_path` 形状与代码约定不符**。上传链路（`app/common/storage.py` 的 `save`）生成的是**裸文件名**，`storage.resolve()` 就按「相对 `upload_dir` 的名字」拼路径（`upload_dir / stored_name`），并在 `path.parent != root` 时抛 `BusinessError(400, "非法的音频文件名")`（`storage.py:60`）。这 6 条种子数据的 `file_path` 带了 `uploads/` 前缀，被拼成 `uploads/uploads/demos/…`，父目录不等于 `uploads/`，于是 400。**是数据写错了形状，不是代码有 bug**。
