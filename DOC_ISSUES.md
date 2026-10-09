@@ -1366,6 +1366,65 @@ F6 之后，一份截止日期还没到的作业只要批完全部提交就会�
 
 ---
 
+## 40. 示范音频（B5）当前一条都放不出：`file_path` 形状与代码约定不符，且文件缺失
+
+2026-10-09 做 `sing_along.html` 的「播放示范」时实测发现：`GET /api/audio/<file_id>`
+（B5）对本项目全部示范曲目的音频**无一成功**。
+
+### 40.1 实测
+
+| audio id | 对应曲目 | 库里的 `file_path` | 磁盘上有文件 | B5 实测 |
+|---|---|---|---|---|
+| 75 | demo 16《穆桂英挂帅》 | `uploads/demos/muguaying_yuanmenwai.wav` | 有（19.7MB） | **400** |
+| 76 | demo 17《贵妃醉酒》 | `uploads/demos/guifeizuijiu_haidaobinglun.wav` | 无 | **400** |
+| 77 | demo 18《霸王别姬》 | `uploads/demos/bawangbieji_kandawang.wav` | 无 | **400** |
+| 78 | demo 19《红娘》 | `uploads/demos/hongniang_jiaozhangsheng.wav` | 无 | **400** |
+| 74 | demo 15 `01_xipi_1931` | `090e52c9fb8642ab95d3c7e431e0e2b5.wav` | 无 | **404** |
+
+关联列是 `teacher_demos.audio_id → audio_files.id`（**没有 `demos` 表**，查库时别写错表名）。
+`400` 的响应体是统一信封的 `{"code":400,"message":"非法的音频文件名"}`。
+
+### 40.2 两个互相独立的缺陷
+
+**① `file_path` 形状与代码约定不符（数据错，不是代码错）。**
+
+上传链路（`app/common/storage.py` 的 `save`）生成的是**裸文件名**（`uuid4().hex + 后缀`），
+`storage.resolve()` 就按「相对 `upload_dir` 的名字」拼路径：
+
+```python
+root = settings.upload_dir.resolve()
+path = (root / stored_name).resolve()
+if path.parent != root:
+    raise BusinessError(400, "非法的音频文件名")
+```
+
+而这 4 条数据的 `file_path` 带了 `uploads/` 前缀，被拼成 `uploads/uploads/demos/…`，
+父目录不等于 `uploads/`，于是 400。**`resolve()` 的行为与它的文档字符串一致，它没错**——
+错的是种进库里的那些值：它们记的是「相对项目根」的路径，而列的约定是「相对 `upload_dir`」。
+
+源头大概率是 `schema.sql` 第 48 行那句注释——`file_path VARCHAR(255) NOT NULL, -- uploads/ 相对路径`。
+「uploads/ 相对路径」两种读法都成立（相对 uploads/、还是有一层 uploads/ 的相对路径），
+灌种子数据的人按后一种理解了。**改数据时要顺手把这句注释改明确**，否则同一个坑会再踩一次。
+
+**② 文件本身也不在。**
+
+`uploads/demos/` 下**只有** `muguaying_yuanmenwai.wav` 一个文件（demo 16 那条）；
+76/77/78 指向的文件在磁盘上根本不存在。audio 74 那个裸名文件同样不在 `uploads/` 下，故 404。
+**所以即使把 ① 的路径形状改对，也只有 demo 16 一首能真正出声。**
+
+### 40.3 影响与当前口径
+
+- 影响面不止跟唱页：`demo_library.html` 的详情区、`pitch_comparison.html` 的分析链路
+  （基准音频）只要走到「按 `file_id` 取示范音频」这一步，同样拿不到音频。
+- **本轮（`docs/superpowers/specs/2026-10-09-sing-along-list-and-demo-playback-design.md`）
+  不改后端、不改库、不动磁盘文件**：前端按 `<audio>` 的 `error` 事件降级为日志提示，
+  播放链路的代码路径完整可验，但听不到声音。
+- 修复需要两件事一起做：把 `file_path` 改成裸文件名（或让 `resolve()` 兼容带前缀的旧值，
+  但那是给脏数据开口子，倾向于改数据），以及把缺失的音频文件补回 `uploads/`。
+  **后者需要音频源文件，目前不在仓库里**（`../艺校_docs/` 只有另几个素材）。
+
+---
+
 ## 待核实
 
 - `CLAUDE.md` 记载《5-接口清单》共 49 个接口，但按 `方法 + 路径` 提取只得 43 条、按资源路径去重得 37 个。差异可能来自提取方式（表格结构、路径参数写法），也可能是文档自身统计有误，**尚未确认，不作为问题登记**。
