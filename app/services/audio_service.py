@@ -29,6 +29,7 @@ def save_upload(
     is_teacher: bool,
     access: str,
     file: FileStorage,
+    subdir: str | None = None,
     commit: bool = True,
 ) -> AudioFile:
     """B1：落盘 + 写 audio_files 登记，返回记录。
@@ -36,6 +37,11 @@ def save_upload(
     access 默认 private（学生录音）。public 是示范音频、所有登录用户可听，
     因此只允许教师设置——否则学生把自己的录音标成 public，就绕过了
     《6-登录与数据隔离方案》定的可听范围。
+
+    subdir 是相对 uploads/ 的落盘子目录：示范库音频传 "demos"，学生录音不传。
+    显式传入、不从 access 推导——access 在接口层是客户端可控的
+    （request.form.get("access", "private")），拿它选目录会在「教师上传示范
+    但没传 public」时把示范音频落进学生录音目录（见 DOC_ISSUES 第 40 条）。
 
     commit=False 时只 flush（audio.id 已经能拿到，audio_repo.create 内部
     就是 flush），把提交交给调用方。示范曲目上传要走这条路：它紧接着还要建
@@ -50,12 +56,12 @@ def save_upload(
     if access == ACCESS_PUBLIC and not is_teacher:
         raise BusinessError(403, "只有教师可以上传公开示范音频")
 
-    stored_name, size = storage.save(file)
+    stored_path, size = storage.save(file, subdir=subdir)
 
     audio = audio_repo.create(
         db,
         uploader_id=uploader_id,
-        file_path=stored_name,
+        file_path=stored_path,
         original_name=file.filename,
         file_size=size,
         access=access,

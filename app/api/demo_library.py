@@ -43,6 +43,9 @@ def demo_library_upload():
         uploader_id=current_user_id(),
         is_teacher=session.get("role") == "teacher",
         access=request.form.get("access", "private"),
+        # 示范音频落 uploads/demos/，与学生录音（uploads/ 根）分开。
+        # 显式给而不用 access 推导，理由见 audio_service.save_upload 的 docstring。
+        subdir="demos",
         file=file,
         commit=False,
     )
