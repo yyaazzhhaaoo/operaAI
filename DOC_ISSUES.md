@@ -1406,11 +1406,28 @@ if path.parent != root:
 「uploads/ 相对路径」两种读法都成立（相对 uploads/、还是有一层 uploads/ 的相对路径），
 灌种子数据的人按后一种理解了。**改数据时要顺手把这句注释改明确**，否则同一个坑会再踩一次。
 
-**② 文件本身也不在。**
+**② 文件本身也不在（或不在该在的位置）。**
 
 `uploads/demos/` 下**只有** `muguaying_yuanmenwai.wav` 一个文件（demo 16 那条）；
 76/77/78 指向的文件在磁盘上根本不存在。audio 74 那个裸名文件同样不在 `uploads/` 下，故 404。
-**所以即使把 ① 的路径形状改对，也只有 demo 16 一首能真正出声。**
+
+**③ `resolve()` 的契约是「文件名直接躺在 `uploads/` 下」，不接受任何子目录。**
+
+守卫是 `if path.parent != root: raise 400`，`path.parent` 必须**正好**是 `uploads/`。
+所以 `demos/` 这一层目录本身就不被支持——即使把前缀 `uploads/` 去掉、
+写成 `demos/muguaying_yuanmenwai.wav`（这个相对路径的解读是自洽的、文件也真的在那儿），
+仍然 400。
+
+三者叠起来，demo 16 是**双重卡死**：值既有前缀错误，又指进了子目录。实测三种形态：
+
+| `file_path` 写法 | 守卫 | 文件在不在 |
+|---|---|---|
+| `uploads/demos/muguaying_yuanmenwai.wav`（现值） | **400** | — |
+| `muguaying_yuanmenwai.wav`（上传链路产出的裸名形态） | 通过 | **False** |
+| `demos/muguaying_yuanmenwai.wav` | **400** | True |
+
+**所以只把 ① 的路径形状改对，demo 16 只是从 400 变成 404，仍然一首都放不出**——
+还得同时把文件挪到 `uploads/` 根下。修 ① 不等于修好。
 
 ### 40.3 影响与当前口径
 
@@ -1419,9 +1436,16 @@ if path.parent != root:
 - **本轮（`docs/superpowers/specs/2026-10-09-sing-along-list-and-demo-playback-design.md`）
   不改后端、不改库、不动磁盘文件**：前端按 `<audio>` 的 `error` 事件降级为日志提示，
   播放链路的代码路径完整可验，但听不到声音。
-- 修复需要两件事一起做：把 `file_path` 改成裸文件名（或让 `resolve()` 兼容带前缀的旧值，
-  但那是给脏数据开口子，倾向于改数据），以及把缺失的音频文件补回 `uploads/`。
-  **后者需要音频源文件，目前不在仓库里**（`../艺校_docs/` 只有另几个素材）。
+- 修复要**三件事一起做**，少一件都还是放不出（见 40.2）：
+  1. 把 `file_path` 改成裸文件名。`resolve()` 不要放宽——给脏数据开口子会连带
+     放行 `../` 一类的路径穿越，倾向于改数据。
+  2. 把音频文件**平铺到 `uploads/` 根下**（现在的 `uploads/demos/` 这一层不被支持）。
+     **这一步需要音频源文件，目前不在仓库里**（`../艺校_docs/` 只有另几个素材）。
+     仓库里现存的只有 demo 16 那一个 wav，挪个位置就有。
+  3. 其余 3 条的源文件补进来，否则它们永远是 404。
+- 想先只验通链路，最小动作是第 1 + 2 步只做 demo 16 那一条：
+  `file_path` 改 `muguaying_yuanmenwai.wav`，文件从 `uploads/demos/` 挪到 `uploads/`。
+  这不会让别的曲目变好，也不会更坏。
 
 ---
 
