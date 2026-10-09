@@ -146,7 +146,7 @@ GET /api/demo/library/<int:demo_id>   → data.url = url_for("api.audio_download
 | `updateMetrics()` `:1185` | `ly.teacherPitch`→`ly.pitch`（其余模拟逻辑不动） |
 | `playDemo()` `:1306` | **整段重写**（见 §4.3） |
 | `stopAll()` `:1345` | 增加 `audio.pause(); audio.currentTime = 0` |
-| `updateProgress(elapsed)` `:1248` | 分母由 `segmentDuration` 改为音频总时长（见 §4.3） |
+| `updateProgress(elapsed)` `:1248` | **不改**。它继续按 `segmentDuration` 服务跟唱录制的模拟；播放示范走自己的 `timeupdate` 处理器（见 §4.3）——两个模式共用一个函数会让录制时的进度条被整首时长污染 |
 
 ### 4.3 播放（`playDemo` 重写）
 
