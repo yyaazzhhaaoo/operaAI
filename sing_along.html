@@ -518,6 +518,10 @@ body{
         </div>
         <div style="margin-left:auto;display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn-secondary" id="btnPlayDemo" onclick="playDemo()">▶️ 播放示范</button>
+          <!-- 播放示范的停止，与分段练习标题栏里那枚 #btnStop 分开：那枚管录音
+               （开始跟唱 ↔ 停止 原位互换）。两者各自贴着自己的启动按钮，
+               不共用一枚元素在两处之间来回跳。两枚都调 stopAll()。 -->
+          <button class="btn-danger" id="btnStopDemo" onclick="stopAll()" style="display:none">⏹️ 停止</button>
         </div>
       </div>
     </div>
@@ -664,7 +668,7 @@ function demoTitle() {
 }
 
 // 示范音频：游离的 Audio 实例，不往 DOM 塞 <audio> 元素——页面没有播放器控件的
-// 设计位，一切播控都走既有的 btnPlayDemo / btnStop。
+// 设计位，播控走曲目行那一对 btnPlayDemo / btnStopDemo。
 const demoAudio = new Audio();
 demoAudio.preload = "none";
 const audioUrlCache = new Map();   // demoId -> url|null，懒加载后缓存
@@ -1345,7 +1349,7 @@ async function playDemo() {
   isPlaying = true;
   document.getElementById("btnPlayDemo").disabled = true;
   document.getElementById("btnRecord").disabled = true;
-  document.getElementById("btnStop").style.display = "inline-flex";
+  document.getElementById("btnStopDemo").style.display = "inline-flex";
   addLog("▶️ 播放示范音频…", "info");
 
   try {
@@ -1381,7 +1385,9 @@ function stopAll() {
   document.getElementById("btnPlayDemo").disabled = false;
   document.getElementById("btnRecord").disabled = false;
   document.getElementById("btnRecord").style.display = "inline-flex";
+  // 两枚停止都收：录音那枚（分段练习标题栏）与播放示范那枚（曲目行）
   document.getElementById("btnStop").style.display = "none";
+  document.getElementById("btnStopDemo").style.display = "none";
   document.getElementById("recIndicator").style.display = "none";
   progressFill.style.width = "0%";
   timeCurrent.textContent = "0.00s";
