@@ -1521,6 +1521,20 @@ function rhythmMetrics(stu, tea, mapping) {
   const offset = sorted[Math.floor(sorted.length / 2)];
   return { warpStd, tempo, offset };
 }
+// 离时刻 t 最近的乐谱点下标；最近距离超过 WORD_MATCH_SEC 说明这个时刻没有落在
+// 乐谱曲线上（例如标点之后的字），返回 -1。
+// wordDeviations（读起点）与 wordDurationByMapping（读间隔）共用这一个判定，两处不会漂。
+function nearestTeacherIdx(tea, t) {
+  if (!Number.isFinite(t)) return -1;
+  let j = -1;
+  let bestD = Infinity;
+  for (let p = 0; p < tea.length; p++) {
+    const d = Math.abs(tea[p].t - t);
+    if (d < bestD) { bestD = d; j = p; }
+  }
+  if (j < 0 || bestD > WORD_MATCH_SEC) return -1;
+  return j;
+}
 // 逐字偏差：每个字起唱时刻相对乐谱的偏移（秒）。
 // 取法不是「在字起点附近找发声帧」——学生连着唱时字间没有静音，那样找出来的
 // 永远是搜索窗的左边缘。改为直接读 DTW 映射：字起点处的学生时刻 vs 乐谱时刻，
@@ -1532,13 +1546,8 @@ function wordDeviations(stu, tea, mapping, lyrics) {
     const ly = lyrics[k];
     // 标点：pitch 为 null，算不出偏差（C3 spec），跳过
     if (ly.pitch === null || !Number.isFinite(ly.pitch) || !Number.isFinite(ly.start)) continue;
-    // 找离字起点最近的乐谱点；离得太远说明这个字的起点没有落在乐谱曲线上（如标点后的字）
-    let j = -1, bestD = Infinity;
-    for (let p = 0; p < tea.length; p++) {
-      const d = Math.abs(tea[p].t - ly.start);
-      if (d < bestD) { bestD = d; j = p; }
-    }
-    if (j < 0 || bestD > WORD_MATCH_SEC || j >= mapping.length) continue;
+    const j = nearestTeacherIdx(tea, ly.start);
+    if (j < 0 || j >= mapping.length) continue;
     const actualT = stu[mapping[j]].t;
     items.push({ index: k, expectedT: ly.start, actualT, diff: actualT - ly.start });
   }

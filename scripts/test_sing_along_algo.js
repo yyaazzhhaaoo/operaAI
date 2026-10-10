@@ -16,7 +16,7 @@ const END = "// ===== END 纯算法";
 // 算法段应当导出的函数名；写测试时先加名字，实现后自然出现在导出里
 const ALGO_NAMES = [
   "dtwAlign", "rhythmMetrics", "wordDeviations", "breathMetrics",
-  "logistic", "thinTeacher",
+  "logistic", "thinTeacher", "nearestTeacherIdx",
 ];
 
 function loadAlgo() {
@@ -366,6 +366,24 @@ test("整段拖慢一成：节奏分掉下来，速度比报 1.1 左右", () => 
     slow.rhythmScore < onTime.rhythmScore,
     `拖拍后节奏分应更低：准时 ${onTime.rhythmScore} → 拖拍 ${slow.rhythmScore}`
   );
+});
+
+// ===== nearestTeacherIdx（wordDeviations 与 wordDurationByMapping 共用的判定）=====
+console.log("\nnearestTeacherIdx");
+
+test("窗内有样本：返回离该时刻最近的乐谱点下标", () => {
+  isFn(algo.nearestTeacherIdx, "nearestTeacherIdx");
+  const tea = makeTeacher(3, 0.02);   // t = 0, 0.02, …, 3.00
+  const j = algo.nearestTeacherIdx(tea, 1.0);
+  assert(j >= 0, "1.0 落在曲线上，不该返回 -1");
+  close(tea[j].t, 1.0, 0.02, "最近点的时刻");
+});
+
+test("窗内没有样本：返回 -1", () => {
+  isFn(algo.nearestTeacherIdx, "nearestTeacherIdx");
+  const tea = makeTeacher(3, 0.02);
+  assert(algo.nearestTeacherIdx(tea, 9.0) === -1, "离曲线 6s 远，应返回 -1");
+  assert(algo.nearestTeacherIdx(tea, NaN) === -1, "非有限时刻应返回 -1");
 });
 
 // ===== 汇总 =====
