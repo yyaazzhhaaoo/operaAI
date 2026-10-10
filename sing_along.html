@@ -649,6 +649,29 @@ let mediaRecorder = null;
 let audioChunks = [];
 let stream = null;
 
+// ===== 实时音高检测（浏览器本地）=====
+// 《2-系统设计说明》5.2 的技术决策：逐字实时反馈要走 <100ms，音高检测必须在
+// 浏览器本地做（自相关法），后端只负责唱后整段录音的精算（D1/B2，本页暂未接）。
+// 一处实现偏离：文档写的是 AudioWorklet，本页是单文件自包含原型、没有独立模块
+// 文件，改为主线程 rAF 轮询 AnalyserNode——每次检测约 55 万次乘加（553 个
+// lag × 1024 窗口），按 30ms 节流即约 1800 万次/秒。
+const PITCH_MIN_HZ = 80;        // 检测下限：戏曲男声低音区
+const PITCH_MAX_HZ = 1000;      // 检测上限：假声/高腔
+const PITCH_RMS_MIN = 0.01;     // 能量门限：静音/清音帧不落点
+const PITCH_ACF_CONF_MIN = 0.5; // 自相关峰值置信度下限
+const OCTAVE_TOL_SEMI = 4;      // 八度修正容差 ±4 个半音（=±400 音分，与后端 OCTAVE_TOLERANCE 一致）
+const OCTAVE_MIN_POINTS = 10;   // 攒够这么多个「与教师基准成对」的采样点才敢判八度
+const DETECT_INTERVAL_MS = 30;  // 检测节流：约 33 次/秒，够画曲线且不占满主线程
+const TOLERANCE_CENTS = 30;     // 容忍区间半宽（音分），与 updateMetrics 的「在容忍区间内」阈值一致
+
+let audioCtx = null;      // 跟唱用的 AudioContext（与 MediaRecorder 共用同一个麦克风流）
+let analyser = null;      // AnalyserNode：逐帧提供时域波形
+let analyserBuf = null;   // getFloatTimeDomainData 的复用缓冲
+let lastDetectAt = 0;     // 上次检测时刻（rAF 时间戳，节流用）
+let octaveOffset = 0;     // 已应用的八度修正（半音：0 或 ±12）
+let octaveDiffs = [];     // 判八度用：（教师基准 − 学生原始音高）半音，滚动窗口
+let octaveDecided = false; // 八度只判一次，定了就不再改（见 updateOctaveOffset）
+
 const canvas = document.getElementById("pitchCanvas");
 const ctx = canvas.getContext("2d");
 let canvasWidth = 0, canvasHeight = 0;
@@ -771,6 +794,90 @@ function timeToX(t) {
 function pitchToY(pitch, minP=58, maxP=78) {
   const ratio = (pitch - minP) / (maxP - minP);
   return (canvasHeight - TOP_OFFSET - 12) - ratio * (canvasHeight - TOP_OFFSET - 50);
+}
+// 频率 → MIDI 号，与歌词基准 ly.pitch（C3 出参）同量纲，可直接进 pitchToY
+function hzToMidi(f) {
+  return 69 + 12 * Math.log2(f / 440);
+}
+
+// 自相关法基频检测（文档 5.2 指定的算法）。返回 Hz；静音或不可信返回 null。
+function frameRms(buf) {
+  let s = 0;
+  for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+  return Math.sqrt(s / buf.length);
+}
+function detectPitch(buf, sampleRate) {
+  const rms = frameRms(buf);
+  if (rms < PITCH_RMS_MIN) return null;   // 静音/清音帧不落点
+
+  const minLag = Math.floor(sampleRate / PITCH_MAX_HZ);
+  const maxLag = Math.min(Math.floor(sampleRate / PITCH_MIN_HZ), Math.floor(buf.length / 2));
+  const win = Math.floor(buf.length / 2); // 相关窗口取一半，给 lag 留足余量
+  const acf = new Float32Array(maxLag + 2);
+  for (let lag = minLag; lag <= maxLag + 1; lag++) {
+    let sum = 0;
+    for (let i = 0; i < win; i++) sum += buf[i] * buf[i + lag];
+    acf[lag] = sum;
+  }
+
+  // 先跳过起点附近的下降段（零延迟的残留峰），再取**第一个**达到置信度的
+  // 局部极大。取全局最大值是错的：周期的整数倍处峰等高（纯音尤其明显），
+  // 全局最大会在它们之间乱跳，把音高报成低八度/低十二度。
+  let acf0 = 0;
+  for (let i = 0; i < win; i++) acf0 += buf[i] * buf[i];
+  if (acf0 <= 0) return null;
+
+  let d = minLag;
+  while (d < maxLag && acf[d] > acf[d + 1]) d++;
+  let maxPos = -1;
+  for (let i = d; i <= maxLag; i++) {
+    if (acf[i] >= acf[i - 1] && acf[i] >= acf[i + 1]
+        && acf[i] / acf0 >= PITCH_ACF_CONF_MIN) { maxPos = i; break; }
+  }
+  if (maxPos < 0) return null;
+
+  // 抛物线插值：把峰定位到亚采样精度，否则低音区会有几十音分的量化误差
+  const a = (acf[maxPos - 1] + acf[maxPos + 1] - 2 * acf[maxPos]) / 2;
+  const b = (acf[maxPos + 1] - acf[maxPos - 1]) / 2;
+  const peak = (a !== 0) ? maxPos - b / (2 * a) : maxPos;
+  const f0 = sampleRate / peak;
+  if (f0 < PITCH_MIN_HZ || f0 > PITCH_MAX_HZ) return null;
+  return f0;
+}
+// 从 AnalyserNode 取一帧并检测；没准备好或测不出返回 null。
+// 测出音高时连同该帧的能量一起回——气息读数要的就是这个 rms，另取一帧会与
+// 音高错开一个检测周期（30ms）。
+function readMicF0() {
+  if (!analyser || !analyserBuf || !audioCtx) return null;
+  analyser.getFloatTimeDomainData(analyserBuf);
+  const f0 = detectPitch(analyserBuf, audioCtx.sampleRate);
+  return f0 === null ? null : { f0, rms: frameRms(analyserBuf) };
+}
+// 八度修正：学生（男声/不同行当）整条曲线低八度唱是常态，不拉齐的话整条曲线
+// 会掉出画布固定的 MIDI 58–78 范围。判据与后端 analyze_service._best_octave
+// 同思路：滚动窗口内（教师基准 − 学生原始音高）的中位数落在 12±容差 个半音内
+// 就整体 ±12 修正，修正后按原始 f0 重算已落点，保证整条曲线同一基准。
+// 每次检测都重判、重判就回写全部已落点是错的：检测在 T 与 T/2 之间跳、麦克风
+// 拾到示范声，中位数就会在窗口里反复越线，已画出的曲线随之中途整条 ±12 跳变
+// （实测 12 秒内跳 12 次，观感是「线条整个结构变了」）。改为只判一次。
+function updateOctaveOffset(rawMidi, teacherMidi) {
+  if (octaveDecided) return;
+  octaveDiffs.push(teacherMidi - rawMidi);
+  if (octaveDiffs.length > 50) octaveDiffs.shift();
+  if (octaveDiffs.length < OCTAVE_MIN_POINTS) return;
+  const sorted = [...octaveDiffs].sort((a, b) => a - b);
+  const med = sorted[Math.floor(sorted.length / 2)];
+  // 只在两种明确结论里选：同八度（中位数≈0）或低/高八度（中位数≈∓12）。
+  // 都不像（起音滑音、整体跑调）就不定，继续攒样本——不定调只会保持现状，
+  // 而定错调要回写整条曲线。
+  let next = null;
+  if (Math.abs(med) <= OCTAVE_TOL_SEMI) next = 0;
+  else if (Math.abs(Math.abs(med) - 12) <= OCTAVE_TOL_SEMI) next = Math.sign(med) * 12;
+  if (next === null) return;
+  octaveDecided = true;
+  if (next === octaveOffset) return;
+  octaveOffset = next;
+  for (const pt of studentPoints) pt.pitch = hzToMidi(pt.f0) + octaveOffset;
 }
 function addLog(msg, type="info") {
   const entry = document.createElement("div");
@@ -896,19 +1003,21 @@ function drawStudentCurve() {
   ctx.stroke();
   ctx.restore();
 }
+// 容忍区间（PRD 2.7）：当前字的教师音高 ±TOLERANCE_CENTS 音分，横跨整个字。
+// 旧实现用 teacherPoints[currentWordIndex] 取基准——那是 20ms 采样曲线的下标，
+// 不是字序号，色带会被画到时间轴最左端且高度写死。
 function drawToleranceBand() {
-  if (currentWordIndex < 0 || currentWordIndex >= teacherPoints.length) return;
-  const ly = teacherPoints[currentWordIndex];
-  if (!ly) return;
-  const basePitch = ly.pitch;
-  const bandHeight = 16;
-  const y = pitchToY(basePitch);
-  const x = timeToX(ly.t);
-  const w = Math.max(6, timeToX(ly.t + 0.06) - x);
+  const ly = currentLyrics[currentWordIndex];
+  if (!ly || !Number.isFinite(ly.pitch)
+      || !Number.isFinite(ly.start) || !Number.isFinite(ly.duration)) return;
+  const half = TOLERANCE_CENTS / 100;   // 音分 → 半音
+  const x = timeToX(ly.start);
+  const w = Math.max(2, timeToX(ly.start + ly.duration) - x);
+  const yTop = pitchToY(ly.pitch + half);
+  const yBottom = pitchToY(ly.pitch - half);
   ctx.save();
-  ctx.fillStyle = "rgba(90,143,123,0.13)";
-  ctx.shadowBlur = 0;
-  ctx.fillRect(x, y - bandHeight/2, w, bandHeight);
+  ctx.fillStyle = "rgba(90,143,123,0.18)";
+  ctx.fillRect(x, yTop, w, Math.max(2, yBottom - yTop));
   ctx.restore();
 }
 function drawPlayhead(t) {
@@ -1102,8 +1211,41 @@ function dismissCoaching() {
 }
 
 // ============================================================
-// 核心模拟逻辑（P0 完善点：真实模拟"外"字偏差）
+// 跟唱录音：真实录音（getUserMedia + MediaRecorder）
+// 音高曲线来自浏览器本地实时检测（见「实时音高检测」一节）；
+// 录音中右侧面板的节奏/气息读数仍是模拟；停录后的五维面板里这两项已换成真算
+// （见「纯算法」段）——两处用的是两套东西，别只改一处就以为都改了。
 // ============================================================
+// 实时音高检测的建立/拆除。检测坏了只降级（曲线画不出来），不挡录音本身。
+function startPitchDetection() {
+  try {
+    audioCtx = new AudioContext();
+    const src = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyserBuf = new Float32Array(analyser.fftSize);
+    // 0 增益旁路到 destination：图要被 destination 拉动 AnalyserNode 才有数据，
+    // 增益为 0 所以不外放、不啸叫。
+    const silentGain = audioCtx.createGain();
+    silentGain.gain.value = 0;
+    src.connect(analyser);
+    analyser.connect(silentGain);
+    silentGain.connect(audioCtx.destination);
+  } catch (e) {
+    audioCtx = null; analyser = null; analyserBuf = null;
+    addLog("实时音高检测不可用：" + e.message, "warn");
+  }
+  lastDetectAt = 0;
+  octaveOffset = 0;
+  octaveDiffs = [];
+  octaveDecided = false;
+}
+function stopPitchDetection() {
+  if (audioCtx) { audioCtx.close().catch(() => {}); audioCtx = null; }
+  analyser = null;
+  analyserBuf = null;
+}
+
 async function toggleRecord() {
   if (isRecording) { stopAll(); return; }
   if (currentSegmentIdx < 0) { alert("请先选择一个练习段落"); return; }
@@ -1111,27 +1253,29 @@ async function toggleRecord() {
 
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorder = new MediaRecorder(stream);
-    audioChunks = [];
-    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-    mediaRecorder.onstop = () => {
-      addLog("录音完成，准备分析...", "success");
-      simulateAnalysisAfterRecord();
-    };
-    mediaRecorder.start();
-    isRecording = true;
-    recordStartTime = performance.now();
-    studentPoints = [];
-    currentWordIndex = -1;
-    document.getElementById("btnRecord").style.display = "none";
-    document.getElementById("btnStop").style.display = "inline-flex";
-    document.getElementById("recIndicator").style.display = "flex";
-    addLog("🎙️ 开始录音...", "info");
-    requestAnimationFrame(recordLoop);
   } catch (err) {
     alert("无法访问麦克风: " + err.message);
     addLog("❌ 麦克风访问失败: " + err.message, "error");
+    return;
   }
+  mediaRecorder = new MediaRecorder(stream);
+  audioChunks = [];
+  mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+  mediaRecorder.onstop = () => {
+    addLog("录音完成，准备分析...", "success");
+    simulateAnalysisAfterRecord();
+  };
+  mediaRecorder.start();
+  startPitchDetection();
+  isRecording = true;
+  recordStartTime = performance.now();
+  studentPoints = [];
+  currentWordIndex = -1;
+  document.getElementById("btnRecord").style.display = "none";
+  document.getElementById("btnStop").style.display = "inline-flex";
+  document.getElementById("recIndicator").style.display = "flex";
+  addLog("🎙️ 开始录音...", "info");
+  requestAnimationFrame(recordLoop);
 }
 
 function recordLoop(now) {
@@ -1156,16 +1300,17 @@ function recordLoop(now) {
     }
   }
 
-  if (teacherPitchNow !== null) {
-    const noise = (Math.random() - 0.5) * 0.04;
-    const vibrato = Math.sin(elapsed * 2 * Math.PI * 6) * 0.06;
-    const drift = Math.sin(elapsed * 0.3) * 0.02;
-    let studentPitch = teacherPitchNow + noise + vibrato + drift;
-    // ★ "外"字（索引2）添加 -25 cents 系统性偏差
-    if (widx === 2) {
-      studentPitch -= 0.25;
+  // 真实音高：节流后每帧从麦克风检测一次，有有效基频就落点。
+  // 静音/清音帧不落点，曲线自然断开——不再像旧模拟那样只在唱词区间内造点。
+  if (now - lastDetectAt >= DETECT_INTERVAL_MS) {
+    lastDetectAt = now;
+    const det = readMicF0();
+    if (det !== null) {
+      const rawMidi = hzToMidi(det.f0);
+      if (teacherPitchNow !== null) updateOctaveOffset(rawMidi, teacherPitchNow);
+      // rms 与 pitch 同帧：停录后的气息稳定性就靠这一列能量算（breathMetrics）
+      studentPoints.push({ t: elapsed, f0: det.f0, pitch: rawMidi + octaveOffset, rms: det.rms });
     }
-    studentPoints.push({ t: elapsed, pitch: studentPitch });
   }
 
   if (widx !== currentWordIndex) {
@@ -1174,8 +1319,9 @@ function recordLoop(now) {
       const currentLyric = currentLyrics[widx];
       if (currentLyric.tip) showCoaching(currentLyric.tip, currentLyric.char);
     }
-    updateMetrics(elapsed, seg, widx);
   }
+  // 每帧刷新偏差读数（PRD 2.8「实时显示」）：原来只在换字那一刻调一次
+  updateMetrics(elapsed, seg, widx);
 
   syncCurrentTime = elapsed;
   drawTimeline();
@@ -1263,6 +1409,7 @@ function stopRecordingAndAnalyze() {
     stream.getTracks().forEach(t => t.stop());
     stream = null;
   }
+  stopPitchDetection();
   isRecording = false;
   document.getElementById("recIndicator").style.display = "none";
   document.getElementById("btnRecord").style.display = "inline-flex";
@@ -1270,13 +1417,247 @@ function stopRecordingAndAnalyze() {
   addLog("⏹️ 录音停止，准备分析...", "info");
 }
 
+// ===== BEGIN 纯算法 =====
+// 停录后本地算「节奏偏差」与「气息稳定性」的全部纯函数。
+// 这一段不碰 DOM、不碰音频句柄、不读页面上的可变全局——scripts/test_sing_along_algo.js
+// 会把标记之间的代码原样抽到 Node 的 vm 里跑断言，往里塞 document.xxx 会当场炸。
+// 阈值常数也刻意留在这一段而不是顶部常量区，好让抽出来的代码自足。
+const RHYTHM_BAND_SEC = 3;      // DTW 带宽：对齐只允许在 ±3s 内游走，防串段
+const ALIGN_BIAS = 0.02;        // 自然对齐先验（半音/帧）：同音长的平台上配对代价全为 0，
+                                // 不加这个路径会被带宽边缘牵走；0.02 远小于真实音高差，不影响正常对齐
+const WORD_MATCH_SEC = 0.15;    // 字起点与最近乐谱点的最大容许距离，超过就不给这个字出偏差
+const RHYTHM_MID = 1.0;         // 节奏分的 logistic 中点（秒）与斜率：照搬后端已标定的那组，
+const RHYTHM_K = 2.0;           // 好让本页的「节奏」与 B 组报告的是同一口径
+const DTW_MAX_CELLS = 4e6;      // DTW 代价矩阵的格数上限，超了抽稀乐谱点（约 32MB）
+const BREATH_SILENCE_PCTL = 0.2; // 静音门限看本次录音 rms 的 P20 分位（相对门限，不吃设备增益）
+const BREATH_FLOOR_RATIO = 0.1;  // 同时还得低于典型电平（P80）的十分之一，见 breathMetrics 注释
+const BREATH_FRAME_GAP_SEC = 0.1;// 长音段内相邻点的最大间隔，超过就当唱段被打断
+const BREATH_FLAT_SEMI = 0.5;    // 视为「音高没动」的半音容差：够容纳颤音，又不至于把换字吞掉
+const BREATH_SUSTAIN_SEC = 0.4;  // 长音段最短时长：太短的段判不出气息
+const BREATH_GAP_SEC = 0.2;      // 换气间隙：静音超过这么久算一句唱完
+const BREATH_TAIL_PCTL = 0.3;    // 句尾衰减取每句首尾各 30%
+
+// DTW 对齐：返回长度 = 乐谱点数的数组，mapping[j] = 乐谱第 j 点对应的学生帧下标。
+// 与后端 analyze_service._align_frames 同思路，只是这里算的是「学生 vs 乐谱」。
+// 距离用音高的半音绝对值；带 Sakoe-Chiba 带宽约束，避免学生只唱半段时被强行拉齐。
+function dtwAlign(stu, tea, opts) {
+  const bandSec = (opts && opts.bandSec) || RHYTHM_BAND_SEC;
+  const n = stu.length, m = tea.length;
+  if (n === 0 || m === 0) return [];
+
+  // 乐谱侧是 prepareTeacherCurve 的 20ms 均匀采样，这里直接反推帧长
+  const dtTea = m > 1 ? (tea[m - 1].t - tea[0].t) / (m - 1) : 0.02;
+  const band = Math.max(2, Math.round(bandSec / dtTea)); // ≥2 才保证带宽内的格连通
+
+  const INF = Infinity;
+  const D = new Float64Array(n * m).fill(INF);
+  const from = new Uint8Array(n * m); // 0=对角 1=退乐谱 2=退学生
+
+  for (let j = 0; j < m; j++) {
+    const center = m > 1 ? (j * (n - 1)) / (m - 1) : 0;
+    const lo = Math.max(0, Math.ceil(center - band));
+    const hi = Math.min(n - 1, Math.floor(center + band));
+    for (let i = lo; i <= hi; i++) {
+      const cost = Math.abs(stu[i].pitch - tea[j].pitch) + ALIGN_BIAS * Math.abs(i - center);
+      if (i === 0 && j === 0) { D[j] = cost; continue; }
+      let best = INF, dir = 0;
+      if (i > 0 && j > 0) { const v = D[(i - 1) * m + j - 1]; if (v < best) { best = v; dir = 0; } }
+      if (j > 0) { const v = D[i * m + j - 1]; if (v < best) { best = v; dir = 1; } }
+      if (i > 0) { const v = D[(i - 1) * m + j]; if (v < best) { best = v; dir = 2; } }
+      if (best === INF) continue; // 带外的孤格
+      D[i * m + j] = cost + best;
+      from[i * m + j] = dir;
+    }
+  }
+
+  // 回溯路径再压成单调映射：每个乐谱点取路径上第一次出现的那个学生帧
+  const path = [];
+  let i = n - 1, j = m - 1;
+  while (i > 0 || j > 0) {
+    path.push([i, j]);
+    if (i === 0) j--;
+    else if (j === 0) i--;
+    else {
+      const d = from[i * m + j];
+      if (d === 0) { i--; j--; } else if (d === 1) j--; else i--;
+    }
+  }
+  path.push([0, 0]);
+
+  const mapping = new Array(m).fill(0);
+  const seen = new Array(m).fill(false);
+  for (let k = path.length - 1; k >= 0; k--) {  // 从起点往回读 = 正序
+    const pi = path[k][0], pj = path[k][1];
+    if (!seen[pj]) { seen[pj] = true; mapping[pj] = pi; }
+  }
+  let last = 0; // 兜底：带约束下不该有漏网点，漏了就沿用前一个
+  for (let k = 0; k < m; k++) {
+    if (seen[k]) last = mapping[k]; else mapping[k] = last;
+  }
+  return mapping;
+}
+// 三个节奏读数，都建立在 dtwAlign 的映射之上：
+//   warpStd 局部抖动（秒）——面板主数与 B 组的节奏口径一致
+//   tempo   速度比——>1 拖拍、<1 抢拍（DTW 会吸收整体偏移，靠斜率才看得出来）
+//   offset  整体偏移（秒）——正数=整段起唱晚了，与「抖不抖」是两回事
+function rhythmMetrics(stu, tea, mapping) {
+  const n = mapping.length;
+  if (n === 0) return { warpStd: 0, tempo: 1, offset: 0 };
+  const xs = [], ys = [], res = [];
+  for (let j = 0; j < n; j++) {
+    const st = stu[mapping[j]].t;
+    xs.push(tea[j].t);
+    ys.push(st);
+    res.push(st - tea[j].t);
+  }
+  const xm = mean(xs), ym = mean(ys);
+  let sxy = 0, sxx = 0;
+  for (let k = 0; k < n; k++) { sxy += (xs[k] - xm) * (ys[k] - ym); sxx += (xs[k] - xm) ** 2; }
+  const tempo = sxx > 0 ? sxy / sxx : 1;
+
+  const rm = mean(res);
+  const warpStd = Math.sqrt(mean(res.map(v => (v - rm) ** 2)));
+  const sorted = res.slice().sort((a, b) => a - b);
+  const offset = sorted[Math.floor(sorted.length / 2)];
+  return { warpStd, tempo, offset };
+}
+// 逐字偏差：每个字起唱时刻相对乐谱的偏移（秒）。
+// 取法不是「在字起点附近找发声帧」——学生连着唱时字间没有静音，那样找出来的
+// 永远是搜索窗的左边缘。改为直接读 DTW 映射：字起点处的学生时刻 vs 乐谱时刻，
+// 与 rhythmMetrics 的残差同源，漏唱一段时也只是偏差变大而不会崩。
+function wordDeviations(stu, tea, mapping, lyrics) {
+  const items = [];
+  if (!lyrics || lyrics.length === 0) return { items, median: 0 };
+  for (let k = 0; k < lyrics.length; k++) {
+    const ly = lyrics[k];
+    // 标点：pitch 为 null，算不出偏差（C3 spec），跳过
+    if (ly.pitch === null || !Number.isFinite(ly.pitch) || !Number.isFinite(ly.start)) continue;
+    // 找离字起点最近的乐谱点；离得太远说明这个字的起点没有落在乐谱曲线上（如标点后的字）
+    let j = -1, bestD = Infinity;
+    for (let p = 0; p < tea.length; p++) {
+      const d = Math.abs(tea[p].t - ly.start);
+      if (d < bestD) { bestD = d; j = p; }
+    }
+    if (j < 0 || bestD > WORD_MATCH_SEC || j >= mapping.length) continue;
+    const actualT = stu[mapping[j]].t;
+    items.push({ index: k, expectedT: ly.start, actualT, diff: actualT - ly.start });
+  }
+  const median_ = items.length ? median(items.map(it => it.diff)) : 0;
+  return { items, median: median_ };
+}
+// 气息读数（都只看学生自己，与教师无关）：
+//   cv          长音段内能量变异系数的中位数——越小说明长音上越稳
+//   tailRatio   每句尾段/首段能量比的中位数——<1 说明越唱越没气
+//   sustainCount 参与统计的长音段数，为 0 时 cv 给 null（页面显示待分析，不假装满分）
+function breathMetrics(stu) {
+  if (stu.length === 0) return { cv: null, tailRatio: null, sustainCount: 0 };
+
+  // 静音门限：既要低于本次录音的 P20（噪声底），又要明显低于典型电平（P80 的十分之一）。
+  // 只取 P20 会在「整段能量均匀」时把每个点都判成静音——P20 就等于那个电平本身；
+  // 两个条件取小，均匀录音谁都不丢，真有底噪时底噪又确实低于典型电平的十分之一。
+  const sorted = stu.map(p => p.rms).sort((a, b) => a - b);
+  const pctl = q => sorted[Math.floor(q * (sorted.length - 1))];
+  const floor = Math.min(pctl(BREATH_SILENCE_PCTL), pctl(0.8) * BREATH_FLOOR_RATIO);
+  const voiced = stu.filter(p => p.rms > floor);
+
+  // 换气切句：点序列在时间上断开超过 BREATH_GAP_SEC 就是换了一口气
+  // （学生点只在发声帧落点，静音期本来就没有点，所以断开即换气）
+  const phrases = [];
+  let cur = [];
+  for (const p of voiced) {
+    if (cur.length && p.t - cur[cur.length - 1].t > BREATH_GAP_SEC) { phrases.push(cur); cur = []; }
+    cur.push(p);
+  }
+  if (cur.length) phrases.push(cur);
+
+  // 长音段：句内再按「音高基本不动」切，免得把一串快字的咬字起伏当成气息抖动
+  const longs = [];
+  for (const ph of phrases) {
+    let seg = [ph[0]];
+    for (let i = 1; i < ph.length; i++) {
+      const movable = ph[i].t - ph[i - 1].t <= BREATH_FRAME_GAP_SEC;
+      const flat = Math.abs(ph[i].pitch - seg[0].pitch) <= BREATH_FLAT_SEMI;
+      if (movable && flat) seg.push(ph[i]);
+      else { longs.push(seg); seg = [ph[i]]; }
+    }
+    longs.push(seg);
+  }
+  const kept = longs.filter(s => s[s.length - 1].t - s[0].t >= BREATH_SUSTAIN_SEC);
+
+  const cvs = kept.map(s => {
+    const m = mean(s.map(p => p.rms));
+    return m > 0 ? Math.sqrt(mean(s.map(p => (p.rms - m) ** 2))) / m : 0;
+  });
+
+  // 句尾衰减：每句首尾各取 30% 比均值。用 phrase 而不是长音段——衰减是整句的事
+  const tails = [];
+  for (const ph of phrases) {
+    if (ph[ph.length - 1].t - ph[0].t < BREATH_SUSTAIN_SEC) continue;
+    const k = Math.max(1, Math.ceil(ph.length * BREATH_TAIL_PCTL));
+    const head = mean(ph.slice(0, k).map(p => p.rms));
+    const tail = mean(ph.slice(-k).map(p => p.rms));
+    if (head > 0) tails.push(tail / head);
+  }
+
+  return {
+    cv: cvs.length ? median(cvs) : null,
+    tailRatio: tails.length ? median(tails) : null,
+    sustainCount: kept.length,
+  };
+}
+
+// 与后端 analyze_service._logistic 同一个式子：阈值处 50 分，越偏离越低。
+// 节奏沿用后端已标定的 mid/k，这样本页的「节奏」与 B 组报告的是同一口径。
+function logistic(x, mid, k) {
+  return 100 / (1 + Math.exp((x - mid) * k));
+}
+
+// DTW 的代价矩阵是 学生点数 × 乐谱点数 的。乐谱是 20ms 均匀采样，一段 3 分钟的
+// 唱段就有 9000 个点，学生录满 3 分钟又是 6000 个点——五千万格，直接爆内存。
+// 抽稀乐谱点把格数压回上限内：只改采样密度、不改曲线形状，下游一律按各点自带
+// 的 t 读时间，所以对结果是透明的。首尾必须留住，否则时间轴两端会缺。
+function thinTeacher(tea, stuCount, maxCells) {
+  if (tea.length <= 2 || stuCount <= 0) return tea.slice();
+  const n = tea.length;
+  if (n * stuCount <= maxCells) return tea.slice();
+  const allowed = Math.floor(maxCells / stuCount); // 抽稀后允许保留的点数
+  if (allowed <= 2) return [tea[0], tea[n - 1]];
+  // 按 allowed-1 算步长，把「补齐末点」那一格也留进配额里
+  const stride = Math.ceil((n - 1) / (allowed - 1));
+  const out = [];
+  for (let i = 0; i < n; i += stride) out.push(tea[i]);
+  if (out[out.length - 1] !== tea[n - 1]) out.push(tea[n - 1]);
+  return out;
+}
+
+function mean(a) { return a.reduce((s, v) => s + v, 0) / a.length; }
+function median(a) {
+  const s = a.slice().sort((x, y) => x - y);
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+// ===== END 纯算法 =====
+
 function simulateAnalysisAfterRecord() {
   addLog("🔍 正在分析演唱...", "info");
+  // 音准分用真实数据算。旧模拟按下标配对两个不同采样率的数组；教师曲线是
+  // 20ms 均匀采样、学生点由 rAF 驱动，两串必须按时间配。其余四个维度仍是
+  // 模拟（无算法可依，等 D1/B2 接入后再换真）。
+  if (studentPoints.length === 0) {
+    addLog("未检测到有效演唱音高，本次不出评分（检查麦克风或再唱一遍）", "warn");
+    return;
+  }
   const diffs = [];
-  for (let i = 0; i < Math.min(studentPoints.length, teacherPoints.length); i++) {
-    const s = studentPoints[i];
-    const t = teacherPoints[i];
-    if (s && t) diffs.push(Math.abs(s.pitch - t.pitch) * 100);
+  let ti = 0;
+  for (const s of studentPoints) {
+    while (ti + 1 < teacherPoints.length && teacherPoints[ti + 1].t <= s.t) ti++;
+    // 取前后两个教师采样点里时间更近的那个
+    let t = teacherPoints[ti];
+    const nxt = teacherPoints[ti + 1];
+    if (nxt && (!t || Math.abs(nxt.t - s.t) < Math.abs(t.t - s.t))) t = nxt;
+    // 时间对不上的点（标点间隙、曲线范围之外）不计入
+    if (!t || Math.abs(t.t - s.t) > 0.1) continue;
+    diffs.push(Math.abs(s.pitch - t.pitch) * 100);
   }
   const medianDiff = diffs.length > 0 ? diffs.reduce((a,b)=>a+b,0)/diffs.length : 50;
   let score = 100;
@@ -1286,10 +1667,65 @@ function simulateAnalysisAfterRecord() {
   else if (medianDiff < 100) score = 55 - (medianDiff - 50) * 0.4;
   else score = Math.max(0, 35 - (medianDiff - 100) * 0.2);
 
+  // 节奏与气息：用整段真实数据本地算，不走后端（见上方「纯算法」段）
+  const tea = thinTeacher(teacherPoints, studentPoints.length, DTW_MAX_CELLS);
+  const mapping = dtwAlign(studentPoints, tea, { bandSec: RHYTHM_BAND_SEC });
+  const rhythm = rhythmMetrics(studentPoints, tea, mapping);
+  const breath = breathMetrics(studentPoints);
+
+  // 速度比离谱时对齐结果没有意义（学生多半只唱了半段，或唱的压根不是这一段），
+  // 这种情况宁可不给节奏分，也不要拿一个强行拉齐出来的数糊弄人。
+  let rhythmScore = null;
+  if (rhythm.tempo >= 0.5 && rhythm.tempo <= 2) {
+    rhythmScore = Math.round(logistic(rhythm.warpStd, RHYTHM_MID, RHYTHM_K));
+    addLog(
+      `节奏：抖动 ${rhythm.warpStd.toFixed(2)}s · 速度比 ${rhythm.tempo.toFixed(2)}`
+      + `（${rhythm.tempo > 1.05 ? "偏慢" : rhythm.tempo < 0.95 ? "偏快" : "基本同步"}）`
+      + ` · 整体${rhythm.offset >= 0 ? "晚" : "早"} ${Math.abs(rhythm.offset).toFixed(2)}s`,
+      "info"
+    );
+  } else {
+    addLog(`演唱与乐谱的速度差到 ${rhythm.tempo.toFixed(2)} 倍，节奏分本次不出`, "warn");
+  }
+
+  // 气息：稳定度 = 1 − 长音内的能量变异系数。没有够长的音就报「待分析」，
+  // 不拿 100 分充数——那会让学生以为「没测出来」等于「唱得好」。
+  const breathScore = breath.cv === null ? null : Math.max(0, Math.round((1 - Math.min(1, breath.cv)) * 100));
+  if (breathScore === null) {
+    addLog("气息：没数到 0.4s 以上的长音，稳定度本次不出", "warn");
+  } else {
+    const tail = breath.tailRatio === null ? "" : ` · 句尾/句首能量比 ${breath.tailRatio.toFixed(2)}`;
+    addLog(`气息：稳定度 ${breathScore}% · 长音 ${breath.sustainCount} 段${tail}`, "info");
+    if (breath.tailRatio !== null && breath.tailRatio < 0.8) {
+      addLog("⚠ 句尾能量掉得比句首多，注意乐句收尾时的气息支撑", "warn");
+    }
+  }
+
+  // 逐字偏差：只说相对本人整体节拍最跑偏的那几个字，整体偏移由上面那条日志交代，
+  // 否则「整体晚 0.5s」会把每个字都算成问题字，反而看不出哪句真出了问题。
+  const words = wordDeviations(studentPoints, tea, mapping, currentLyrics);
+  if (words.items.length >= 3) {
+    const off = words.items
+      .map(it => ({ ...it, rel: it.diff - words.median }))
+      .sort((a, b) => Math.abs(b.rel) - Math.abs(a.rel))
+      .slice(0, 3)
+      .filter(it => Math.abs(it.rel) >= 0.15);
+    if (off.length) {
+      addLog(
+        "偏差最大的字：" + off.map(it =>
+          `${currentLyrics[it.index].char || `第${it.index + 1}字`} ${it.rel > 0 ? "晚" : "早"}${Math.abs(it.rel).toFixed(2)}s`
+        ).join(" · "),
+        "warn"
+      );
+    }
+  }
+
   const dimensions = {
     "音准": Math.round(score),
-    "节奏": Math.round(Math.max(0, Math.min(100, score * (0.9 + 0.1 * Math.random())))),
-    "气息": Math.round(Math.max(0, Math.min(100, score * (0.8 + 0.2 * Math.random())))),
+    "节奏": rhythmScore,
+    "气息": breathScore,
+    // 咬字与拖腔仍是模拟：这两项要分别对齐到逐字歌词与音高变化率上才算得准，
+    // 等接后端 B 组（analyze_service._dimensions）时一起换真。
     "咬字": Math.round(Math.max(0, Math.min(100, score * (0.85 + 0.15 * Math.random())))),
     "拖腔": Math.round(Math.max(0, Math.min(100, score * (0.7 + 0.3 * Math.random()))))
   };
@@ -1297,7 +1733,12 @@ function simulateAnalysisAfterRecord() {
   const box = document.getElementById('dimensionBox');
   const list = document.getElementById('dimensionList');
   box.classList.add('show');
+  // 值为 null 的维度（本次没测出来）显示「待分析」且不画进度条——
+  // 直接写进 width 会得到 "width:null%"，条会静默变成 0 宽，看起来像得了 0 分。
   list.innerHTML = Object.entries(dimensions).map(([name, val]) => {
+    if (val === null) {
+      return `<div class="dimension-item"><div class="dim-label">${name}</div><div class="dim-bar-wrap"></div><div class="dim-value" style="color:var(--text-muted)">待分析</div></div>`;
+    }
     const color = val >= 80 ? '#4A8F6B' : val >= 60 ? '#C9A84C' : '#B83A2F';
     return `<div class="dimension-item"><div class="dim-label">${name}</div><div class="dim-bar-wrap"><div class="dim-bar" style="width:${val}%;background:${color}"></div></div><div class="dim-value" style="color:${color}">${val}</div></div>`;
   }).join('');
@@ -1372,6 +1813,7 @@ function stopAll() {
     stream.getTracks().forEach(t => t.stop());
     stream = null;
   }
+  stopPitchDetection();
   if (coachingTimer) { clearTimeout(coachingTimer); coachingTimer = null; }
   document.getElementById("btnPlayDemo").disabled = false;
   document.getElementById("btnRecord").disabled = false;
