@@ -17,6 +17,7 @@ const END = "// ===== END 纯算法";
 const ALGO_NAMES = [
   "dtwAlign", "rhythmMetrics", "wordDeviations", "breathMetrics",
   "logistic", "thinTeacher", "nearestTeacherIdx", "wordDurationByMapping",
+  "breathScoreFromCv",
 ];
 
 function loadAlgo() {
@@ -343,7 +344,7 @@ function runPipeline(lyrics, stu) {
   return {
     rhythm, breath, words,
     rhythmScore: Math.round(algo.logistic(rhythm.warpStd, 1.0, 2.0)),
-    breathScore: breath.cv === null ? null : Math.round((1 - Math.min(1, breath.cv)) * 100),
+    breathScore: algo.breathScoreFromCv(breath.cv),
   };
 }
 
@@ -474,6 +475,31 @@ test("空歌词或空映射：返回空明细，不崩", () => {
   const one = [{ t: 0, pitch: 60, rms: 0.15 }];
   assert(algo.wordDurationByMapping(one, tea, [0], []).items.length === 0, "空歌词应返回空明细");
   assert(algo.wordDurationByMapping(one, tea, [], LYRICS).items.length === 0, "空映射应返回空明细");
+});
+
+// ===== breathScoreFromCv（实时卡片与停录后面板共用的稳定度式子）=====
+console.log("\nbreathScoreFromCv");
+
+test("cv 为 0：满稳 100", () => {
+  isFn(algo.breathScoreFromCv, "breathScoreFromCv");
+  assert(algo.breathScoreFromCv(0) === 100, `实际 ${algo.breathScoreFromCv(0)}`);
+});
+test("cv 为 0.15：报 85（就是 1 − 0.15）", () => {
+  isFn(algo.breathScoreFromCv, "breathScoreFromCv");
+  assert(algo.breathScoreFromCv(0.15) === 85, `实际 ${algo.breathScoreFromCv(0.15)}`);
+});
+test("cv 为 1：报 0，不报负数", () => {
+  isFn(algo.breathScoreFromCv, "breathScoreFromCv");
+  assert(algo.breathScoreFromCv(1) === 0, `实际 ${algo.breathScoreFromCv(1)}`);
+});
+test("cv 超过 1：仍钳在 0", () => {
+  isFn(algo.breathScoreFromCv, "breathScoreFromCv");
+  assert(algo.breathScoreFromCv(1.5) === 0, `实际 ${algo.breathScoreFromCv(1.5)}`);
+});
+test("cv 为 null / NaN：返回 null（页面显示「待分析」，不装满分）", () => {
+  isFn(algo.breathScoreFromCv, "breathScoreFromCv");
+  assert(algo.breathScoreFromCv(null) === null, `null 应返回 null，实际 ${algo.breathScoreFromCv(null)}`);
+  assert(algo.breathScoreFromCv(NaN) === null, `NaN 应返回 null，实际 ${algo.breathScoreFromCv(NaN)}`);
 });
 
 // ===== 汇总 =====

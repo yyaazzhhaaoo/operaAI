@@ -1635,6 +1635,13 @@ function breathMetrics(stu) {
     sustainCount: kept.length,
   };
 }
+// 气息稳定度 = 1 − 长音段能量变异系数，取整并钳在 0–100。
+// 实时卡片与停录后的维度面板共用这一个式子——两处的「气息」数字在数学上不可能漂移。
+// cv 为 null（全段没有 ≥0.4s 的平稳音）时返回 null，由调用方显示「待分析」而不是假装满分。
+function breathScoreFromCv(cv) {
+  if (cv === null || !Number.isFinite(cv)) return null;
+  return Math.max(0, Math.round((1 - Math.min(1, cv)) * 100));
+}
 
 // 与后端 analyze_service._logistic 同一个式子：阈值处 50 分，越偏离越低。
 // 节奏沿用后端已标定的 mid/k，这样本页的「节奏」与 B 组报告的是同一口径。
@@ -1720,7 +1727,7 @@ function simulateAnalysisAfterRecord() {
 
   // 气息：稳定度 = 1 − 长音内的能量变异系数。没有够长的音就报「待分析」，
   // 不拿 100 分充数——那会让学生以为「没测出来」等于「唱得好」。
-  const breathScore = breath.cv === null ? null : Math.max(0, Math.round((1 - Math.min(1, breath.cv)) * 100));
+  const breathScore = breathScoreFromCv(breath.cv);
   if (breathScore === null) {
     addLog("气息：没数到 0.4s 以上的长音，稳定度本次不出", "warn");
   } else {
