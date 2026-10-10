@@ -1554,6 +1554,27 @@ function wordDeviations(stu, tea, mapping, lyrics) {
   const median_ = items.length ? median(items.map(it => it.diff)) : 0;
   return { items, median: median_ };
 }
+// 逐字时值偏差（PRD 2.9 的实时卡片口径）：每个字实际占用了多久，从 DTW 映射上读。
+// 本字的乐谱终点由 start + duration 直接给出，不引用下一个字——对最后一个字同样成立。
+// 与 wordDeviations 同源同映射，区别只在读的是「间隔」还是「起点」。
+function wordDurationByMapping(stu, tea, mapping, lyrics) {
+  const items = [];
+  if (!lyrics || lyrics.length === 0 || !mapping || mapping.length === 0) return { items };
+  for (let k = 0; k < lyrics.length; k++) {
+    const ly = lyrics[k];
+    // 标点没有音高，也就没有乐谱曲线上的落点，跳过
+    if (ly.pitch === null || !Number.isFinite(ly.pitch)) continue;
+    if (!Number.isFinite(ly.start) || !Number.isFinite(ly.duration)) continue;
+    const jFrom = nearestTeacherIdx(tea, ly.start);
+    const jTo = nearestTeacherIdx(tea, ly.start + ly.duration);
+    // jTo <= jFrom 说明映射在这一段不单调，这个字不出数
+    if (jFrom < 0 || jTo < 0 || jTo <= jFrom) continue;
+    if (jFrom >= mapping.length || jTo >= mapping.length) continue;
+    const actual = stu[mapping[jTo]].t - stu[mapping[jFrom]].t;
+    items.push({ index: k, actual, expected: ly.duration, diff: actual - ly.duration });
+  }
+  return { items };
+}
 // 气息读数（都只看学生自己，与教师无关）：
 //   cv          长音段内能量变异系数的中位数——越小说明长音上越稳
 //   tailRatio   每句尾段/首段能量比的中位数——<1 说明越唱越没气

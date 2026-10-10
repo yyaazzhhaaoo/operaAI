@@ -16,7 +16,7 @@ const END = "// ===== END 纯算法";
 // 算法段应当导出的函数名；写测试时先加名字，实现后自然出现在导出里
 const ALGO_NAMES = [
   "dtwAlign", "rhythmMetrics", "wordDeviations", "breathMetrics",
-  "logistic", "thinTeacher", "nearestTeacherIdx",
+  "logistic", "thinTeacher", "nearestTeacherIdx", "wordDurationByMapping",
 ];
 
 function loadAlgo() {
@@ -384,6 +384,96 @@ test("窗内没有样本：返回 -1", () => {
   const tea = makeTeacher(3, 0.02);
   assert(algo.nearestTeacherIdx(tea, 9.0) === -1, "离曲线 6s 远，应返回 -1");
   assert(algo.nearestTeacherIdx(tea, NaN) === -1, "非有限时刻应返回 -1");
+});
+
+// ===== wordDurationByMapping（实时卡片主数：逐字时值偏差）=====
+console.log("\nwordDurationByMapping");
+
+// 走与页面相同的顺序：乐谱采样 → 抽稀 → 对齐 → 读时值
+function durations(lyrics, stu) {
+  const tea = algo.thinTeacher(teacherFromLyrics(lyrics), stu.length, 4e6);
+  const mapping = algo.dtwAlign(stu, tea, { bandSec: 3 });
+  return algo.wordDurationByMapping(stu, tea, mapping, lyrics);
+}
+
+// 把「二」（乐谱 0.5–1.0s，长 0.5s）拉成学生时间 0.5–1.4s（长 0.9s），其余照旧：
+// 学生时间轴 → 乐谱位置的分段映射
+function stretchedScoreAt(t) {
+  if (t < 0.5) return t;
+  if (t < 1.4) return 0.5 + (t - 0.5) * (0.5 / 0.9);
+  return 1.0 + (t - 1.4);
+}
+function singStretched(dt, dur) {
+  const pts = [];
+  for (let t = 0; t <= dur; t += dt) {
+    const s = stretchedScoreAt(t);
+    for (const ly of LYRICS) {
+      if (s >= ly.start && s < ly.start + ly.duration) { pts.push({ t, pitch: ly.pitch, rms: 0.15 }); break; }
+    }
+  }
+  return pts;
+}
+
+test("准时唱：每个字的时值偏差都接近 0", () => {
+  isFn(algo.wordDurationByMapping, "wordDurationByMapping");
+  const r = durations(LYRICS, singAlong(LYRICS, 1.0, 0.01, 0.15));
+  assert(r.items.length === 3, `应给出 3 个字，实际 ${r.items.length}`);
+  for (const it of r.items) {
+    close(it.expected, 0.5, 1e-9, `第 ${it.index} 个字的乐谱时值`);
+    assert(Math.abs(it.diff) < 0.05, `第 ${it.index} 个字时值偏差 ${it.diff}，应接近 0`);
+  }
+});
+
+test("整段晚 0.5s 起唱：时值偏差仍接近 0（整体偏移不算进时值）", () => {
+  isFn(algo.wordDurationByMapping, "wordDurationByMapping");
+  const stu = singAlong(LYRICS, 1.0, 0.01, 0.15).map(p => ({ t: p.t + 0.5, pitch: p.pitch, rms: p.rms }));
+  const r = durations(LYRICS, stu);
+  assert(r.items.length === 3, `应给出 3 个字，实际 ${r.items.length}`);
+  for (const it of r.items) {
+    assert(
+      Math.abs(it.diff) < 0.06,
+      `第 ${it.index} 个字时值偏差 ${it.diff}——整体晚起唱不该记进时值（这是本口径的验收点）`
+    );
+  }
+});
+
+test("拖长某个字：该字偏差明显为正，前面的字不被牵连", () => {
+  isFn(algo.wordDurationByMapping, "wordDurationByMapping");
+  const r = durations(LYRICS, singStretched(0.01, 1.9));
+  const byIdx = {};
+  for (const it of r.items) byIdx[it.index] = it;
+  assert(byIdx[1], `第 2 个字应能算出时值，实际只有 ${r.items.map(it => it.index).join(",")}`);
+  assert(byIdx[1].diff > 0.3, `第 2 个字拉长 0.4s，应报明显偏长，实际 ${byIdx[1].diff}`);
+  if (byIdx[0]) {
+    assert(Math.abs(byIdx[0].diff) < 0.08, `第 1 个字不该被牵连，实际 ${byIdx[0].diff}`);
+  }
+});
+
+test("整段慢一成：每个字的偏差都约为 +0.05s", () => {
+  isFn(algo.wordDurationByMapping, "wordDurationByMapping");
+  const r = durations(LYRICS, singAlong(LYRICS, 1.1, 0.01, 0.15));
+  assert(r.items.length === 3, `应给出 3 个字，实际 ${r.items.length}`);
+  for (const it of r.items) {
+    close(it.diff, it.expected * 0.1, 0.03, `第 ${it.index} 个字的时值偏差`);
+  }
+});
+
+test("标点与字段不全的字不进明细", () => {
+  isFn(algo.wordDurationByMapping, "wordDurationByMapping");
+  const lyrics = LYRICS.concat([
+    { char: "，", pitch: null, start: 1.5, duration: null },
+    { char: "四", pitch: 69, start: null, duration: 0.5 },
+  ]);
+  const r = durations(lyrics, singAlong(LYRICS, 1.0, 0.01, 0.15));
+  assert(r.items.length === 3, `应只有 3 条，实际 ${r.items.length}`);
+});
+
+test("空歌词或空映射：返回空明细，不崩", () => {
+  isFn(algo.wordDurationByMapping, "wordDurationByMapping");
+  const tea = teacherFromLyrics(LYRICS);
+  const one = [{ t: 0, pitch: 60, rms: 0.15 }];
+  assert(algo.wordDurationByMapping(one, tea, [0], []).items.length === 0, "空歌词应返回空明细");
+  assert(algo.wordDurationByMapping(one, tea, [], LYRICS).items.length === 0, "空映射应返回空明细");
 });
 
 // ===== 汇总 =====
