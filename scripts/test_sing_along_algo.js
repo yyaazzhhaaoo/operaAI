@@ -502,6 +502,28 @@ test("cv 为 null / NaN：返回 null（页面显示「待分析」，不装满�
   assert(algo.breathScoreFromCv(NaN) === null, `NaN 应返回 null，实际 ${algo.breathScoreFromCv(NaN)}`);
 });
 
+// ===== 端到端（实时）：按 updateLiveMetrics 里的调用顺序串一遍 =====
+console.log("\n端到端（实时卡片）");
+
+test("整段拖慢一成：门限放行、逐字时值偏长、气息稳定度不为 null", () => {
+  const lyrics = LYRICS;
+  const stu = singAlong(lyrics, 1.1, 0.01, 0.15);
+  const tea = algo.thinTeacher(teacherFromLyrics(lyrics), stu.length, 4e6);
+  const mapping = algo.dtwAlign(stu, tea, { bandSec: 3 });
+  const tempo = algo.rhythmMetrics(stu, tea, mapping).tempo;
+  assert(tempo >= 0.5 && tempo <= 2, `可信度门限应放行，实际 tempo=${tempo}`);
+
+  const durs = algo.wordDurationByMapping(stu, tea, mapping, lyrics).items;
+  assert(durs.length > 0, "应至少给出一个字的时值");
+  for (const it of durs) {
+    assert(it.diff > 0, `第 ${it.index} 个字应报偏长，实际 ${it.diff}`);
+  }
+
+  const score = algo.breathScoreFromCv(algo.breathMetrics(stu).cv);
+  assert(score !== null, "匀速长音应给出稳定度，不该是 null");
+  assert(score > 80, `匀速长音的稳定度应偏高，实际 ${score}`);
+});
+
 // ===== 汇总 =====
 console.log("");
 if (failures.length) {

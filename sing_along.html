@@ -663,6 +663,7 @@ const OCTAVE_TOL_SEMI = 4;      // 八度修正容差 ±4 个半音（=±400 音
 const OCTAVE_MIN_POINTS = 10;   // 攒够这么多个「与教师基准成对」的采样点才敢判八度
 const DETECT_INTERVAL_MS = 30;  // 检测节流：约 33 次/秒，够画曲线且不占满主线程
 const TOLERANCE_CENTS = 30;     // 容忍区间半宽（音分），与 updateMetrics 的「在容忍区间内」阈值一致
+const LIVE_CALC_INTERVAL_MS = 500; // 实时节奏/气息的重算节流：两张卡都「完成才定格」，粒度不影响正确性
 
 let audioCtx = null;      // 跟唱用的 AudioContext（与 MediaRecorder 共用同一个麦克风流）
 let analyser = null;      // AnalyserNode：逐帧提供时域波形
@@ -1271,6 +1272,7 @@ async function toggleRecord() {
   recordStartTime = performance.now();
   studentPoints = [];
   currentWordIndex = -1;
+  startLiveCards();
   document.getElementById("btnRecord").style.display = "none";
   document.getElementById("btnStop").style.display = "inline-flex";
   document.getElementById("recIndicator").style.display = "flex";
@@ -1327,8 +1329,19 @@ function recordLoop(now) {
   drawTimeline();
   updateProgress(elapsed);
 
+  // 实时节奏/气息：节流重算（两张卡都是「完成才定格」，粒度不影响正确性）
+  if (now - lastLiveCalcAt >= LIVE_CALC_INTERVAL_MS) {
+    lastLiveCalcAt = now;
+    updateLiveMetrics();
+  }
+
   if (isRecording) requestAnimationFrame(recordLoop);
 }
+
+// 实时「节奏偏差」的配色阈值（秒）：配的是逐字时值偏差，与音准那套音分阈值无关。
+// 0.10s 约当一个十六分音符的容差量级；未经真实素材标定，调参改这两行即可。
+const DEV_GOOD_SEC = 0.10;
+const DEV_WARN_SEC = 0.25;
 
 function updateMetrics(elapsed, seg, widx) {
   if (widx < 0) return;
@@ -1350,49 +1363,107 @@ function updateMetrics(elapsed, seg, widx) {
   document.getElementById("cardPitch").className = `metric-card ${absDiff <= 30 ? 'success' : absDiff <= 50 ? 'warn' : 'danger'}`;
   document.getElementById("trendPitch").textContent = absDiff <= 30 ? "✓ 在容忍区间内" : (diffCents > 0 ? "↗ 偏高" : "↘ 偏低");
   document.getElementById("trendPitch").style.color = absDiff <= 30 ? "#4A8F6B" : absDiff <= 50 ? "#C9A84C" : "#B83A2F";
+}
 
-  let rhythmOffset = 0;
-  let breathVal = 0.85;
-  let rhythmDisplay = "0.00";
-  let breathDisplay = "85";
-  let rhythmTrend = "✓ 节奏准确";
-  let breathTrend = "✓ 气息稳定";
+// ===== 实时节奏/气息（薄壳：只做调度与 DOM，算术全在「纯算法」段）=====
+// 每 LIVE_CALC_INTERVAL_MS 对已累积的落点重跑一次对齐，逐字时值偏差进节奏卡、
+// 长音段能量变异系数进气息卡。单次约 20 万格 DTW，见 spec §11 的代价登记。
+let lastLiveCalcAt = -Infinity;  // 上次重算的 rAF 时间戳
+let lastRhythmKey = null;        // 上次落地的节奏读数（日志去重：同一个字会被反复结算出同一个值）
+let lastBreathKey = null;        // 上次落地的气息读数
 
-  if (widx === 2) {
-    rhythmOffset = 0.08;
-    breathVal = 0.72;
-    rhythmDisplay = "+0.08";
-    breathDisplay = "72";
-    rhythmTrend = "↗ 偏慢";
-    breathTrend = "⚠ 气息波动";
-  } else if (widx === 0 || widx === 1) {
-    rhythmOffset = 0.02;
-    breathVal = 0.88;
-    rhythmDisplay = "+0.02";
-    breathDisplay = "88";
-    rhythmTrend = "✓ 节奏准确";
-    breathTrend = "✓ 气息稳定";
-  } else {
-    rhythmOffset = 0.03;
-    breathVal = 0.82;
-    rhythmDisplay = "+0.03";
-    breathDisplay = "82";
-    rhythmTrend = "✓ 节奏准确";
-    breathTrend = "✓ 气息稳定";
+// 开始录音时把两张卡拨回等待态（停录后的重置在 stopAll 里，措辞是「等待开始…」）
+function startLiveCards() {
+  lastLiveCalcAt = -Infinity;
+  lastRhythmKey = null;
+  lastBreathKey = null;
+  document.getElementById("valRhythm").textContent = "--";
+  document.getElementById("valRhythm").style.color = "#C9A84C";
+  document.getElementById("trendRhythm").textContent = "等待起唱…";
+  document.getElementById("trendRhythm").style.color = "#8A7A6A";
+  document.getElementById("cardRhythm").className = "metric-card";
+  document.getElementById("valBreath").textContent = "--";
+  document.getElementById("valBreath").style.color = "#4A8F6B";
+  document.getElementById("trendBreath").textContent = "等待长音…";
+  document.getElementById("trendBreath").style.color = "#8A7A6A";
+  document.getElementById("cardBreath").className = "metric-card";
+}
+
+// 取 index ≤ maxIdx 中最靠后的一个读数；一个都没有、或最近那个也太陈（超过 back 个字）→ null。
+// 回溯上限就是「不回溯超过 3 个字」这条容错规则，免得卡片停在很陈的读数上。
+function latestItem(items, maxIdx, back) {
+  let best = null;
+  for (const it of items) {
+    if (it.index > maxIdx || maxIdx - it.index > back) continue;
+    if (!best || it.index > best.index) best = it;
+  }
+  return best;
+}
+
+function updateLiveMetrics() {
+  const lyrics = currentLyrics;
+  if (!lyrics.length || teacherPoints.length < 2) return;
+  const stu = studentPoints;
+  if (stu.length < 2) return;
+
+  const tea = thinTeacher(teacherPoints, stu.length, DTW_MAX_CELLS);
+  const mapping = dtwAlign(stu, tea, { bandSec: RHYTHM_BAND_SEC });
+  if (!mapping.length) return;
+  // 可信度门限：与停录后的维度面板同一个判据（tempo 越界就整轮不出数、不写日志）
+  const tempo = rhythmMetrics(stu, tea, mapping).tempo;
+  if (!(tempo >= 0.5 && tempo <= 2)) return;
+
+  // 节奏：取最近一个已唱完的字（当前字还在唱，不出数）
+  const durs = wordDurationByMapping(stu, tea, mapping, lyrics).items;
+  const dur = latestItem(durs, currentWordIndex - 1, 3);
+  if (dur) {
+    const starts = wordDeviations(stu, tea, mapping, lyrics).items;
+    applyRhythmCard(dur, starts.find(it => it.index === dur.index) || null);
   }
 
-  document.getElementById("valRhythm").textContent = rhythmDisplay + "s";
-  const rAbs = Math.abs(rhythmOffset);
-  document.getElementById("valRhythm").style.color = rAbs <= 0.04 ? "#4A8F6B" : rAbs <= 0.08 ? "#C9A84C" : "#B83A2F";
-  document.getElementById("trendRhythm").textContent = rhythmTrend;
-  document.getElementById("trendRhythm").style.color = rAbs <= 0.04 ? "#4A8F6B" : rAbs <= 0.08 ? "#C9A84C" : "#B83A2F";
-  document.getElementById("cardRhythm").className = `metric-card ${rAbs <= 0.04 ? 'success' : rAbs <= 0.08 ? 'warn' : 'danger'}`;
+  // 气息：breathMetrics 只统计已完成的长音段，天然就是「长音唱完才定格」
+  const breath = breathMetrics(stu);
+  const score = breathScoreFromCv(breath.cv);
+  if (score !== null) applyBreathCard(score, breath.cv, breath.sustainCount);
+}
 
-  document.getElementById("valBreath").textContent = breathDisplay + "%";
-  document.getElementById("valBreath").style.color = breathVal >= 0.80 ? "#4A8F6B" : breathVal >= 0.70 ? "#C9A84C" : "#B83A2F";
-  document.getElementById("trendBreath").textContent = breathTrend;
-  document.getElementById("trendBreath").style.color = breathVal >= 0.80 ? "#4A8F6B" : breathVal >= 0.70 ? "#C9A84C" : "#B83A2F";
-  document.getElementById("cardBreath").className = `metric-card ${breathVal >= 0.80 ? 'success' : breathVal >= 0.70 ? 'warn' : 'danger'}`;
+function applyRhythmCard(dur, start) {
+  const diff = dur.diff;
+  const abs = Math.abs(diff);
+  const color = abs <= DEV_GOOD_SEC ? "#4A8F6B" : abs <= DEV_WARN_SEC ? "#C9A84C" : "#B83A2F";
+  const cls = abs <= DEV_GOOD_SEC ? "success" : abs <= DEV_WARN_SEC ? "warn" : "danger";
+  const shown = (diff >= 0 ? "+" : "-") + Math.abs(diff).toFixed(2) + "s";
+
+  document.getElementById("valRhythm").textContent = shown;
+  document.getElementById("valRhythm").style.color = color;
+  document.getElementById("trendRhythm").textContent =
+    abs <= DEV_GOOD_SEC ? "✓ 时值准确" : diff > 0 ? "↗ 时值偏长" : "↘ 时值偏短";
+  document.getElementById("trendRhythm").style.color = color;
+  document.getElementById("cardRhythm").className = `metric-card ${cls}`;
+
+  const key = `${dur.index}:${shown}`;
+  if (key !== lastRhythmKey) {
+    lastRhythmKey = key;
+    const s = start ? ` · 起唱 ${start.diff >= 0 ? "+" : "-"}${Math.abs(start.diff).toFixed(2)}s` : "";
+    addLog(`节奏：时值 ${shown}${s}`, "info");
+  }
+}
+
+function applyBreathCard(score, cv, sustainCount) {
+  const color = score >= 80 ? "#4A8F6B" : score >= 70 ? "#C9A84C" : "#B83A2F";
+  const cls = score >= 80 ? "success" : score >= 70 ? "warn" : "danger";
+
+  document.getElementById("valBreath").textContent = score + "%";
+  document.getElementById("valBreath").style.color = color;
+  document.getElementById("trendBreath").textContent = score >= 80 ? "✓ 气息稳定" : "⚠ 气息波动";
+  document.getElementById("trendBreath").style.color = color;
+  document.getElementById("cardBreath").className = `metric-card ${cls}`;
+
+  const key = `${score}:${sustainCount}`;
+  if (key !== lastBreathKey) {
+    lastBreathKey = key;
+    addLog(`气息：稳定度 ${score}% · 能量波动 ${Math.round(cv * 100)}% · 长音 ${sustainCount} 段`, "info");
+  }
 }
 
 function updateProgress(elapsed) {
@@ -1877,6 +1948,10 @@ function stopAll() {
   document.getElementById("trendBreath").textContent = "等待开始…";
   document.getElementById("trendBreath").style.color = "#8A7A6A";
   document.getElementById("cardBreath").className = "metric-card";
+  // 清掉实时读数的节流时间戳与去重缓存，下次录音从头来
+  lastLiveCalcAt = -Infinity;
+  lastRhythmKey = null;
+  lastBreathKey = null;
   drawTimeline();
   addLog("⏹️ 已停止", "info");
 }
