@@ -1706,6 +1706,76 @@ function breathMetrics(stu) {
     sustainCount: kept.length,
   };
 }
+// 【临时诊断：定位完「气息不出数」立即删除】把 breathMetrics 内部各道门的分流数一次算出来，
+// 用来判断是静音门、帧距门还是音高门把长音段砍没了。
+function breathDiagnose(stu) {
+  const out = { pts: stu.length };
+  if (!stu.length) return out;
+  out.span = +(stu[stu.length - 1].t - stu[0].t).toFixed(2);
+  const sorted = stu.map(p => p.rms).sort((a, b) => a - b);
+  const pctl = q => sorted[Math.floor(q * (sorted.length - 1))];
+  const floor = Math.min(pctl(BREATH_SILENCE_PCTL), pctl(0.8) * BREATH_FLOOR_RATIO);
+  out.rmsMin = sorted[0]; out.rmsP50 = pctl(0.5); out.floor = floor;
+  const voiced = stu.filter(p => p.rms > floor);
+  out.voiced = voiced.length;
+  const gaps = [];
+  for (let i = 1; i < stu.length; i++) gaps.push(stu[i].t - stu[i - 1].t);
+  gaps.sort((a, b) => a - b);
+  const gp = q => (gaps.length ? +gaps[Math.floor(q * (gaps.length - 1))].toFixed(3) : 0);
+  out.gapP50 = gp(0.5); out.gapP90 = gp(0.9);
+  out.gapMax = gaps.length ? +gaps[gaps.length - 1].toFixed(3) : 0;
+  const phrases = [];
+  let cur = [];
+  for (const p of voiced) {
+    if (cur.length && p.t - cur[cur.length - 1].t > BREATH_GAP_SEC) { phrases.push(cur); cur = []; }
+    cur.push(p);
+  }
+  if (cur.length) phrases.push(cur);
+  out.phrases = phrases.length;
+  out.phraseMax = phrases.length
+    ? +Math.max(...phrases.map(p => p[p.length - 1].t - p[0].t)).toFixed(2) : 0;
+  const span = s => s[s.length - 1].t - s[0].t;
+  // 只按帧距门切：看音高门之外还剩多长
+  const gapOnly = [];
+  for (const ph of phrases) {
+    let seg = [ph[0]];
+    for (let i = 1; i < ph.length; i++) {
+      if (ph[i].t - ph[i - 1].t <= BREATH_FRAME_GAP_SEC) seg.push(ph[i]);
+      else { gapOnly.push(seg); seg = [ph[i]]; }
+    }
+    gapOnly.push(seg);
+  }
+  out.gapOnlySegs = gapOnly.length;
+  out.gapOnlyMax = gapOnly.length ? +Math.max(...gapOnly.map(span)).toFixed(3) : 0;
+  // 再加音高门（现在的实现）
+  const longs = [];
+  for (const ph of phrases) {
+    let seg = [ph[0]];
+    for (let i = 1; i < ph.length; i++) {
+      const movable = ph[i].t - ph[i - 1].t <= BREATH_FRAME_GAP_SEC;
+      const flat = Math.abs(ph[i].pitch - seg[0].pitch) <= BREATH_FLAT_SEMI;
+      if (movable && flat) seg.push(ph[i]); else { longs.push(seg); seg = [ph[i]]; }
+    }
+    longs.push(seg);
+  }
+  out.segs = longs.length;
+  out.segMax = longs.length ? +Math.max(...longs.map(span)).toFixed(3) : 0;
+  // 最长那条「只按帧距」的段上量音高：锚点最大偏离、逐帧步长——用来定新容差
+  let best = null;
+  for (const s of gapOnly) if (!best || span(s) > span(best)) best = s;
+  if (best && best.length > 1) {
+    let maxDev = 0, sumStep = 0, maxStep = 0;
+    for (let i = 1; i < best.length; i++) {
+      maxDev = Math.max(maxDev, Math.abs(best[i].pitch - best[0].pitch));
+      const st = Math.abs(best[i].pitch - best[i - 1].pitch);
+      sumStep += st; maxStep = Math.max(maxStep, st);
+    }
+    out.anchorMaxDev = +maxDev.toFixed(2);
+    out.stepMean = +(sumStep / (best.length - 1)).toFixed(2);
+    out.stepMax = +maxStep.toFixed(2);
+  }
+  return out;
+}
 // 气息稳定度 = 1 − 长音段能量变异系数，取整并钳在 0–100。
 // 实时卡片与停录后的维度面板共用这一个式子——两处的「气息」数字在数学上不可能漂移。
 // cv 为 null（全段没有 ≥0.4s 的平稳音）时返回 null，由调用方显示「待分析」而不是假装满分。
@@ -1780,6 +1850,7 @@ function simulateAnalysisAfterRecord() {
   const mapping = dtwAlign(studentPoints, tea, { bandSec: RHYTHM_BAND_SEC });
   const rhythm = rhythmMetrics(studentPoints, tea, mapping);
   const breath = breathMetrics(studentPoints);
+  addLog("【诊断】" + JSON.stringify(breathDiagnose(studentPoints)), "warn"); // 临时，定位完删
 
   // 速度比离谱时对齐结果没有意义（学生多半只唱了半段，或唱的压根不是这一段），
   // 这种情况宁可不给节奏分，也不要拿一个强行拉齐出来的数糊弄人。
