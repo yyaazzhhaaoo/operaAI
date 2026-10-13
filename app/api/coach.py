@@ -12,7 +12,7 @@ from app.api import api_bp
 from app.common.decorators import current_user_id, login_required, student_required
 from app.db import get_db
 from app.response import ok
-from app.schemas.coach import CoachChatIn, CoachContextOut
+from app.schemas.coach import ChatMessageOut, CoachChatIn, CoachContextOut
 from app.services import coach_service
 
 
@@ -50,3 +50,21 @@ def coach_chat():
     db = get_db()
     sid = coach_service.resolve_student_id(db, data.student_id, current_user_id())
     return ok(coach_service.chat(db, sid, data.message))
+
+
+@api_bp.route("/coach/history/<int:student_id>", methods=["GET"])
+@login_required
+@student_required
+def coach_history(student_id):
+    """E3 历史对话。limit 走查询串，默认 50，上限 200。"""
+    db = get_db()
+    sid = coach_service.resolve_student_id(db, student_id, current_user_id())
+    # request.args.get 拿到的永远是字符串，非数字会让 int() 抛 ValueError
+    # 变成未捕获的 500；给个安全兜底，越界交给下面夹紧。
+    try:
+        limit = int(request.args.get("limit", 50))
+    except (TypeError, ValueError):
+        limit = 50
+    limit = max(1, min(limit, 200))
+    out = [ChatMessageOut.model_validate(m) for m in coach_service.history(db, sid, limit)]
+    return ok([m.model_dump(mode="json") for m in out])

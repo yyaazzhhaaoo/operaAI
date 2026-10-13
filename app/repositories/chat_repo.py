@@ -80,8 +80,10 @@ def get_recent(db: Session, student_id: int, limit: int) -> list[ChatMessage]:
     E3 要按正序渲染。先在库里按倒序取 limit 条（走 created_at 索引、避免全表
     排序），回到内存再翻转——只取 limit 条时这是划算的。
 
-    同一秒内写入的 user/assistant 两条靠 id 兜底定序：created_at 是
-    TIMESTAMP 无小数秒精度，同一秒内两条会并列，只按 created_at 排会随机。
+    同一轮写入的 user/assistant 两条靠 id 兜底定序：created_at 的默认值是
+    PG 的 now()，而 now() 返回的是**事务开始时间**——同一次 chat() 里落的两条
+    拿到的时间戳一模一样（实测两条都是 15:10:59.246005），只按 created_at
+    排就是随机的。别把 created_at 的微秒精度当成可依赖的序。
     """
     rows = list(db.scalars(
         select(ChatMessage)

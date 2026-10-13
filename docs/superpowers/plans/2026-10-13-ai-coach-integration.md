@@ -474,8 +474,10 @@ def get_recent(db: Session, student_id: int, limit: int) -> list[ChatMessage]:
     E3 要按正序渲染。先在库里按倒序取 limit 条（走 created_at 索引、避免全表
     排序），回到内存再翻转——只取 limit 条时这是划算的。
 
-    同一毫秒内写入的 user/assistant 两条靠 id 兜底定序：created_at 是
-    TIMESTAMP 无小数秒精度，同一秒内两条会并列，只按 created_at 排会随机。
+    同一轮写入的 user/assistant 两条靠 id 兜底定序：created_at 的默认值是
+    PG 的 now()，而 now() 返回的是**事务开始时间**——同一次 chat() 里落的两条
+    拿到的时间戳一模一样（实测两条都是 15:10:59.246005），只按 created_at
+    排就是随机的。别把 created_at 的微秒精度当成可依赖的序。
     """
     rows = list(db.scalars(
         select(ChatMessage)
@@ -1387,9 +1389,9 @@ with session_scope() as db:
     print("1) 历史条数:", len(rows))
     assert rows, "库里本来就有 student_id=48 的一行，不该为空"
 
-    # 正序：最早的在前
-    times = [r["id"] for r in rows]
-    assert times == sorted(times), f"应按时间正序（此处用 id 近似），实际 {times}"
+    # 正序：id 递增（created_at 同轮并列，故用 id 近似）
+    ids = [r["id"] for r in rows]
+    assert ids == sorted(ids), f"应按时间正序，实际 {ids}"
     print("2) 正序 ✓")
 
     # 字段齐且能被 schema 吃下
@@ -1401,10 +1403,9 @@ with session_scope() as db:
     assert "context_snapshot" not in rows[0], "快照不对外暴露"
     print("4) 未泄漏 context_snapshot ✓")
 
-    # 无对话的学生 → 空列表
-    assert coach_service.history(db, 49) == [] or True   # 49 可能有自己的历史
-    print("5) 空历史返回列表（学生 2）:", coach_service.history(db, 2))
+    # 从没聊过的学生 → 空列表，不是报错
     assert coach_service.history(db, 2) == []
+    print("5) 学生 2 无历史 → [] ✓")
 
     # limit 生效
     assert len(coach_service.history(db, 48, limit=1)) == 1

@@ -319,3 +319,24 @@ def chat(db: Session, student_id: int, message: str) -> dict:
         "emotion": meta["emotion"],
         "quick_replies": meta["quick_replies"],
     }
+
+
+def history(db: Session, student_id: int, limit: int = 50) -> list[dict]:
+    """E3：回读某学生的对话，按时间正序。
+
+    只出 id/role/content/created_at，**不出 context_snapshot** ——
+    那是「这条回复当时基于什么」的审计记录，含学生画像等内部信息，
+    前端渲染对话根本用不到，没必要暴露。
+
+    created_at 存的是北京时间，直接给 ISO 串（前端 new Date() 解析本地时间）。
+    """
+    rows = chat_repo.get_recent(db, student_id, limit)
+    return [
+        {
+            "id": m.id,
+            "role": m.role,
+            "content": m.content,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+        }
+        for m in rows
+    ]
