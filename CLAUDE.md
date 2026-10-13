@@ -84,6 +84,8 @@ PostgreSQL 跑在 Docker 容器 `docker_postgres`（`postgres:15.7`，端口 543
 - 状态词表是 `parsing`/`parsed`/`error`（按前端，不是 B 组的 `queued`/`done`/`failed`）。
 - 列表（`fetchDemos`）自 2026-09-22 起也走真接口（`GET /api/demo/library/list`），只对教师可见。**两处坑**：(1) 库里的 `elo_difficulty` 当前是列默认值 **1000**（未标定），而页面按 0–1 渲染，`renderDemoList` 与 `renderDetail` 因此共用同一套容错——取不到有效值（null／非有限数／超出 0–1）就显示「待校准」且不渲染难度条，往列表加新读数时照抄这套判定，别直接 `.toFixed`（值为 null 时会抛 TypeError 打断整个 `map`，整张列表渲染不出来）；(2) `DEMO_DATA` 及 `fetchDemoDetail` 里的 mock 分支**已不可达**（列表不再产出字符串 id 的 mock 条目），是待清的死代码。
 - `TOP_DB`（静音判定阈值）当前是 **30.0，未经真实素材标定**；调参改 `parse_service` 顶部那一个常量即可（越小切得越碎）。
+- **AI 教练对话（`/api/coach/*`，E1/E2/E3）依赖内网 LLM**：调公司自部署的 vLLM（`LLM_BASE_URL`，默认 `http://192.168.36.208:8007/v1`，模型 `Qwen3.6-27B-FP8`，**无需 API Key**）。配置在 `.env` 的 `LLM_*` 四项，读取处是 `app/config.py`，唯一出口是 `app/services/llm_client.py`。**调用必须带 `chat_template_kwargs: {"enable_thinking": false}`**——Qwen3.x 是推理模型，不关思考的话正文全进 `reasoning`、`content` 返回 `null`（`max_tokens=800` 也被思维链吃满）；该参数写死在 `llm_client.py` 里，别删。**`LLM_TIMEOUT` 默认 10 秒、不是《2-系统设计说明》5.3 写的 3 秒**：实测延迟 2.06–3.15 秒，取 3 会有约四分之一请求被打成 503（见 `DOC_ISSUES.md` 第 42 条）。**改 `.env` 后必须重启后端**——werkzeug 的 reloader 只盯 `.py`，`.env` 改了不会自动生效。部署到目标机后先验网络可达性，开发机通不代表服务器通。无对外测试框架，验收用 `scripts/smoke_coach.sh`（**它会真调模型并往 `chat_messages` 写记录，非只读**）。
+- **`AI_teacher.html` 左侧「客观数据区」有三块是显式空位**：逐字偏差、CDM 归因、RAG 检索在库中**均无数据源**，E1 对这三项恒返回 `null`，页面显示「待接入」。**不要为了填满版面去编造这些数据**——`null` 表示「没有数据源」、`[]` 表示「查了是空」，这个区分是本项目刻意的约定（同 `homework_service.py`）。右侧「策略与引导」的**情绪指数是按三个档位画的示意宽度，不是模型算出来的百分比**；「上下文注入」与「水平适配语言风格」两张卡仍是写死的 mock（含 RAG、本次偏差等编造读数），尚未接真数据。演示账号用 `s01`（`students.id=48` 李小燕，8 个技法有 BKT），`stu001`/`stu002` 名下没有教学数据。
 
 ## 架构：单文件自包含原型
 
