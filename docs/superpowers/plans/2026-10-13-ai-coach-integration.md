@@ -1039,6 +1039,10 @@ with session_scope() as db:
     after = chat_repo.get_recent(db, 48, 200)
     assert len(after) == before + 2, f"应双写两条，实际多了 {len(after)-before}"
     assert after[-2].role == "user" and after[-2].content == "这一句总是唱不准"
+    # user 那条不给快照对象。注意：传 None 落库后是 JSON 的 null
+    # （jsonb_typeof='null'）而不是 SQL NULL——SQLAlchemy 的 JSONB 默认行为，
+    # 全项目 10 个 JSONB 列都是这样（没有一处设 none_as_null），
+    # Python 侧读回来仍是 None，故此断言成立。
     assert after[-2].context_snapshot is None, "user 那条不写快照"
     assert after[-1].role == "assistant"
     snap = after[-1].context_snapshot

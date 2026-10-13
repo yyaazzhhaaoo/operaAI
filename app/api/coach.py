@@ -12,7 +12,7 @@ from app.api import api_bp
 from app.common.decorators import current_user_id, login_required, student_required
 from app.db import get_db
 from app.response import ok
-from app.schemas.coach import CoachContextOut
+from app.schemas.coach import CoachChatIn, CoachContextOut
 from app.services import coach_service
 
 
@@ -39,3 +39,14 @@ def coach_context(student_id):
     sid = coach_service.resolve_student_id(db, student_id, current_user_id())
     return ok(CoachContextOut.model_validate(
         coach_service.build_context(db, sid)).model_dump(mode="json"))
+
+
+@api_bp.route("/coach/chat", methods=["POST"])
+@login_required
+@student_required
+def coach_chat():
+    """E2 发消息 → AI 回复。契约见《5-接口清单》3.3。"""
+    data = CoachChatIn.model_validate(_payload())
+    db = get_db()
+    sid = coach_service.resolve_student_id(db, data.student_id, current_user_id())
+    return ok(coach_service.chat(db, sid, data.message))
