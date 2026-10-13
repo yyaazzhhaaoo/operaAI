@@ -609,13 +609,14 @@ with session_scope() as db:
         assert e.code == 403
         print("7b) teacher01 跨学生 → 403 ✓")
 
-    # 8. 不存在的学生 → 404
+    # 8. 不存在的学生 id：与「别人的 id」一视同仁 → 403（故意不区分
+    #    「不存在」与「不是你的」，避免拿它当探针枚举库里的学生）
     try:
-        coach_service.resolve_student_id(db, 999999, user_id=999999)
-        raise AssertionError("不存在的学生应抛 404")
+        coach_service.resolve_student_id(db, 999999, user_id=50)
+        raise AssertionError("不存在的学生应抛 403")
     except BusinessError as e:
-        assert e.code == 404, f"实际 {e.code}"
-        print("8) 不存在的学生 → 404 ✓")
+        assert e.code == 403, f"实际 {e.code}"
+        print("8) 不存在的学生 → 403 ✓")
 
 print("全部通过")
 ```
@@ -759,7 +760,11 @@ def resolve_student_id(db: Session, path_student_id: int, user_id: int) -> int:
     「登录」、没区分角色。本实现收紧为「仅学生、且只能看自己」：
       - 路径里的 id 不是自己的 → 403
       - 登录人是学生却没有学生档案 → 403
-      - 学生档案不存在 → 404
+
+    **没有 404**：任何「不是你的」id 一律 403，故意不区分「该学生不存在」与
+    「不是你的」——拿 403/404 的差异去枚举库里有哪些学生是不必要的泄漏面。
+    至于「档案不存在」：own 是从 students 表按 user_id 查出来的 students.id，
+    只要不是 None，按同一张表主键再查必定查得到，那个分支不可达，不写。
 
     后端自己反查、不信任前端传来的 id：只做「传了吗」的判断没有意义，
     必须比对。
@@ -778,8 +783,6 @@ def resolve_student_id(db: Session, path_student_id: int, user_id: int) -> int:
         raise BusinessError(403, "AI 教练仅学生可用")
     if own != path_student_id:
         raise BusinessError(403, "无权访问该学员数据")
-    if user_repo.get_student_profile(db, own) is None:
-        raise BusinessError(404, "学员档案不存在")
     return own
 
 
@@ -937,7 +940,7 @@ curl -s -b $J -w '\n[HTTP %{http_code}]\n' http://127.0.0.1:8877/api/coach/conte
 curl -s -w '\n[HTTP %{http_code}]\n' http://127.0.0.1:8877/api/coach/context/48
 ```
 
-预期依次为 `403`（含中文「AI 教练仅学生可用」）、`200`（`bkt` 8 项、`last_practice` 为 null、三项空位 null）、`403`、`401`。
+预期依次为 `403`（文案「需要学生权限」——教师是被路由上的 `@student_required` 挡的）、`200`（`bkt` 8 项、`last_practice` 为 null、三项空位 null）、`403`、`401`。
 
 - [ ] **Step 8: Commit**
 
@@ -1486,7 +1489,7 @@ curl -s -b $J -w '\n[HTTP %{http_code}]\n' 'http://127.0.0.1:8877/api/coach/hist
 curl -s -b $J -w '\n[HTTP %{http_code}]\n' http://127.0.0.1:8877/api/coach/history/999999
 ```
 
-预期：`200`（最新 3 条）、`200`（非法 limit 回落 50，不 500）、`404`。
+预期：`200`（最新 3 条）、`200`（非法 limit 回落 50，不 500）、`403`（不是自己的 id 一律 403，故意不回 404）。
 
 - [ ] **Step 7: Commit**
 
