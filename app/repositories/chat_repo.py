@@ -48,3 +48,46 @@ def count_user_messages(
         .where(or_(*[ChatMessage.content.like(f"%{k}%") for k in keywords]))
     ) or 0
     return hit, total
+
+
+def add_message(
+    db: Session,
+    student_id: int,
+    role: str,
+    content: str,
+    context_snapshot: dict | None = None,
+) -> ChatMessage:
+    """追加一条对话。只 flush、不 commit——事务边界在 service 层。
+
+    context_snapshot 记录「这条回复当时是基于什么上下文生成的」，只写在
+    role='assistant' 那条上；user 那条传 None。
+    """
+    msg = ChatMessage(
+        student_id=student_id,
+        role=role,
+        content=content,
+        context_snapshot=context_snapshot,
+    )
+    db.add(msg)
+    db.flush()
+    return msg
+
+
+def get_recent(db: Session, student_id: int, limit: int) -> list[ChatMessage]:
+    """某个学生最近的 limit 条对话，**按时间正序**返回。
+
+    E2 要把它直接拼进 prompt（必须正序，倒序会让模型以为对话是反着进行的），
+    E3 要按正序渲染。先在库里按倒序取 limit 条（走 created_at 索引、避免全表
+    排序），回到内存再翻转——只取 limit 条时这是划算的。
+
+    同一秒内写入的 user/assistant 两条靠 id 兜底定序：created_at 是
+    TIMESTAMP 无小数秒精度，同一秒内两条会并列，只按 created_at 排会随机。
+    """
+    rows = list(db.scalars(
+        select(ChatMessage)
+        .where(ChatMessage.student_id == student_id)
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+        .limit(limit)
+    ).all())
+    rows.reverse()
+    return rows

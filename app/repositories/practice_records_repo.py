@@ -199,3 +199,21 @@ def get_last_practice_dates(db: Session, student_ids: list[int], until: datetime
     ).all()
     return {sid: d for sid, d in rows if d is not None}
 
+
+def get_latest_for_student(db: Session, student_id: int) -> PracticeRecord | None:
+    """某个学生最近一次练习记录；从没练过返回 None。
+
+    None 是**正常返回值**不是错误——「这个学生还没练过」在教练页要渲染成
+    「暂无练习记录」，不能当成 404。排序键与 idx_practice_student_time
+    (student_id, created_at DESC) 一致。
+
+    注意 created_at 存的是北京时间（服务器时区 Asia/Shanghai），不要在这上面
+    套 AT TIME ZONE。
+    """
+    return db.scalar(
+        select(PracticeRecord)
+        .where(PracticeRecord.student_id == student_id)
+        .order_by(desc(PracticeRecord.created_at))
+        .limit(1)
+    )
+

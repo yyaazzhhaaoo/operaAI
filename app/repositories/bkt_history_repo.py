@@ -44,3 +44,19 @@ def get_recent_by_skill(db:Session, limit:int = 2) -> list[BktHistory]:
         .where(ranked.c.rn <= limit)
         .order_by(history.student_id, history.skill, desc(history.recorded_at))
     ).all())
+
+
+def get_latest_per_skill_for_student(db: Session, student_id: int) -> list[BktHistory]:
+    """某个学生每个技法只留 recorded_at 最新的那一条，即「当前掌握度」。
+
+    与已有的 get_latest_by_skill 是同一套 DISTINCT ON 写法，区别只是**限定单个
+    学生**——那个函数把全班拉回来再按学生分组，只为渲染一个人的左侧面板不值当，
+    且 LIMIT 也下推不到索引。这里带上 student_id 等值条件，正好命中
+    idx_bkt_student_skill(student_id, skill, recorded_at DESC)。
+    """
+    return list(db.scalars(
+        select(BktHistory)
+        .where(BktHistory.student_id == student_id)
+        .distinct(BktHistory.skill)
+        .order_by(BktHistory.skill, desc(BktHistory.recorded_at))
+    ).all())

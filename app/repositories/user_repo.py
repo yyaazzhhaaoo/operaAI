@@ -95,3 +95,30 @@ def get_students_with_bkt(db: Session, skills: list[str]) -> list[tuple[int, str
         .order_by(Student.id)
     ).all()
     return [tuple(row) for row in rows]
+
+
+def get_student_id_by_user_id(db: Session, user_id: int) -> int | None:
+    """登录用户 id → students.id；该用户没有学生档案时返回 None。
+
+    students.id 与 users.id 是两条独立序列、数值部分重合，直接拿 user_id 当
+    student_id 用会静默取到别人的数据，且不报错（DOC_ISSUES 第 21 条）。
+    这里显式走 students.user_id 这一跳，是全项目唯一的正向映射入口。
+    """
+    return db.scalar(select(Student.id).where(Student.user_id == user_id))
+
+
+def get_student_profile(
+    db: Session, student_id: int
+) -> tuple[int, str | None, str | None] | None:
+    """单个学生的档案，返回 (students.id, display_name, level)；查不到返回 None。
+
+    姓名在 users.display_name，students 表只有 id/user_id/level，
+    所以必须 join 拐一次（同 get_student_names，DOC_ISSUES 第 21 条）。
+    用内连接：没有账号的档案行取不到姓名，这样的行对教练页没有意义。
+    """
+    row = db.execute(
+        select(Student.id, User.display_name, Student.level)
+        .join(User, User.id == Student.user_id)
+        .where(Student.id == student_id)
+    ).first()
+    return tuple(row) if row else None
