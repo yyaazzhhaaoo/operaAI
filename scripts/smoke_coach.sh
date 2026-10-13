@@ -109,11 +109,17 @@ req "$BASE/api/coach/context/48"
 expect_status "E1 未登录 → 401" 401
 expect_code   "E1 未登录 code=401" 401
 
+# 本人便捷入口：无 id，页面登进来时用它探出 students.id（前端唯一入口，必须验）
+req "$BASE/api/coach/context/me"
+expect_status "E1 /me 未登录 → 401" 401
+
 JAR="$JAR_T"
 post_json "/api/auth/login" "{\"username\":\"teacher01\",\"password\":\"$PW\"}"
 expect_status "teacher01 登录 → 200" 200
 req "$BASE/api/coach/context/48"
 expect_status "E1 教师 → 403" 403
+req "$BASE/api/coach/context/me"
+expect_status "E1 /me 教师 → 403" 403
 # 教师是被路由上的 @student_required 挡的，文案是「需要学生权限」；
 # 不是 service 里那句「AI 教练仅学生可用」——那句要到 stu002 那种
 # 「是学生但没有学生档案」的账号才会出现。
@@ -141,6 +147,13 @@ expect_in     "无源项 deviations 为 null" '"deviations":null'
 expect_in     "无源项 cdm 为 null" '"cdm":null'
 expect_in     "无源项 rag 为 null" '"rag":null'
 expect_not_in "不该编造逐字偏差" '"cents"'
+
+# /me 必须与带 id 的那条回同一份数据——前端正是靠它的 student.id 去调 E2/E3
+req "$BASE/api/coach/context/me"
+expect_status "E1 /me 本人 → 200" 200
+expect_code   "E1 /me code=0" 0
+expect_in     "E1 /me 同样是李小燕" "李小燕"
+expect_in     "E1 /me 报回 student.id=48" '"id":48'
 
 echo
 echo "── 3. E1 空态（stu001，students.id=2 无教学数据）──"

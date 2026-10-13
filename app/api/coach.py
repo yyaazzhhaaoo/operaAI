@@ -10,7 +10,9 @@ from flask import request
 
 from app.api import api_bp
 from app.common.decorators import current_user_id, login_required, student_required
+from app.common.errors import BusinessError
 from app.db import get_db
+from app.repositories import user_repo
 from app.response import ok
 from app.schemas.coach import ChatMessageOut, CoachChatIn, CoachContextOut
 from app.services import coach_service
@@ -39,6 +41,27 @@ def coach_context(student_id):
     sid = coach_service.resolve_student_id(db, student_id, current_user_id())
     return ok(CoachContextOut.model_validate(
         coach_service.build_context(db, sid)).model_dump(mode="json"))
+
+
+@api_bp.route("/coach/context/me", methods=["GET"])
+@login_required
+@student_required
+def coach_context_me():
+    """E1 的本人便捷入口：路径不带 id。
+
+    文档里 E1 只有带 <student_id> 的那条。加这条是因为页面登进来时只知道
+    users.id，而 E1 要的是 students.id（DOC_ISSUES 第 21 条），前端无从换算。
+    让它自己报回 student.id，前端再拿它去调带 id 的两条。
+
+    与 /coach/context/<int:student_id> 不冲突：后者带 int 转换器，
+    正则只认 \\d+，`me` 匹配不上，会落到这里。
+    """
+    db = get_db()
+    own = user_repo.get_student_id_by_user_id(db, current_user_id())
+    if own is None:
+        raise BusinessError(403, "AI 教练仅学生可用")
+    return ok(CoachContextOut.model_validate(
+        coach_service.build_context(db, own)).model_dump(mode="json"))
 
 
 @api_bp.route("/coach/chat", methods=["POST"])

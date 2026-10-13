@@ -600,10 +600,10 @@ body{
         <div class="data-section">
           <div class="data-section-title">📋 本次演唱摘要</div>
           <div style="font-size:12px;color:var(--text-secondary);line-height:1.8">
-            <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">曲目</span><span style="font-weight:600">《穆桂英挂帅》· 辕门外三声炮</span></div>
-            <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">段落</span><span style="font-weight:600">段落 1（辕门外三声炮）</span></div>
-            <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">综合评分</span><span style="color:var(--warning);font-weight:700">82.5</span></div>
-            <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">练习时间</span><span style="font-weight:600">2026-08-05 14:32</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">曲目</span><span style="font-weight:600" id="sumPiece">—</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">段落</span><span style="font-weight:600" id="sumSegment">—</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">综合评分</span><span style="color:var(--warning);font-weight:700" id="sumScore">—</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">练习时间</span><span style="font-weight:600" id="sumTime">—</span></div>
           </div>
         </div>
 
@@ -613,55 +613,21 @@ body{
         <div class="data-section">
           <table class="data-table">
             <thead><tr><th>字</th><th>老师</th><th>学生</th><th>偏差</th></tr></thead>
-            <tbody id="deviationTable">
-              <tr><td>辕</td><td>E4</td><td>E4</td><td class="diff-neu">-8c</td></tr>
-              <tr><td>门</td><td>F#4</td><td>F#4</td><td class="diff-neu">-12c</td></tr>
-              <tr><td>外</td><td>G4</td><td>G4</td><td class="diff-neu">-15c</td></tr>
-              <tr><td>三</td><td>A4</td><td>A4</td><td class="diff-neu">-5c</td></tr>
-              <tr><td>声</td><td>B4</td><td>B4</td><td class="diff-neu">-18c</td></tr>
-              <tr><td>炮</td><td>C5</td><td>B4+</td><td class="diff-pos">-35c</td></tr>
-              <tr><td>如</td><td>A4</td><td>A4</td><td class="diff-neu">+5c</td></tr>
-              <tr><td>同</td><td>G4</td><td>G4</td><td class="diff-neu">-3c</td></tr>
-              <tr><td>雷</td><td>B4</td><td>B4-</td><td class="diff-pos">-42c</td></tr>
-              <tr><td>震</td><td>A4</td><td>A4</td><td class="diff-neu">-22c</td></tr>
-            </tbody>
+            <!-- 渲染由 renderContext() 负责；库里没有逐字音高数据源，
+                 所以这里正常会落进 renderContext 的「待接入」分支 -->
+            <tbody id="deviationTable"></tbody>
           </table>
         </div>
 
         <div class="divider-label"><span>BKT 能力状态</span></div>
 
-        <!-- BKT 状态 -->
-        <div class="data-section">
-          <div style="margin-bottom:10px">
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary)"><span>音准控制</span><span style="color:var(--primary);font-weight:700">72%</span></div>
-            <div class="bkt-bar"><div class="bkt-fill" style="width:72%;background:var(--primary)"></div></div>
-            <div class="bkt-label"><span>P(L) = 0.72 · 置信 0.85</span><span style="color:var(--success)">↗</span></div>
-          </div>
-          <div style="margin-bottom:10px">
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary)"><span>气息支撑</span><span style="color:var(--warning);font-weight:700">51%</span></div>
-            <div class="bkt-bar"><div class="bkt-fill" style="width:51%;background:var(--warning)"></div></div>
-            <div class="bkt-label"><span>P(L) = 0.51 · 置信 0.73</span><span style="color:var(--text-muted)">→</span></div>
-          </div>
-          <div style="margin-bottom:10px">
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary)"><span>拖腔</span><span style="color:var(--danger);font-weight:700">28%</span></div>
-            <div class="bkt-bar"><div class="bkt-fill" style="width:28%;background:var(--danger)"></div></div>
-            <div class="bkt-label"><span>P(L) = 0.28 · 置信 0.55</span><span style="color:var(--text-muted)">→</span></div>
-          </div>
-          <div>
-            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary)"><span>滑音</span><span style="color:var(--primary);font-weight:700">63%</span></div>
-            <div class="bkt-bar"><div class="bkt-fill" style="width:63%;background:var(--primary)"></div></div>
-            <div class="bkt-label"><span>P(L) = 0.63 · 置信 0.68</span><span style="color:var(--success)">↗</span></div>
-          </div>
-        </div>
+        <!-- BKT 状态：渲染由 renderContext() 负责 -->
+        <div class="data-section" id="bktList"></div>
 
         <div class="divider-label"><span>CDM 归因诊断</span></div>
 
-        <!-- CDM 标签 -->
-        <div class="data-section">
-          <div class="cdm-tag high">✓ 气息支撑不足 · 置信 82%</div>
-          <div class="cdm-tag high">✓ 拖腔时值偏短 · 置信 78%</div>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">以上标签由 CDM 引擎基于特征矩阵输出</div>
-        </div>
+        <!-- CDM 标签：库里无对应表，renderContext() 会落进「待接入」分支 -->
+        <div class="data-section" id="cdmList"></div>
 
       </div>
       <div class="card-footer" style="border-top-color:var(--primary-border);color:var(--text-muted)">
@@ -680,27 +646,11 @@ body{
         <span class="strategy-tag" id="currentStrategyTag">🧠 苏格拉底式</span>
       </div>
 
-      <div class="chat-body" id="chatBody">
-        <div class="system-msg"><span>📝 上下文已注入：学生画像 + 本次演唱数据 + RAG 检索结果</span></div>
-
-        <div class="message ai">
-          <div class="msg-avatar">🎓</div>
-          <div>
-            <div class="msg-bubble">
-              小燕你好！刚才你唱了"辕门外三声炮"这一段。我们先不急着看分数，我想先请你听一听自己和老师的演唱，感受一下——在"炮"和"雷"这两个字上，你的声音和老师的有什么不一样的地方？🎵
-            </div>
-            <div class="msg-time">14:33:05</div>
-          </div>
-        </div>
-      </div>
+      <!-- 消息与快捷回复全部由 JS 渲染（E3 读历史 + E2 的 quick_replies） -->
+      <div class="chat-body" id="chatBody"></div>
 
       <div class="chat-input-wrap">
-        <div class="quick-replies" id="quickReplies">
-          <button class="quick-btn" onclick="sendQuick('我感觉"炮"字好像低了一点？')">我感觉"炮"字好像低了一点？</button>
-          <button class="quick-btn" onclick="sendQuick('听不出来…')">听不出来…</button>
-          <button class="quick-btn" onclick="sendQuick('是不是拖腔不够长？')">是不是拖腔不够长？</button>
-          <button class="quick-btn" onclick="sendQuick('太难了，算了')">太难了，算了</button>
-        </div>
+        <div class="quick-replies" id="quickReplies"></div>
         <div class="input-row">
           <textarea class="chat-input" id="chatInput" placeholder="输入你的回复，或点击上方快捷按钮…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
           <button class="send-btn" id="sendBtn" onclick="sendMessage()">发送</button>
@@ -745,10 +695,6 @@ body{
               <div class="emotion-bar"><div class="emotion-fill" id="emotionBar" style="width:72%;background:var(--primary)"></div></div>
               <span class="emotion-label" id="emotionScore">72%</span>
             </div>
-          </div>
-          <div class="guide-item emotion">
-            <span class="label">连续大偏差计数</span>
-            <div id="deviationCount">0 字 &gt; 50cents（未触发鼓励模式）</div>
           </div>
           <div class="guide-item emotion frustration-alert" id="frustrationAlert" style="display:none;">
             <span class="label">⚠️ 挫败感预警</span>
@@ -802,106 +748,6 @@ body{
 
 <script>
 /* ============================================================
-   模拟数据与状态
-   ============================================================ */
-const STUDENT_PROFILE = {
-  name: "李小燕",
-  level: "初级",
-  years: 1.5,
-  frustration: 0.32,
-  bkt: { "音准控制": 0.72, "气息支撑": 0.51, "拖腔": 0.28, "滑音": 0.63 }
-};
-
-const SESSION_DATA = {
-  piece: "《穆桂英挂帅》· 辕门外三声炮",
-  segment: "段落 1",
-  score: 82.5,
-  deviations: [
-    {char:"辕", diff:-8}, {char:"门", diff:-12}, {char:"外", diff:-15},
-    {char:"三", diff:-5}, {char:"声", diff:-18}, {char:"炮", diff:-35},
-    {char:"如", diff:5}, {char:"同", diff:-3}, {char:"雷", diff:-42}, {char:"震", diff:-22}
-  ],
-  cdm: ["气息支撑不足(0.82)", "拖腔时值偏短(0.78)"]
-};
-
-let chatHistory = [];
-let socraticFailCount = 0;
-let bigDeviationCount = 0;
-let isEncourageMode = false;
-let isFrustrationMode = false;
-let currentStrategy = "socratic";
-
-/* ============================================================
-   对话引擎（模拟 LLM 回复逻辑）
-   ============================================================ */
-const RESPONSES = {
-  found_issue: {
-    text: "很好！你能听出来已经很棒了。那我们再仔细听一次——'炮'字拖腔的时候，除了音高，气息是不是也有点'晃'？就像走独木桥的时候，脚底下在抖一样。你觉得气息稳不稳？🌉",
-    strategy: "苏格拉底式",
-    strategyDesc: "肯定学生发现 → 引导深入第二层问题（气息）",
-    guide: "先肯定学生的发现，建立信心；再用生活化类比引导关注气息稳定性",
-    emotion: "积极发现 · 信心提升",
-    emotionScore: 85,
-    bigDevReset: true
-  },
-  cannot_hear: {
-    text: "没关系，这很正常！我们再来听一遍——这次你特别留意'炮'字，听听老师的声音是不是更'稳'、更'沉'一些？把你的手放在胸口，感受一下振动。准备好了吗？▶️",
-    strategy: "苏格拉底式（提示层+1）",
-    strategyDesc: "给予情感支持 → 提供具体听辨方法（体感辅助）",
-    guide: "降低挫败感，提供多感官辅助策略（听觉+触觉），帮助学生建立感知",
-    emotion: "需要支持 · 给予方法",
-    emotionScore: 65,
-    bigDevReset: true
-  },
-  give_hint: {
-    text: "好的，我来给你一个明确的提示：'炮'字你的音高比老师低了大约 35 音分（约 1/3 个半音），而且拖腔的时长也稍微短了一点。建议先做一个'慢吸慢呼'的气息练习，然后再唱一次这个字。要试试吗？💪",
-    strategy: "明确提示 + 练习建议",
-    strategyDesc: "连续 3 次引导失败，切换为直接提示 + 给出可执行的改进方案",
-    guide: "直接给出量化偏差（引用左侧客观数据），并提供具体练习动作",
-    emotion: "明确指导 · 行动导向",
-    emotionScore: 70,
-    bigDevReset: true
-  },
-  found_rhythm: {
-    text: "对！你的耳朵很准。'炮'字的拖腔确实比标准短了一些。拖腔需要气息像一根线一样牵住，不能断。我们现在来练一个'吹蜡烛'的小游戏：深吸一口气，然后均匀地吹 4 秒钟。准备好了告诉我！🕯️",
-    strategy: "苏格拉底式 + 游戏化",
-    strategyDesc: "肯定发现 → 用生活化类比解释原理 → 给出趣味练习",
-    guide: "初学者适合游戏化类比（吹蜡烛=气息控制），避免抽象术语",
-    emotion: "积极发现 · 趣味引导",
-    emotionScore: 88,
-    bigDevReset: true
-  },
-  frustration: {
-    text: "别急别急，我们先不练这一句了。你知道吗？上周你唱'三声炮'的时候，'三'字还偏差了 20 多音分，今天已经能控制在 5 音分以内了！进步很明显。要不我们先换一句简单一点的，比如'天波府'这三个字？这个没有拖腔，适合你现在的状态。🌟",
-    strategy: "鼓励模式 + 降难度",
-    strategyDesc: "检测到挫败关键词 → 播放历史成功片段建立信心 → 推荐低难度曲目",
-    guide: "引用历史进步数据（BKT 历史曲线）建立信心；主动降级推荐，保护学习动机",
-    emotion: "挫败安抚 · 信心重建",
-    emotionScore: 55,
-    bigDevReset: true,
-    isFrustration: true
-  },
-  encourage: {
-    text: "我们先停一下。我放一段你上周唱得最好的'辕'字给你听——听，这个音多稳！你是有这个能力的。今天的状态可能只是有点累了，我们先做两个深呼吸，然后再试一次，好吗？🌸",
-    strategy: "鼓励模式",
-    strategyDesc: "连续多字大偏差 → 播放历史最佳片段 → 归因于状态而非能力",
-    guide: "用历史成功证据对抗挫败感；将失败归因于临时状态（疲劳），保护自我效能感",
-    emotion: "鼓励安抚 · 状态调整",
-    emotionScore: 60,
-    bigDevReset: true
-  },
-  default: {
-    text: "嗯，我明白了。那我们回到刚才的演唱数据——'炮'字偏差 35 音分，'雷'字偏差 42 音分，这两个都是拖腔字。拖腔需要两个前置技能：气息支撑和音准稳定性。你现在的气息支撑掌握度是 51%，刚好在临界点上。你觉得是气息先松了，还是音高先跑了？🤔",
-    strategy: "苏格拉底式 + 数据关联",
-    strategyDesc: "引用左侧客观数据 → 关联 BKT 前置技能 → 引导学生自我归因",
-    guide: "将演唱数据与能力模型关联，帮助学生理解'为什么'，而非只记住'是什么'",
-    emotion: "深度思考 · 元认知引导",
-    emotionScore: 75,
-    bigDevReset: false
-  }
-};
-
-/* ============================================================
    消息发送与渲染
    ============================================================ */
 function appendMessage(role, text, timeStr) {
@@ -937,94 +783,156 @@ function escapeHtml(text) {
 }
 
 /* ============================================================
-   策略与引导区更新
+   客观数据区（E1）
    ============================================================ */
-function updateGuidePanel(data) {
-  document.getElementById("currentStrategyTag").textContent = data.strategy.includes("鼓励") ? "🌟 鼓励模式" : (data.strategy.includes("挫败") ? "💚 安抚模式" : "🧠 苏格拉底式");
-  document.getElementById("strategyName").textContent = data.strategy;
-  document.getElementById("strategyDesc").textContent = data.strategyDesc;
-  document.getElementById("currentGuideText").textContent = data.guide;
-  document.getElementById("emotionText").textContent = data.emotion;
-  document.getElementById("emotionScore").textContent = data.emotionScore + "%";
-  document.getElementById("emotionBar").style.width = data.emotionScore + "%";
-  document.getElementById("emotionBar").style.background = data.emotionScore >= 80 ? "var(--success)" : (data.emotionScore >= 60 ? "var(--primary)" : "var(--warning)");
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = (value === null || value === undefined || value === "") ? "—" : value;
+}
 
-  const alertBox = document.getElementById("frustrationAlert");
-  if (data.isFrustration) { alertBox.style.display = "block"; }
-  else { alertBox.style.display = "none"; }
+// 情绪是模型输出的三个档位，不是数值。这里给的是**按档位画的示意宽度**，
+// 不是模型算出来的百分比——后端从来没返回过 emotionScore 这个数，
+// 页面上原先那个 72% 是 mock 编的，不要把它当成真值恢复出来。
+const EMOTION_STYLE = {
+  positive:  { label: "积极", width: 85, color: "var(--success)" },
+  neutral:   { label: "平稳", width: 60, color: "var(--primary)" },
+  concerned: { label: "关切", width: 35, color: "var(--warning)" }
+};
 
-  document.getElementById("deviationCount").textContent = bigDeviationCount + " 字 > 50cents" + (bigDeviationCount >= 2 ? "（已触发鼓励模式阈值）" : "（未触发鼓励模式）");
+function placeholder(text) {
+  return `<div style="font-size:11px;color:var(--text-muted);padding:6px 0">${escapeHtml(text)}</div>`;
+}
+
+function renderContext(ctx) {
+  if (!ctx) return;
+
+  // 演唱摘要
+  const lp = ctx.last_practice;
+  setText("sumPiece", lp && lp.segment_title);
+  setText("sumSegment", lp && lp.segment_id !== null ? "段落 " + lp.segment_id : null);
+  setText("sumScore", lp && lp.ai_score);
+  setText("sumTime", lp && lp.recorded_at ? lp.recorded_at.replace("T", " ").slice(0, 16) : null);
+
+  // 逐字偏差：库里无数据源，显式空位
+  // 注意 id 挂在 <tbody> 上（不是 <table>），所以直接 getElementById，
+  // 写成 querySelector("#deviationTable tbody") 会取到 null、整块渲染不出来。
+  const tbody = document.getElementById("deviationTable");
+  if (tbody) {
+    if (!ctx.deviations) {
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:10px">
+        逐字偏差待接入（当前库中无该校准数据源）</td></tr>`;
+    } else {
+      tbody.innerHTML = ctx.deviations.map(d => `<tr>
+        <td>${escapeHtml(d.char)}</td><td>${escapeHtml(d.teacher)}</td>
+        <td>${escapeHtml(d.student)}</td><td class="${d.cents < -20 ? "diff-pos" : "diff-neu"}">${d.cents}c</td>
+      </tr>`).join("");
+    }
+  }
+
+  // BKT
+  const bktList = document.getElementById("bktList");
+  if (bktList) {
+    if (!ctx.bkt || !ctx.bkt.length) {
+      bktList.innerHTML = placeholder("暂无能力数据");
+    } else {
+      bktList.innerHTML = ctx.bkt.map(b => {
+        const pct = Math.round(b.p_l * 100);
+        const color = pct >= 70 ? "var(--primary)" : (pct >= 50 ? "var(--warning)" : "var(--danger)");
+        const conf = b.confidence === null || b.confidence === undefined ? "—" : b.confidence;
+        return `<div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary)">
+            <span>${escapeHtml(b.skill)}</span><span style="color:${color};font-weight:700">${pct}%</span></div>
+          <div class="bkt-bar"><div class="bkt-fill" style="width:${pct}%;background:${color}"></div></div>
+          <div class="bkt-label"><span>P(L) = ${b.p_l.toFixed(2)} · 置信 ${conf}</span></div>
+        </div>`;
+      }).join("");
+    }
+  }
+
+  // CDM：库里无数据源，显式空位
+  const cdmList = document.getElementById("cdmList");
+  if (cdmList) {
+    cdmList.innerHTML = ctx.cdm
+      ? ctx.cdm.map(c => `<div class="cdm-tag high">✓ ${escapeHtml(String(c))}</div>`).join("")
+      : placeholder("CDM 归因待接入");
+  }
 }
 
 /* ============================================================
-   核心对话逻辑
+   对话（E2 / E3）
    ============================================================ */
-function processUserInput(text) {
-  const frustrationKeywords = ["不会", "太难", "算了", "放弃", "不想练", "没劲"];
-  const hasFrustration = frustrationKeywords.some(k => text.includes(k));
+let accountStudentId = null;   // 由 /api/coach/context/me 探出
 
-  const foundKeywords = ["低", "高", "短", "长", "抖", "晃", "不稳", "气息", "拖腔"];
-  const foundIssue = foundKeywords.some(k => text.includes(k));
-
-  let responseKey = "default";
-
-  if (hasFrustration) {
-    responseKey = "frustration";
-    isFrustrationMode = true;
-    isEncourageMode = true;
-    socraticFailCount = 0;
-    bigDeviationCount = 0;
-  } else if (isEncourageMode && !foundIssue) {
-    responseKey = "encourage";
-  } else if (bigDeviationCount >= 2 && !foundIssue) {
-    responseKey = "encourage";
-    isEncourageMode = true;
-  } else if (!foundIssue) {
-    socraticFailCount++;
-    if (socraticFailCount >= 3) {
-      responseKey = "give_hint";
-      socraticFailCount = 0;
-    } else {
-      responseKey = "cannot_hear";
-    }
-    const bigDevs = SESSION_DATA.deviations.filter(d => Math.abs(d.diff) > 50).length;
-    if (bigDevs >= 2) bigDeviationCount = bigDevs;
-  } else {
-    if (text.includes("拖腔") || text.includes("短") || text.includes("长")) {
-      responseKey = "found_rhythm";
-    } else {
-      responseKey = "found_issue";
-    }
-    socraticFailCount = 0;
-    bigDeviationCount = 0;
-    isEncourageMode = false;
-  }
-
-  return RESPONSES[responseKey];
+function setBusy(busy) {
+  document.getElementById("chatInput").disabled = busy;
+  document.getElementById("sendBtn").disabled = busy;
 }
 
-function sendMessage() {
+function renderQuickReplies(list) {
+  const box = document.getElementById("quickReplies");
+  if (!box) return;
+  if (!list || !list.length) { box.replaceChildren(); return; }
+  box.replaceChildren(...list.map(t => {
+    const b = document.createElement("button");
+    b.className = "quick-btn";
+    b.textContent = t;
+    b.addEventListener("click", () => sendQuick(t));
+    return b;
+  }));
+}
+
+function applyReply(data) {
+  const emo = EMOTION_STYLE[data.emotion] || EMOTION_STYLE.neutral;
+  // 「鼓励」与「降难度」都算安抚分支：prompt 把挫败应对拆成了这两个策略，
+  // 而实测（2026-10-13，三轮挫败表达）模型稳定回「降难度」、从不回「鼓励」，
+  // 只认「鼓励」的话这个标签永远不会变。与 smoke_coach.sh 里那条
+  // 「挫败表达触发鼓励/降难度」的断言同一口径。
+  const soothed = data.strategy === "鼓励" || data.strategy === "降难度";
+  document.getElementById("currentStrategyTag").textContent =
+    soothed ? "🌟 鼓励模式" : "🧠 苏格拉底式";
+  document.getElementById("strategyName").textContent = data.strategy;
+  document.getElementById("currentGuideText").textContent = data.reply;
+  document.getElementById("emotionText").textContent = emo.label;
+  document.getElementById("emotionScore").textContent = emo.label;
+  document.getElementById("emotionBar").style.width = emo.width + "%";
+  document.getElementById("emotionBar").style.background = emo.color;
+  // 挫败提示条：模型走安抚分支时亮起
+  document.getElementById("frustrationAlert").style.display = soothed ? "block" : "none";
+  renderQuickReplies(data.quick_replies);
+}
+
+async function sendMessage() {
   const input = document.getElementById("chatInput");
   const text = input.value.trim();
-  if (!text) return;
+  if (!text || accountStudentId === null) return;
 
   input.value = "";
-  input.disabled = true;
-  document.getElementById("sendBtn").disabled = true;
-
+  setBusy(true);
   appendMessage("user", text);
-  chatHistory.push({role:"user", text});
 
-  setTimeout(() => {
-    const reply = processUserInput(text);
-    appendMessage("ai", reply.text);
-    chatHistory.push({role:"ai", text: reply.text});
-    updateGuidePanel(reply);
-
-    input.disabled = false;
-    document.getElementById("sendBtn").disabled = false;
+  try {
+    const r = await fetch("/api/coach/chat", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ student_id: accountStudentId, message: text })
+    });
+    if (r.status === 401) return location.replace("/login.html");
+    const body = await r.json();
+    if (!r.ok) {
+      // body.message 已经是后端写好的中文（如「AI 教练暂时不可用，请稍后再试」），
+      // 别再套一层前缀，否则会渲染成「AI 教练暂时不可用：AI 教练暂时不可用…」。
+      appendSystem(body.message || ("请求失败（HTTP " + r.status + "）"));
+      return;
+    }
+    appendMessage("ai", body.data.reply);
+    applyReply(body.data);
+  } catch (e) {
+    appendSystem("网络异常，请稍后重试");
+  } finally {
+    setBusy(false);
     input.focus();
-  }, 800 + Math.random() * 600);
+  }
 }
 
 function sendQuick(text) {
@@ -1032,19 +940,34 @@ function sendQuick(text) {
   sendMessage();
 }
 
+// E3 回读历史，按时间正序追加
+async function loadHistory() {
+  try {
+    const r = await fetch(`/api/coach/history/${accountStudentId}`, { credentials: "same-origin" });
+    if (!r.ok) return;
+    const rows = (await r.json()).data || [];
+    rows.forEach(m => appendMessage(m.role === "assistant" ? "ai" : "user", m.content,
+      m.created_at ? m.created_at.slice(11, 19) : undefined));
+  } catch (e) { /* 历史读不到不影响新对话 */ }
+}
+
+// 教师访问：右侧对话区替换为提示，不再发任何请求
+function disableForNonStudent() {
+  const body = document.getElementById("chatBody");
+  body.replaceChildren();
+  const tip = document.createElement("div");
+  tip.className = "system-msg";
+  tip.innerHTML = "<span>AI 教练仅学生可用</span>";
+  body.appendChild(tip);
+  document.getElementById("chatInput").disabled = true;
+  document.getElementById("sendBtn").disabled = true;
+  document.getElementById("quickReplies").replaceChildren();
+}
+
 /* ============================================================
    初始化
    ============================================================ */
 function init() {
-  updateGuidePanel({
-    strategy: "苏格拉底式引导",
-    strategyDesc: "不直接指出错误，通过提问引导学生自主发现偏差。连续 3 次无法找到问题才给出明确提示。",
-    guide: "先肯定学生的发现，建立信心；再用生活化类比引导关注气息稳定性",
-    emotion: "平稳 · 积极参与",
-    emotionScore: 72,
-    isFrustration: false
-  });
-
   const textarea = document.getElementById("chatInput");
   textarea.addEventListener("input", function() {
     this.style.height = "auto";
@@ -1084,6 +1007,26 @@ init();
     return location.replace('/login.html');              // 后端不可达
   }
   if (!user) return;
+
+  if (user.role !== 'student') {
+    // 教师没有学生档案，E1/E2/E3 都会 403，索性不发请求
+    disableForNonStudent();
+    return;
+  }
+
+  // 学生：先向 E1 的本人便捷入口探出自己的 students.id。
+  // 页面手上只有 users.id，而 E1 的路径参数要的是 students.id（DOC_ISSUES 第 21 条），
+  // 前端无从换算，所以让后端自己报回来。
+  try {
+    const me = await fetch('/api/coach/context/me', { credentials: 'same-origin' });
+    if (!me.ok) { disableForNonStudent(); return; }
+    const ctx = (await me.json()).data;
+    accountStudentId = ctx.student.id;
+    renderContext(ctx);
+    await loadHistory();
+  } catch (e) {
+    disableForNonStudent();
+  }
 
   const isTeacher = user.role === 'teacher';
   const roleText = isTeacher ? '教师' : '学生';
