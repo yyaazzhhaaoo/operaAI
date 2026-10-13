@@ -1544,9 +1544,13 @@ if path.parent != root:
 
 本实现取 `llm_timeout = 10.0`（`.env` 的 `LLM_TIMEOUT`，10 连打全通过，最慢一条 3.15 秒），即**不采用 5.3 的 3 秒**。这个值与文档不符，登记在此；2 秒的端到端验收目标无法承诺。
 
-**5. E1–E3 的权限未区分角色。** 《5-接口清单》2.5 节三条接口的权限列都只写「登录」，未规定教师能否查看学生对话，也未规定学生能否查看他人。本实现收紧为：仅 `role='student'` 可访问，且路径中的 `student_id` 必须等于登录人自己的 `students.id`，否则 403。**两道闸门缺一不可**，别以为一道够用：`teacher01`（`users.id=2`）在 `students` 表里**有一行**（`students.id=1`，种子数据如此），只靠 service 层比对 `students.id` 放它过去，必须由路由上的 `@student_required` 先挡；反过来 `stu002`（`users.id=4`，`role='student'` 但 `students` 表无行）能过 `@student_required`，得靠 service 层的 `own is None` 挡。
+**5. E1–E3 的权限未区分角色。** 《5-接口清单》2.5 节三条接口的权限列都只写「登录」，未规定教师能否查看学生对话，也未规定学生能否查看他人。本实现收紧为：仅 `role='student'` 可访问，且路径中的 `student_id` 必须等于登录人自己的 `students.id`，否则 403。**两道闸门缺一不可**，别以为一道够用，它们各挡一类人：`teacher01`（`users.id=2`）在 `students` 表里**有一行**（`students.id=1`，见第 6 条），只靠 service 层比对 `students.id` 会放它过去，必须由路由上的 `@student_required` 先挡；反过来「`role='student'` 但 `students` 表无行」的账号能过 `@student_required`，得靠 service 层的 `own is None` 挡。第二类账号在库里**当前一个都没有**（stu002 已于 2026-10-13 补上档案），要复现得手工删掉某人的 `students` 行——但这条代码路径必须留着，否则一个建号流程没走完的学生会拿到 500 而不是 403。
 
-**6. 演示账号与数据对不上。** CLAUDE.md 记载的种子账号 `stu001`（`students.id=2`）名下 0 条 `practice_records`/`bkt_history`，`stu002`（`users.id=4`）**根本没有 `students` 行**（此点已在第 21 条记录）；而真正带有完整演示数据的是 `s01`–`s08`（`students.id` 48–55），这批账号未出现在任何文档里。AI 教练页的演示因此改用 `s01`（李小燕，8 个技法有 BKT）。建议后续统一种子账号时一并处理。
+**6. 演示账号与数据对不上，且活库的 users 序列比 seed.sql 的假设偏移了 1。** CLAUDE.md 记载的种子账号 `stu001`（`students.id=2`）名下 0 条 `practice_records`/`bkt_history`；真正带完整演示数据的是 `s01`–`s08`（`students.id` 48–55），这批账号未出现在任何文档里。AI 教练页的演示因此改用 `s01`（李小燕，8 个技法有 BKT）。
+
+**根因在本机活库，不在 `seed.sql`。** `seed.sql:29` 写的是 `INSERT INTO students (user_id, level) VALUES (2, '初学'), (3, '初学');`，它假设全新库里 users 的 serial 从 1 开始、即 `teacher01=1 / stu001=2 / stu002=3`，此时 user_id 2、3 正好落在 stu001、stu002 上，**是对的**。但本机活库的 `users.id` 是 `teacher01=2 / stu001=3 / stu002=4`（整体 +1，推测建库时 id=1 上先有过一个后来被删的账号），于是那两条 `students` 落到了 **teacher01 和 stu001** 头上：`students.id=1 → users.id=2 → teacher01`（一位教师白得一条学员档案），而 `stu002`（`users.id=4`）什么都没有。
+
+**2026-10-13 的处置**：只补活库，不动 `seed.sql`（它在全新库上是对的，改了反而错）。执行 `INSERT INTO students (user_id, level) SELECT 4, '初学' WHERE NOT EXISTS (...)`，`stu002` 得到 `students.id=56`，`/api/coach/context/me` 由 403 转 200。`students.id=1`（teacher01）**保留未删**：它对 `bkt_history`/`practice_records`/`chat_messages`/`submissions` 的引用数均为 0，删掉无副作用，但一个教师带学员档案会让按 `students` 表列的「学生名单」多出王老师，属应当清理之列，留待统一种子账号时一并处理。
 
 **7. E1 新增了文档中没有的 `/api/coach/context/me`。** 页面登录后只知道 `users.id`，而 E1 要的是 `students.id`（第 21 条），前端无从换算，故增加这条不带 id 的便捷入口返回本人的上下文。文档里没有这个接口，`scripts/smoke_coach.sh` 已为它补了断言。
 

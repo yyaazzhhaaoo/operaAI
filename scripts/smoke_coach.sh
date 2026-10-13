@@ -121,8 +121,9 @@ expect_status "E1 教师 → 403" 403
 req "$BASE/api/coach/context/me"
 expect_status "E1 /me 教师 → 403" 403
 # 教师是被路由上的 @student_required 挡的，文案是「需要学生权限」；
-# 不是 service 里那句「AI 教练仅学生可用」——那句要到 stu002 那种
-# 「是学生但没有学生档案」的账号才会出现。
+# 不是 service 里那句「AI 教练仅学生可用」——那句要到「是学生、但 students
+# 表里查不到档案」的账号才会出现。库里现在没有这种账号了（stu002 2026-10-13
+# 已补上档案），要复现得手工把某人的 students 行删掉。
 expect_in     "教师被挡的文案" "需要学生权限"
 
 JAR="$JAR_S"
