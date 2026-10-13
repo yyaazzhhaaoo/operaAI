@@ -951,13 +951,24 @@ async function loadHistory() {
   } catch (e) { /* 历史读不到不影响新对话 */ }
 }
 
-// 教师访问：右侧对话区替换为提示，不再发任何请求
-function disableForNonStudent() {
+// 页面用不了 AI 教练时的降级：右侧换成提示文案，输入框禁用，不再发任何请求。
+//
+// reason 由调用方给，**必须说实话**：这不是「只有一种情况用不了」，而是三种，
+// 且三种的处置完全不同：
+//   - 账号不是学生 → 换个学生账号
+//   - 是学生但 students 表里没有档案（种子账号 stu002 就是这种）→ 找教师建档案
+//   - 后端/网络异常 → 刷新重试
+// 原先三处共用一句写死的「AI 教练仅学生可用」，既会对学生说错话，也会把
+// 「后端挂了」说成权限问题，排查时直接被带偏。
+function unavail(reason) {
   const body = document.getElementById("chatBody");
   body.replaceChildren();
   const tip = document.createElement("div");
   tip.className = "system-msg";
-  tip.innerHTML = "<span>AI 教练仅学生可用</span>";
+  const span = document.createElement("span");
+  // 用 textContent 而不是 innerHTML：reason 含后端回显的内容，拼接进 HTML 有注入风险
+  span.textContent = reason;
+  tip.appendChild(span);
   body.appendChild(tip);
   document.getElementById("chatInput").disabled = true;
   document.getElementById("sendBtn").disabled = true;
@@ -1010,7 +1021,7 @@ init();
 
   if (user.role !== 'student') {
     // 教师没有学生档案，E1/E2/E3 都会 403，索性不发请求
-    disableForNonStudent();
+    unavail('AI 教练仅学生可用');
     return;
   }
 
@@ -1019,13 +1030,23 @@ init();
   // 前端无从换算，所以让后端自己报回来。
   try {
     const me = await fetch('/api/coach/context/me', { credentials: 'same-origin' });
-    if (!me.ok) { disableForNonStudent(); return; }
+    if (me.status === 403) {
+      // 是学生、但 students 表里查不到档案（种子账号 stu002 就是这种）。
+      // 别写成「仅学生可用」——这人对着一句明显不成立的话会以为页面坏了。
+      unavail('该账号没有学员档案，暂时无法使用 AI 教练，请联系教师开通');
+      return;
+    }
+    if (!me.ok) {
+      unavail('AI 教练暂时不可用（HTTP ' + me.status + '），请刷新页面重试');
+      return;
+    }
     const ctx = (await me.json()).data;
     accountStudentId = ctx.student.id;
     renderContext(ctx);
     await loadHistory();
   } catch (e) {
-    disableForNonStudent();
+    // 网络异常不能谎称权限问题
+    unavail('AI 教练暂时不可用，请刷新页面重试');
   }
 
   const isTeacher = user.role === 'teacher';
