@@ -78,6 +78,19 @@ class Settings(BaseSettings):
     redis_password: str = ""
     celery_broker_db: int = 0
 
+    # ── LLM（AI 教练对话，模块3）────────────────────────────────
+    # 公司内网自部署的 vLLM 服务，OpenAI 完全兼容、无需鉴权。
+    # 换模型/换地址只改这里，调用方不感知（见 app/services/llm_client.py）。
+    llm_base_url: str = "http://192.168.36.208:8007/v1"
+    llm_model: str = "Qwen3.6-27B-FP8"
+    # 超时取 3 秒：《2-系统设计说明》5.3 原文「LLM 调用（超时 3 秒）」。
+    # PRD 3.2 写的「2 秒内生成回复」是端到端验收口径、不是这个超时值，
+    # 两者冲突已记 DOC_ISSUES。
+    llm_timeout: float = 3.0
+    # 内网裸跑，留空。留空时 llm_client 不发送 Authorization 头，
+    # 而不是发一个空 Bearer——空 Bearer 会被某些网关当成「带了但不对」直接拒。
+    llm_api_key: str = ""
+
     @property
     def celery_broker_url(self) -> str:
         """Celery 的 broker 与 result backend 连接串。
