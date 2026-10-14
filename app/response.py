@@ -17,18 +17,10 @@ from flask import jsonify
 
 
 def ok(data=None, message="ok"):
-    """成功响应。
-
-    data 直接装数据本身，可以是任意可 JSON 化的值——对象、数组、字符串、
-    数字、布尔或 None，都不需要在外面再包一层。
-    例：ok([{...}, {...}])、ok({"id": 1})、ok(True)、ok(None)
-    """
+    """data 直接装数据本身，不在外面再包一层。"""
     return jsonify({"code": 0, "message": message, "data": data})
 
 
 def fail(code, message):
-    """失败响应。code 沿用 HTTP 语义，HTTP 状态码与之一致。
-
-    例：fail(404, "文件不存在") -> 404 + {"code":404, "message":"文件不存在", "data":null}
-    """
+    """code 沿用 HTTP 语义，HTTP 状态码与之一致。"""
     return jsonify({"code": code, "message": message, "data": None}), code

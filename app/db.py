@@ -13,8 +13,6 @@ class Base(DeclarativeBase):
 def session_scope():
     """脚本与后台任务（celery）用的会话，自带事务边界。
 
-    正常退出自动提交，抛异常则回滚，无论哪条路径都关闭会话（连接归还池子）。
-
     与 get_db() 的区别：本函数给**请求之外**的代码用，进出都管事务；
     get_db() 给 **Flask 请求内**用，只借出会话、不管提交，且依赖
     init_app() 注册的 teardown 收尾。两者不可互换。
@@ -31,11 +29,7 @@ def session_scope():
 
 
 def init_app(app):
-    """把会话生命周期挂到 Flask 应用上，请求结束统一关闭。
-
-    需与 get_db() 配对使用。当前 app-d.py 尚未接入数据库，此处先备好，
-    等 /api 蓝图建立后调用一次即可。
-    """
+    """需与 get_db() 配对使用。"""
     @app.teardown_appcontext
     def _close_session(exc):
         from flask import g
@@ -45,10 +39,7 @@ def init_app(app):
 
 
 def get_db():
-    """Flask 请求内取会话（同一个请求复用同一个 Session）。
-
-    前提：应用已调用 init_app(app) 注册 teardown，否则会话不会被关闭。
-    """
+    """前提：应用已调用 init_app(app) 注册 teardown，否则会话不会被关闭。"""
     from flask import g
     if "db_session" not in g:
         g.db_session = SessionLocal()

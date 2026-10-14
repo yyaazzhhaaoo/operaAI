@@ -12,9 +12,7 @@ from celery import Celery, Task
 
 
 def celery_init_app(app) -> Celery:
-    """按 `app.config["CELERY"]` 装配 Celery，挂到 `app.extensions["celery"]`。
-
-    配置从 app.config 取而不是直接从 settings 取，是为了让测试能用
+    """配置从 app.config 取而不是直接从 settings 取，是为了让测试能用
     `create_app({"CELERY": {"task_always_eager": True}})` 把任务改成在请求线程里
     同步跑完，不必起一个 worker。
     """

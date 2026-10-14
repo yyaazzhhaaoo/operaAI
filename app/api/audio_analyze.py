@@ -23,19 +23,13 @@ from app.services import analyze_service, audio_service
 
 
 def _payload() -> dict:
-    """取 JSON 请求体。
-
-    客户端没带 Content-Type: application/json 时 get_json() 会抛 415；
-    silent=True 把它压成 None，这里再兜成 {}，让 pydantic 报「字段必填」
-    而不是让 Flask 抛一个前端看不懂的 415。
-    """
+    """取 JSON 请求体（同 auth：silent=True 兜成 {}，免得 415）。"""
     return request.get_json(silent=True) or {}
 
 
 @api_bp.route("/audio/upload", methods=["POST"])
 @login_required
 def audio_upload():
-    """B1 上传音频。multipart：字段名 audio 为文件，可选 access（默认 private）。"""
     file = request.files.get("audio")
     if file is None or not file.filename:
         raise BusinessError(400, "缺少音频文件（multipart 字段名应为 audio）")
@@ -67,7 +61,6 @@ def audio_upload():
 @api_bp.route("/analyze/submit", methods=["POST"])
 @login_required
 def analyze_submit():
-    """B2 异步提交分析，立即返回 task_id（3.1 模式一 / 模式二）。"""
     data = AnalyzeSubmitIn.model_validate(_payload())
     task_id = analyze_service.submit(get_db(), data)
     return ok({"task_id": task_id})
@@ -76,14 +69,12 @@ def analyze_submit():
 @api_bp.route("/analyze/status/<task_id>", methods=["GET"])
 @login_required
 def analyze_status(task_id):
-    """B3 轮询进度（3.1 第 2 步）。"""
     return ok(analyze_service.status(task_id))
 
 
 @api_bp.route("/analyze/result/<task_id>", methods=["GET"])
 @login_required
 def analyze_result(task_id):
-    """B4 取完整结果（3.2）。仅在 status=done 后调用。"""
     return ok(analyze_service.result(task_id))
 
 
@@ -121,17 +112,10 @@ def audio_download(file_id):
 # 不进 URL，形状不变；但非数字路径（如 /api/audio/abc）会在**路由层**就以 404
 # 拒掉、不进视图，不必在视图里自己 int() 解析，畸形输入也就没有变成 500 的机会。
 #
-# 更要紧的是它让 B5 与演示取音频路由彻底解耦，而不是「碰巧不撞」。演示路由现在是
-# 两段的 `/audio/demo/<path:filename>`，与单段本来就不重叠；但即便有人把 app-d.py
-# 回退成早先的单段形态 `/audio/<path:filename>`，`<int:file_id>` 也只吃数字，
-# 演示页的 `/api/audio/xxx.wav` 仍归 demo_bp。实测对照，在演示路由为单段的前提下：
+# 更要紧的是它让 B5 与演示取音频路由彻底解耦，而不是「碰巧不撞」：`<int:file_id>`
+# 只吃数字，即便 app-d.py 退回单段 `/audio/<path:filename>`，演示页的
+# `/api/audio/xxx.wav` 仍归 demo_bp。实测对照（演示路由为单段时）：
 #   `<file_id>`     → /api/audio/123、/x.wav、/abc、/14.wav 全部被 B5 抢走（演示页音频加载当场失效）
 #   `<int:file_id>` → 只有 /api/audio/123 归 B5，其余三条照旧落到 demo_bp
 #
-# pitch_comparison.html 的去留已了结：该页 2026-09-20 已迁到 B1/B2/B3/B4/B5，
-# 不再调用 app-d.py 的 demo_bp。DOC_ISSUES 第 11 条记的两个悬案随之解决
-# ——「音频加载是坏的」由 B1 返回 B5 的 url 解决，「结果契约无法平滑切换」
-# 由前端新增的 adaptResult() 转换层解决。
-#
-# 但 demo_bp 那 4 条演示路由**保留未删**（本次的明确决策），已无任何调用方，
-# 是后续的独立清理项。
+# demo_bp 那 4 条演示路由已无任何调用方，是待删的死代码，见 DOC_ISSUES 第 11 条。

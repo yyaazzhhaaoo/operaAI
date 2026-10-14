@@ -232,7 +232,7 @@ import json, math, sys
 d = json.load(open(sys.argv[1]))["data"]
 tl = d["timeline"]
 
-# 本次新增的 4 个字段：前端展示必需，但文档 3.2 未定义（DOC_ISSUES 第 14 条）
+# 前端展示必需的 4 个字段，文档 3.2 未定义（DOC_ISSUES 第 14 条）
 for k in ("octave_shift", "teacher_onset", "student_onset", "ref_hz"):
     print("HAS_%s=%d" % (k.upper(), 1 if k in d else 0))
 

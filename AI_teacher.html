@@ -806,7 +806,6 @@ function placeholder(text) {
 function renderContext(ctx) {
   if (!ctx) return;
 
-  // 演唱摘要
   const lp = ctx.last_practice;
   setText("sumPiece", lp && lp.segment_title);
   setText("sumSegment", lp && lp.segment_id !== null ? "段落 " + lp.segment_id : null);
@@ -829,7 +828,6 @@ function renderContext(ctx) {
     }
   }
 
-  // BKT
   const bktList = document.getElementById("bktList");
   if (bktList) {
     if (!ctx.bkt || !ctx.bkt.length) {
@@ -896,7 +894,6 @@ function applyReply(data) {
   document.getElementById("emotionScore").textContent = emo.label;
   document.getElementById("emotionBar").style.width = emo.width + "%";
   document.getElementById("emotionBar").style.background = emo.color;
-  // 挫败提示条：模型走安抚分支时亮起
   document.getElementById("frustrationAlert").style.display = soothed ? "block" : "none";
   renderQuickReplies(data.quick_replies);
 }

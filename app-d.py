@@ -17,9 +17,8 @@ from fastdtw import fastdtw
 from scipy.spatial.distance import euclidean
 from sqlalchemy import select
 
-# 数据库接入层与业务蓝图。Flask 实例改由 create_app() 统一装配（配置、数据库
-# teardown、错误 handler、业务蓝图都在那里），本文件不再自己 new 实例、也不再
-# 手动注册 teardown——这些 create_app() 里已经做过了。
+# 数据库接入层与业务蓝图。Flask 实例由 create_app() 统一装配（配置、数据库
+# teardown、错误 handler、业务蓝图都在那里）。
 from app import create_app
 from app.api import API_PREFIX
 from app.db import get_db
@@ -53,7 +52,6 @@ progress_lock = threading.Lock()
 
 
 def update_progress(job_key, msg):
-    """记录分析进度"""
     with progress_lock:
         if job_key not in progress_store:
             progress_store[job_key] = []
@@ -63,7 +61,6 @@ def update_progress(job_key, msg):
 
 
 def clear_progress(job_key):
-    """清理进度记录"""
     with progress_lock:
         progress_store.pop(job_key, None)
 
@@ -184,7 +181,6 @@ def extract_pitch(path, sr=16000, hop_length=1024, job_key=None):
     if job_key:
         update_progress(job_key, f"提取完成, 共 {len(f0_filled)} 帧")
 
-    # 返回时增加 rms_interp 和 sc_interp
     return times.tolist(), f0_filled, float(voice_start), rms_interp, sc_interp
 
 
@@ -209,8 +205,6 @@ def hz_to_cents(hz_array, ref_hz):
 
 @app.route("/")
 def index():
-    """直接访问根路径返回 index.html"""
-    # return send_from_directory(".", "index.html")
 
     # 请求内取会话。同一个请求里多次调用 get_db() 拿到的是同一个 Session，
     # 不需要自己 commit/close——teardown 会收尾（只读查询本来也不用提交）。
@@ -290,7 +284,6 @@ def analyze():
     update_progress(job_key, "【学生】分析中...")
     s_times, s_f0, s_onset, s_rms, s_sc = extract_pitch(s_path, job_key=job_key)
 
-    # 转为 numpy 数组方便计算
     t_f0_arr = np.array(t_f0)
     s_f0_arr = np.array(s_f0)
     t_rms_arr = np.array(t_rms)
@@ -305,7 +298,6 @@ def analyze():
     t_cents = hz_to_cents(t_f0_arr, ref_hz).tolist()
     s_cents_original = hz_to_cents(s_f0_arr, ref_hz).tolist()
 
-    # 八度归一化
     update_progress(job_key, "八度归一化...")
     best_octave = 0
     best_mean_diff = float('inf')
@@ -330,7 +322,6 @@ def analyze():
     s_cents = [c + best_octave * 1200 for c in s_cents_original]
     update_progress(job_key, f"选择最佳八度偏移: {best_octave:+d} 个八度")
 
-    # DTW 精细对齐
     update_progress(job_key, "开始精细 DTW 对齐...")
     step = 5
     t_points = [(i, t_cents[i]) for i in range(0, len(t_cents), step)]
@@ -356,7 +347,6 @@ def analyze():
             "diff": float(diff),
             "t_f0": float(t_f0_arr[t_idx]),
             "s_f0": float(s_f0_arr[s_idx]),
-            # 🆕 保存能量和频谱特征
             "t_rms": float(t_rms_arr[t_idx]),
             "s_rms": float(s_rms_arr[s_idx]),
             "t_sc": float(t_sc_arr[t_idx]),
@@ -386,8 +376,6 @@ def analyze():
     # 3.1 节奏得分：基于时间差的标准差
     time_diffs = [a["s_time"] - a["t_time"] for a in aligned]
     rhythm_std = np.std(time_diffs)
-    # 假设标准差 0.05秒以内为满分，0.5秒为0分（系数20）/ 改进：使用 Sigmoid 式归一化，使得 0.05秒以内接近满分，0.3秒以上接近0分
-    # rhythm_score = max(0, min(100, 100 - rhythm_std * 20))
     rhythm_score = 100 / (1 + np.exp((rhythm_std - 1.0) * 2.0))
     rhythm_score = round(float(rhythm_score), 1)
     
@@ -411,14 +399,12 @@ def analyze():
     s_cents_arr = np.array([a["s_cents"] for a in aligned])
     t_deriv = np.abs(np.diff(t_cents_arr))
     s_deriv = np.abs(np.diff(s_cents_arr))
-    # 截取相同长度
     min_len = min(len(t_deriv), len(s_deriv))
     deriv_diff = np.mean(np.abs(t_deriv[:min_len] - s_deriv[:min_len]))
     # 导数差 15 cents/帧以内算优秀
     melisma_score = 100 / (1 + np.exp((deriv_diff - 80) * 0.03))
     melisma_score = round(float(melisma_score), 1)
 
-    # 音准得分复用之前的评分
     pitch_score = round(float(score), 1)
     
     # ===== 调试：打印各维度的原始特征值 =====
@@ -427,7 +413,6 @@ def analyze():
     print(f"[调试] 咬字特征: sc_mean_diff = {sc_mean_diff:.1} -> 得分: {articulation_score:.1f}")
     print(f"[调试] 拖腔特征: deriv_diff = {deriv_diff:.1f} -> 得分: {melisma_score:.1f}")
         
-    # 组装维度字典（使用真实计算值）
     dimensions = {
         "音准": pitch_score,
         "节奏": round(rhythm_score, 1),

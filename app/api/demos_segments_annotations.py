@@ -16,12 +16,7 @@ from app.services import library_service
 
 
 def _payload() -> dict:
-    """取 JSON 请求体。
-
-    客户端没带 Content-Type: application/json 时 get_json() 会抛 415；
-    silent=True 把它压成 None，这里再兜成 {}，让 pydantic 报「字段必填」
-    而不是让 Flask 抛一个前端看不懂的 415。
-    """
+    """取 JSON 请求体（同 auth：silent=True 兜成 {}，免得 415）。"""
     return request.get_json(silent=True) or {}
 
 

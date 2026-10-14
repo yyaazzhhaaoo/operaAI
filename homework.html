@@ -611,7 +611,6 @@ body{
 //   GET /api/submissions/<id>/detail      批改详情（F5）→ fetchDetail
 // 逐字偏差（4.4）与四维分（4.5）在库里没有数据源、校准（4.10）属 F7，右侧那三块
 // 因此出显式空态，见 renderDetailLyrics / renderDetailFusion / renderDetailCalib。
-// 原来这里的 HOMEWORKS / SUBMISSIONS 两个 mock 常量已随 F5 落地删除。
 
 // 同源空串 = 经 nginx 的 /api 代理。**不要改成 location.host + ':8877'**：
 // 那是跨源请求，而跨源 fetch 默认不带 Cookie，后端 login_required 只会看到空
@@ -633,8 +632,6 @@ let hwItems = [];
 // 再抄一份（spec 3.3）。
 const DETAIL_IDLE_HTML = document.getElementById("emptyState").innerHTML;
 
-// 选中的提交 id。F4 就引入了它，但 renderSubmitList 从没读过（卡片高亮一直没接），
-// F5 让点击真的换出右侧内容，这一步才接上（spec 3.8）。
 let currentSubId = null;
 // 右侧面板的状态机。四个状态各自完整渲染两块，见 renderDetail()（spec 3.2）。
 let detailState = "idle";        // idle | loading | error | content
@@ -686,8 +683,6 @@ function renderHwList(items) {
       // 再把曲目名拼上去会与卡片标题重复。库里没有「版本名」这个字段
       // （mock 里的「王老师标准版」是演示页自拟的），口径见 spec 3.4。
       const demo = [hw.demo_role, hw.demo_banshi].filter(Boolean).join(" · ") || "未挂曲目";
-      // 选中态与点击：.hw-item 的 cursor:pointer 与 .hw-item.active 样式本来
-      // 就写好了（:229、:232），只是从来没接过线（spec 3.1）。
       const active = hw.homework_id === currentHwId ? " active" : "";
       return `
         <div class="hw-item${active}" onclick="selectHomework(${hw.homework_id})">
@@ -1176,8 +1171,6 @@ function rejectCDM(btn) {
 
 // 教师终审：POST /api/submissions/<id>/review（F6，统一信封）。
 // 只发终审区那两个字段——语音点评本轮不做（spec 3.1）。
-// 原来这里那句 alert 宣称「点评已保存，BKT 状态已更新」，而实际什么都没发生
-// （BKT 更不归本接口管），换成真调用后它连同假文案一起消失。
 async function submitReview() {
   // 没有选中提交就不发。按钮在 #reviewContent 里，idle/error/loading 三态整块
   // 是 display:none，正常点不到；这一句防的是从控制台直接调，口径同 retryDetail。

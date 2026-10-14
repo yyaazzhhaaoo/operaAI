@@ -845,7 +845,6 @@ function detectPitch(buf, sampleRate) {
   if (f0 < PITCH_MIN_HZ || f0 > PITCH_MAX_HZ) return null;
   return f0;
 }
-// 从 AnalyserNode 取一帧并检测；没准备好或测不出返回 null。
 // 测出音高时连同该帧的能量一起回——气息读数要的就是这个 rms，另取一帧会与
 // 音高错开一个检测周期（30ms）。
 function readMicF0() {
@@ -1165,7 +1164,6 @@ function prepareTeacherCurve() {
     for (let i = 0; i < currentLyrics.length; i++) {
       const ly = currentLyrics[i];
       // pitch === null 表示这是标点（C3 spec）；start/duration 可空。
-      // 三者任一不成立就跳过这一格，不参与曲线。
       if (ly.pitch === null || !Number.isFinite(ly.pitch)
           || !Number.isFinite(ly.start) || !Number.isFinite(ly.duration)) continue;
       if (t >= ly.start && t < ly.start + ly.duration) {
@@ -1217,7 +1215,7 @@ function dismissCoaching() {
 // 录音中右侧面板的节奏/气息读数仍是模拟；停录后的五维面板里这两项已换成真算
 // （见「纯算法」段）——两处用的是两套东西，别只改一处就以为都改了。
 // ============================================================
-// 实时音高检测的建立/拆除。检测坏了只降级（曲线画不出来），不挡录音本身。
+// 检测坏了只降级（曲线画不出来），不挡录音本身。
 function startPitchDetection() {
   try {
     audioCtx = new AudioContext();
@@ -1303,7 +1301,7 @@ function recordLoop(now) {
   }
 
   // 真实音高：节流后每帧从麦克风检测一次，有有效基频就落点。
-  // 静音/清音帧不落点，曲线自然断开——不再像旧模拟那样只在唱词区间内造点。
+  // 静音/清音帧不落点，曲线自然断开
   if (now - lastDetectAt >= DETECT_INTERVAL_MS) {
     lastDetectAt = now;
     const det = readMicF0();
@@ -1322,7 +1320,7 @@ function recordLoop(now) {
       if (currentLyric.tip) showCoaching(currentLyric.tip, currentLyric.char);
     }
   }
-  // 每帧刷新偏差读数（PRD 2.8「实时显示」）：原来只在换字那一刻调一次
+  // 每帧刷新偏差读数（PRD 2.8「实时显示」）
   updateMetrics(elapsed, seg, widx);
 
   syncCurrentTime = elapsed;
@@ -1346,7 +1344,6 @@ const DEV_WARN_SEC = 0.25;
 function updateMetrics(elapsed, seg, widx) {
   if (widx < 0) return;
   const ly = currentLyrics[widx];
-  // 标点没有音高（pitch 为 null），算不出偏差，直接不更新读数
   if (!ly || !Number.isFinite(ly.pitch)) return;
   const teacherP = ly.pitch;
 
@@ -1633,7 +1630,6 @@ function wordDurationByMapping(stu, tea, mapping, lyrics) {
   if (!lyrics || lyrics.length === 0 || !mapping || mapping.length === 0) return { items };
   for (let k = 0; k < lyrics.length; k++) {
     const ly = lyrics[k];
-    // 标点没有音高，也就没有乐谱曲线上的落点，跳过
     if (ly.pitch === null || !Number.isFinite(ly.pitch)) continue;
     if (!Number.isFinite(ly.start) || !Number.isFinite(ly.duration)) continue;
     const jFrom = nearestTeacherIdx(tea, ly.start);
@@ -1829,11 +1825,9 @@ function simulateAnalysisAfterRecord() {
   let ti = 0;
   for (const s of studentPoints) {
     while (ti + 1 < teacherPoints.length && teacherPoints[ti + 1].t <= s.t) ti++;
-    // 取前后两个教师采样点里时间更近的那个
     let t = teacherPoints[ti];
     const nxt = teacherPoints[ti + 1];
     if (nxt && (!t || Math.abs(nxt.t - s.t) < Math.abs(t.t - s.t))) t = nxt;
-    // 时间对不上的点（标点间隙、曲线范围之外）不计入
     if (!t || Math.abs(t.t - s.t) > 0.1) continue;
     diffs.push(Math.abs(s.pitch - t.pitch) * 100);
   }
@@ -1928,7 +1922,7 @@ function simulateAnalysisAfterRecord() {
 // 示范播放
 // ============================================================
 async function playDemo() {
-  // 播的是整首，与段落无关——不再要求「先选一个练习段落」
+  // 播的是整首，与段落无关
   if (currentDemoId === null) { alert("请先选择曲目"); return; }
   if (isRecording) stopAll();
 
@@ -2019,7 +2013,6 @@ function stopAll() {
   document.getElementById("trendBreath").textContent = "等待开始…";
   document.getElementById("trendBreath").style.color = "#8A7A6A";
   document.getElementById("cardBreath").className = "metric-card";
-  // 清掉实时读数的节流时间戳与去重缓存，下次录音从头来
   lastLiveCalcAt = -Infinity;
   lastRhythmKey = null;
   lastBreathKey = null;

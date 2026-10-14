@@ -17,10 +17,7 @@ from app.response import fail
 
 
 class BusinessError(Exception):
-    """业务规则不满足。由 service 层抛出，handler 转成 fail(code, message)。
-
-    例：raise BusinessError(401, "用户名或密码错误")
-    """
+    """业务规则不满足。由 service 层抛出，handler 转成 fail(code, message)。"""
 
     def __init__(self, code: int, message: str):
         super().__init__(message)

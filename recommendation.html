@@ -819,15 +819,13 @@ function initAbilityChart() {
 
   abilityChart.setOption(option);
   
-  // 延迟确保图表渲染完成后更新文字信息（修复文字不显示问题）
+  // 延迟确保图表渲染完成后更新文字信息
   setTimeout(() => {
-    // 更新综合掌握度
     const overallEl = document.getElementById("overallMastery");
     if (overallEl) {
       overallEl.textContent = (data.overall * 100).toFixed(0) + "%";
     }
     
-    // 更新推荐难度区间
     const diffEl = document.getElementById("diffRange");
     if (diffEl) {
       const minDiff = Math.max(0.20, data.overall - 0.15);
@@ -835,7 +833,6 @@ function initAbilityChart() {
       diffEl.textContent = minDiff.toFixed(2) + " ~ " + maxDiff.toFixed(2);
     }
     
-    // 如果 abilityChart 存在，resize 确保正确渲染
     if (abilityChart) {
       abilityChart.resize();
     }

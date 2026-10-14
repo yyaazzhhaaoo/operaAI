@@ -104,8 +104,6 @@ TRUNCATE_NOTE = "音频超过 3 分钟，仅解析了前 3 分钟"
 def _split_segments(y: np.ndarray, sr: int) -> list[dict]:
     """把 16k 单声道人声轨按停顿切成唱段，返回 [{seq, title, duration}]。
 
-    四步（spec 4.3）：取有声区间 → 合并近邻 → 丢弃碎段 → 空结果回退成整条一段。
-
     最后那步回退是刻意的：任何输入都要有分段、都要能走到 `parsed` 终态。
     没有它，一段全静音的人声轨（分离失败、纯伴奏）会让 segments 一行不落，
     而前端还在轮询一个永远不会到来的 `parsed`。
@@ -145,9 +143,7 @@ def _merge_intervals(intervals, min_gap: int) -> list[tuple[int, int]]:
 # ===== 提交 =====
 
 def submit(db: Session, demo: TeacherDemo) -> str:
-    """上传之后建任务并投进 demucs 队列，立即返回 task_id。
-
-    只收一个已经落库的 demo。**不在这里校验音频文件在不在磁盘上**——B 组
+    """只收一个已经落库的 demo。**不在这里校验音频文件在不在磁盘上**——B 组
     （analyze_service.submit）会提前查，是因为它的失败要当场回 4xx 给用户；
     这条链路的形态是「上传返回 200 → 前端轮询」，文件丢失的合理表达是任务
     落成 error（前端弹「解析失败」），而不是上传接口报一个跟上传无关的错。
@@ -227,9 +223,7 @@ def _enter_stage(demo_id: int, stage: str, message: str) -> None:
 # ===== 内部：入参解析 =====
 
 def _require_demo(db: Session, demo_id: int) -> tuple[TeacherDemo, Path]:
-    """取示范曲目并还原出磁盘路径，确认文件真的还在。
-
-    库里登记过、磁盘上却没有，通常是被手工清过 uploads/ 或换了挂载点。
+    """库里登记过、磁盘上却没有，通常是被手工清过 uploads/ 或换了挂载点。
     这种要当 BusinessError 报出来（任务落 error 时 message 直接给用户看），
     而不是让后面 Demucs 抛一个读文件的原生异常。
     """
@@ -274,9 +268,7 @@ def _master_duration(path: Path) -> float | None:
 # ===== 内部：后台执行（Celery）=====
 
 def _dispatch(demo_id: int, task_id: str) -> None:
-    """把解析任务投进 **demucs 队列**，立即返回。
-
-    queue="demucs" 是必须的：一条解析占 8–15 分钟，与秒级的 B 组分析同队列
+    """queue="demucs" 是必须的：一条解析占 8–15 分钟，与秒级的 B 组分析同队列
     会把 pitch_comparison.html 拖住。**代价是 worker 必须带 -Q demucs**，
     否则这个队列没人消费、解析永远停在 parsing（CLAUDE.md 与 app/worker.py
     两处都记了这个坑）。
@@ -293,9 +285,7 @@ def _dispatch(demo_id: int, task_id: str) -> None:
 
 @shared_task(name="parse.run")
 def run_parse(demo_id: int) -> None:
-    """Celery 任务体，worker 进程里的入口。
-
-    **任何异常都必须落成 error 状态**（与 analyze_service.run_analysis 同构）：
+    """**任何异常都必须落成 error 状态**（与 analyze_service.run_analysis 同构）：
     任务抛出的异常若不在这里兜住，前端会一直轮询一个不会到终态的任务——比报错
     更难排查。Celery 自己也会记一份失败，但那份在 worker 日志里，前端看不到。
     """
@@ -320,9 +310,7 @@ def run_parse(demo_id: int) -> None:
 
 
 def _parse(demo_id: int) -> None:
-    """解析管线主体：人声分离 → 唱段切分 → 结果入库。
-
-    跑在 worker 进程里，没有请求上下文，所以自己开 session_scope()，不走 get_db()。
+    """跑在 worker 进程里，没有请求上下文，所以自己开 session_scope()，不走 get_db()。
     会话**分两段开、中间不留连接**：Demucs 要跑 8–15 分钟，攥着连接不放会把
     连接池（pool_size=5）白占一个。中间那段纯计算不碰数据库。
     """

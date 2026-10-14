@@ -104,7 +104,6 @@ def alerts(db:Session):
         if len(lst) < 2:
             lst.append(r)
 
-    # 组装结果；不足两条跳过
     # r.student_id 是 students.id 不是 users.id，姓名要经 students.user_id 拐一次，
     # 这里按学生批量取好，避免逐条查一次库（见 DOC_ISSUES 第 21 条）
     drop_names = user_repo.get_student_names(db, [r.student_id for r in records])

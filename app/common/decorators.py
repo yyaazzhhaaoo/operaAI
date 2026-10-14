@@ -18,12 +18,10 @@ from app.common.errors import BusinessError
 
 
 def current_user_id():
-    """取当前登录用户的 id；未登录返回 None。"""
     return session.get("user_id")
 
 
 def login_required(fn):
-    """未登录则抛 401。"""
 
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -35,7 +33,6 @@ def login_required(fn):
 
 
 def teacher_required(fn):
-    """非教师则抛 403。必须叠在 login_required 内层使用。"""
 
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -46,7 +43,6 @@ def teacher_required(fn):
     return wrapper
 
 def student_required(fn):
-    """非教师则抛 403。必须叠在 login_required 内层使用。"""
 
     @wraps(fn)
     def wrapper(*args, **kwargs):

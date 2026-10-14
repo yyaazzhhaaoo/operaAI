@@ -579,7 +579,7 @@ body{
 // 模拟数据层（后端 API 预留接口）
 // ============================================
 
-// 歌词不再有 mock：来自 C3（GET /api/segments/<id>），见页末 fetchLyrics()。
+// 歌词来自 C3（GET /api/segments/<id>），见页末 fetchLyrics()。
 
 const TECHNIQUE_DEPS = {
   "拖腔":  { prereqs: ["气息支撑","音准稳定性"], classAvg: { "气息支撑": 0.62, "音准稳定性": 0.71 } },
@@ -897,8 +897,8 @@ async function deleteAnnotation(id) {
   fetchRules();
 }
 
-// toast 图标按类型查表。原来是「只判 success、其余一律 ℹ️」，新增的 error
-// 会配上表示「提示」的图标——那是在说反话。表里没有的（如 info）仍回退 ℹ️
+// toast 图标按类型查表：error 不能落回表示「提示」的 ℹ️，那是在说反话。
+// 表里没有的（如 info）仍回退 ℹ️
 const TOAST_ICON = { success: "✅", error: "⚠️" };
 
 function showToast(type, title, msg) {
@@ -969,7 +969,6 @@ async function fetchDemos() {
     box.appendChild(btn);
   });
 
-  // 默认选中第一条有分段的；全都没有分段时一条都不选
   const first = rows.findIndex(d => d.segment_count > 0);
   if (first >= 0) switchPiece(first);
 }
@@ -1288,7 +1287,6 @@ function renderRuleTagFilter() {
   box.querySelectorAll(".piece-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const next = btn.dataset.tag === "" ? null : btn.dataset.tag;
-      // 点已经选中的那个按钮不重发请求
       if (next === ruleTag) return;
       ruleTag = next;
       renderRuleTagFilter();   // 重画以更新 .active

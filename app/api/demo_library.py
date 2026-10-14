@@ -71,9 +71,8 @@ def demo_library_upload():
 def demo_library_list():
     """示范曲目列表。
 
-    `@teacher_required` 是工作区里**已有**的校验，本轮口径是「不新增限制，
-    也不移除已有校验」，所以保留（spec 4.5）。它目前没有调用方——前端
-    `fetchDemos` 仍走 `DEMO_DATA` 演示数据。
+    `@teacher_required` 是工作区里**已有**的校验，口径是「不新增限制，也不移除
+    已有校验」，所以保留（spec 4.5）。
     """
     rows = library_service.demo_library_list(get_db())
     return ok([DemoLibraryListOut.model_validate(r).model_dump(mode="json") for r in rows])

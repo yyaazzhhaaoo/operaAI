@@ -31,9 +31,7 @@ def chat(
     timeout: float | None = None,
     response_format: dict | None = None,
 ) -> str:
-    """发一轮对话，返回 assistant 的文本内容。
-
-    messages 是 OpenAI 格式：[{"role":"system"|"user"|"assistant","content":str}, ...]
+    """messages 是 OpenAI 格式：[{"role":"system"|"user"|"assistant","content":str}, ...]
 
     response_format 传了就在请求体里带上（guided decoding 强制结构化输出）。
     该部署已实测支持（2026-10-13 探测，HTTP 200 且 content 是合法 JSON）；

@@ -54,16 +54,12 @@ def students_recommendations(id):
 @login_required
 @teacher_required
 def dashboard_process_metrics():
-    # mode="json"：响应里有 date（week_start）。默认 model_dump() 会给 Flask 一个
-    # date 对象，而它按 RFC-822 序列化成 "Mon, 28 Sep 2026 00:00:00 GMT"；
-    # mode="json" 出的是 ISO-8601（"2026-09-28"）。同 dashboard_students。
+    # 同 dashboard_students：mode="json" 才有 ISO-8601（week_start 是 date）
     return ok(dashboard_service.process_metrics(get_db()).model_dump(mode="json"))
 
 @api_bp.route("/dashboard/homework-progress",methods=["GET"])
 @login_required
 @teacher_required
 def dashboard_homework_progress():
-    # mode="json"：响应里有 date（deadline）。默认 model_dump() 会给 Flask 一个
-    # date 对象，而它按 RFC-822 序列化成 "Sun, 02 Aug 2026 00:00:00 GMT"；
-    # mode="json" 出的是 ISO-8601（"2026-08-02"）。同 dashboard_students。
+    # 同 dashboard_students：mode="json" 才有 ISO-8601（deadline 是 date）
     return ok(dashboard_service.homework_progress(get_db()).model_dump(mode="json"))

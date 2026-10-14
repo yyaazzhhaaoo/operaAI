@@ -15,10 +15,7 @@ from app.db import init_app
 
 
 def create_app(config_overrides=None):
-    """装配并返回 Flask 应用。
-
-    config_overrides 供测试覆盖配置（如 {"TESTING": True}），生产不传。
-    """
+    """config_overrides 供测试覆盖配置（如 {"TESTING": True}），生产不传。"""
     app = Flask(__name__)
     app.config.from_mapping(
         CELERY=dict(

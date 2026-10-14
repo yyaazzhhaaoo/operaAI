@@ -17,9 +17,7 @@ from app.repositories import user_repo
 
 
 def login(db: Session, username: str, password: str) -> User:
-    """校验用户名密码，返回用户。
-
-    用户不存在与密码错误返回同一句文案，不泄漏账号是否存在。
+    """用户不存在与密码错误返回同一句文案，不泄漏账号是否存在。
     """
     user = user_repo.get_by_username(db, username)
     if user is None or not verify_password(user.password_hash, password):
@@ -41,7 +39,6 @@ def get_user(db: Session, user_id: int) -> User:
 
 
 def change_password(db: Session, user: User, old: str, new: str) -> None:
-    """改密码。先验原密码，成功后写库并提交。"""
     if not verify_password(user.password_hash, old):
         raise BusinessError(401, "原密码不正确")
     user_repo.update_password(db, user, hash_password(new))

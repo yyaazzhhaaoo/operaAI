@@ -91,7 +91,6 @@ REGION_GAP_SEC = 0.3        # 合并相邻同色字的时间上限（字与字�
 # ===== B2 提交 =====
 
 def submit(db: Session, data: AnalyzeSubmitIn) -> str:
-    """B2：解析出教师/学生两条音轨，建任务并投给 Celery，立即返回 task_id。"""
     student = _require_audio(db, data.student_audio_id, "学生录音")
 
     if data.teacher_audio_id is not None:
@@ -170,9 +169,7 @@ def _require_audio(db: Session, audio_id: int, label: str) -> AudioFile:
 
 
 def _require_file(audio: AudioFile) -> Path:
-    """把登记记录还原成磁盘路径，并确认文件真的还在。
-
-    库里登记过、磁盘上却没有，通常是被手工清过 uploads/ 或换了挂载点。
+    """库里登记过、磁盘上却没有，通常是被手工清过 uploads/ 或换了挂载点。
     这种要当 404 报出来，而不是让分析线程在后面炸成一个 500。
     """
     path = storage.resolve(audio.file_path)
@@ -186,9 +183,7 @@ def _require_file(audio: AudioFile) -> Path:
 # ===== 内部：后台执行（Celery） =====
 
 def _dispatch(task_id: str, t_path: Path, s_path: Path, lyrics: list | None) -> None:
-    """把分析任务投进 Celery 队列，立即返回。
-
-    参数一律先转成纯数据：消息要序列化成 JSON 跨进程送给 worker，Path 不是
+    """参数一律先转成纯数据：消息要序列化成 JSON 跨进程送给 worker，Path 不是
     JSON 类型，ORM 对象更是完全过不去——所以这里传的是路径字符串，而不是
     上面那几个 AudioFile。
 
@@ -207,9 +202,7 @@ def _dispatch(task_id: str, t_path: Path, s_path: Path, lyrics: list | None) -> 
 
 @shared_task(name="analyze.run")
 def run_analysis(task_id: str, t_path: str, s_path: str, lyrics: list | None) -> None:
-    """Celery 任务体，worker 进程里的入口。
-
-    **任何异常都必须落成 failed 状态**。任务抛出的异常若不在这里兜住，任务会
+    """**任何异常都必须落成 failed 状态**。任务抛出的异常若不在这里兜住，任务会
     永远停在 queued，前端按 3.1 一直轮询也拿不到终态——比报错更难排查。文档 3.1
     也要求 failed 时 message 给用户可读原因。
 
@@ -348,9 +341,7 @@ class _Track:
 
 
 def _load_vocal(path: Path, label: str) -> tuple[np.ndarray, float]:
-    """加载音频 → HPSS 取出谐波分量 → 裁掉开唱前的静音。
-
-    返回 (人声信号, 开唱时间秒数)。开唱时间是相对**原始文件**的，后面把
+    """返回 (人声信号, 开唱时间秒数)。开唱时间是相对**原始文件**的，后面把
     lyrics_json 的绝对起止时间换算到分析时间轴上要用到它。
     """
     y, _ = librosa.load(str(path), sr=SR, mono=True, duration=MAX_AUDIO_SEC)
@@ -403,7 +394,6 @@ def _detect_onset(y: np.ndarray) -> float:
 
 
 def _extract_pitch(vocal: np.ndarray, label: str) -> _Track:
-    """pyin 提取基频，并算出 RMS 与频谱质心两条辅助特征。"""
     f0, _, _ = librosa.pyin(
         vocal,
         fmin=librosa.note_to_hz("C2"),

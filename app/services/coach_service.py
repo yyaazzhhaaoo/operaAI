@@ -77,9 +77,7 @@ def _bkt_items(db: Session, student_id: int) -> list[dict]:
 
 
 def _weak_skills(bkt: list[dict]) -> list[dict]:
-    """p_l 最低的若干项，即最薄弱的技法。
-
-    数据不足 WEAK_SKILL_TOP_N 项时给几项算几项——新生只有一两个技法有记录
+    """数据不足 WEAK_SKILL_TOP_N 项时给几项算几项——新生只有一两个技法有记录
     是常态，不该为了凑数去补零值。
     """
     ranked = sorted(bkt, key=lambda x: x["p_l"])
@@ -245,9 +243,7 @@ def parse_reply(raw: str) -> tuple[str, dict]:
 
 
 def _build_messages(context: dict, history: list[ChatMessage], message: str) -> list[dict]:
-    """拼出完整 messages。
-
-    客观数据只注入**当前这一轮**的 user 消息，不重复注入历史——历史里
+    """客观数据只注入**当前这一轮**的 user 消息，不重复注入历史——历史里
     那些轮次的数据已经在各自的快照里了，重复塞既费 token 又会让模型
     以为数据在变化。
     """

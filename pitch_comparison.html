@@ -437,12 +437,10 @@ let pollTimer = null;
 const POLL_INTERVAL_MS = 1000;
 const POLL_TIMEOUT_MS = 10 * 60 * 1000;   // 实测单对 77–99s，留足余量
 
-// 播放状态
 let teacherPlaying = false;
 let studentPlaying = false;
 let syncPlaying = false;
 
-// 同步游标相关
 let syncPlayheadId = null;
 let syncCurrentTime = 0;
 
@@ -1001,7 +999,6 @@ function drawTimeline(data) {
 
     ctx.clearRect(0, 0, W, H);
 
-    // 偏差区间底色
     const segSize = 25;
     for (let i = 0; i < al.length - segSize; i += segSize) {
         const slice = al.slice(i, i + segSize);
@@ -1013,7 +1010,6 @@ function drawTimeline(data) {
         ctx.fillRect(x, 0, w, H);
     }
 
-    // 网格线
     ctx.strokeStyle = 'rgba(200, 190, 180, 0.3)';
     ctx.lineWidth = 1;
     for (let sec = 0; sec <= maxTime; sec += 5) {
@@ -1024,7 +1020,6 @@ function drawTimeline(data) {
         ctx.fillText(sec + 's', x + 2, H - 6);
     }
 
-    // 老师音高曲线（景泰蓝）
     ctx.beginPath();
     ctx.strokeStyle = '#0066B3';
     ctx.lineWidth = 2.5;
@@ -1035,7 +1030,6 @@ function drawTimeline(data) {
     });
     ctx.stroke();
 
-    // 学生音高曲线（朱砂红）
     ctx.beginPath();
     ctx.strokeStyle = '#C0392B';
     ctx.lineWidth = 2.5;
@@ -1046,7 +1040,6 @@ function drawTimeline(data) {
     });
     ctx.stroke();
 
-    // 零参考线
     const zeroY = ty(0);
     if (zeroY > 0 && zeroY < H) {
         ctx.strokeStyle = 'rgba(90, 80, 70, 0.25)';
@@ -1057,7 +1050,6 @@ function drawTimeline(data) {
         ctx.fillText('标准调 (0 cents)', 8, zeroY - 6);
     }
 
-    // 偏差标记线（> 50 音分）
     ctx.save();
     ctx.setLineDash([4, 6]);
     ctx.lineWidth = 1.8;
@@ -1088,7 +1080,6 @@ function drawTimeline(data) {
     }
     ctx.restore();
 
-    // 同步播放游标
     if (syncPlaying || syncCurrentTime > 0) {
         const cursorX = tx(syncCurrentTime);
         if (cursorX >= 0 && cursorX <= W) {
@@ -1125,7 +1116,6 @@ function drawTimeline(data) {
         }
     }
 
-    // 鼠标悬浮 Tooltip
     canvas.onmousemove = e => {
         const r = canvas.getBoundingClientRect();
         const mx = e.clientX - r.left;

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""页面路由：把 12 个 HTML 收进 Flask，逐页挂鉴权。
+"""页面路由：把 14 个 HTML 收进 Flask，逐页挂鉴权。
 
 页面不是接口，所以这个蓝图**没有 url_prefix**——/api 是接口的 Base URL
 （《5-接口清单》第 1 节），页面挂在站点根下（/dashboard.html）。
@@ -27,11 +27,10 @@ page_bp = Blueprint("page", __name__)
 
 @page_bp.route("/login.html")
 def login():
-    """登录页。全站唯一的公开页面。"""
+    """全站唯一的公开页面。"""
     return send_from_directory(PAGES_DIR, "login.html")
 
 
-# 受保护页面：除登录页外的全部页面。
 # 新增页面时在这里加一项即可，勿另写 @page_bp.route 装饰器。
 PROTECTED_PAGES = [
     "index",
@@ -51,8 +50,6 @@ PROTECTED_PAGES = [
 
 
 def _serve(name):
-    """返回一个把 <name>.html 发出去的视图函数。"""
-
     def view():
         # send_from_directory 而非 send_file：入参是目录 + 文件名，对 '..'
         # 做了转义校验。这里 name 全部来自上面的字面量列表、不来自请求，
@@ -65,9 +62,9 @@ def _serve(name):
     return view
 
 
-# 循环注册而非写 12 个视图函数：它们的函数体完全相同，逐个写只是把同一个
-# 字符串抄 12 遍。endpoint 必须显式命名——不指定的话 Flask 会从函数名
-# "view" 推导，12 条路由全叫 page.view 而当场冲突。
+# 循环注册而非写 13 个视图函数：它们的函数体完全相同，逐个写只是把同一个
+# 字符串抄 13 遍。endpoint 必须显式命名——不指定的话 Flask 会从函数名
+# "view" 推导，13 条路由全叫 page.view 而当场冲突。
 for _name in PROTECTED_PAGES:
     page_bp.add_url_rule(
         f"/{_name}.html",

@@ -308,7 +308,6 @@ def _feature_matrix(ai_detail: dict | None) -> dict | None:
 
 
 def _overall_confidence(ai_detail: dict | None) -> float | None:
-    """`ai_detail.overallConfidence`，过一遍 _num 挡掉 `"0.68"` 这类字符串。"""
     if not isinstance(ai_detail, dict):
         return None
     return _num(ai_detail.get("overallConfidence"))

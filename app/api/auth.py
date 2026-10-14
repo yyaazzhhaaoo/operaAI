@@ -36,7 +36,6 @@ def _payload() -> dict:
 
 @api_bp.route("/auth/login", methods=["POST"])
 def login():
-    """A1 登录（公开）。成功后写会话，返回 UserOut。"""
     data = LoginIn.model_validate(_payload())
     user = auth_service.login(get_db(), data.username, data.password)
 
@@ -52,7 +51,6 @@ def login():
 @api_bp.route("/auth/logout", methods=["POST"])
 @login_required
 def logout():
-    """A2 登出。"""
     session.clear()
     return ok(None)
 
@@ -60,7 +58,6 @@ def logout():
 @api_bp.route("/auth/me")
 @login_required
 def me():
-    """A3 当前登录用户。"""
     user = auth_service.get_user(get_db(), current_user_id())
     return ok(UserOut.model_validate(user).model_dump())
 
@@ -68,7 +65,6 @@ def me():
 @api_bp.route("/auth/password", methods=["POST"])
 @login_required
 def change_password():
-    """A4 修改密码。成功后清会话，强制用新密码重新登录。"""
     data = PasswordChangeIn.model_validate(_payload())
     db = get_db()
     user = auth_service.get_user(db, current_user_id())

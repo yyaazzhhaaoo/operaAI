@@ -666,7 +666,6 @@ function renderStudentList() {
       return `<span class="alert-tag ${cls}">${a.text}</span>`;
     }).join("");
 
-    // 只取前 3 个技法，与接接口前的观感一致
     const skillsHtml = studentSkills.slice(0, 3).map((t, i) => {
       const p = s.values ? s.values[i] : null;
       // 该生该技法没测过时 values[i] 是 null，必须先判再用：直接 .toFixed() 会抛
@@ -736,7 +735,6 @@ async function loadHeatmap() {
     heatmapChart = echarts.init(dom);
     heatmapChart.on("click", function(params) {
       const s = heatmapStudents[params.data[1]];
-      // 右侧列表是 mock、只有 8 人，跟接口的行不保证一一对应，找不到就不联动
       if (s) selectStudent(s.student_id);
     });
     window.addEventListener("resize", () => { if (heatmapChart) heatmapChart.resize(); });

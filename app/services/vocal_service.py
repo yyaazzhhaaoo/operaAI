@@ -102,7 +102,6 @@ def _prepare_runtime():
 
 
 def _get_model():
-    """取（并缓存）htdemucs 模型。"""
     global _model
     if _model is not None:
         return _model
@@ -126,9 +125,7 @@ def _get_model():
 
 
 def separate_vocal(path: Path, *, max_sec: float = MAX_AUDIO_SEC) -> np.ndarray:
-    """分离出人声轨，返回 16kHz 单声道信号。
-
-    用 `get_model` + `apply_model` 而不是 4.1.0 新增的 `demucs.api.Separator`：
+    """用 `get_model` + `apply_model` 而不是 4.1.0 新增的 `demucs.api.Separator`：
     Separator 是个薄封装，自己管音频读取（走 torchaudio/ffmpeg）。而本项目已有
     librosa、且 B 组分析全程用 librosa 读音频，自己读能保证两条链路的解码行为
     一致；4.1.0 又把 torchaudio 摘出了推理路径，绕开它反而少一个变数。
@@ -158,7 +155,7 @@ def separate_vocal(path: Path, *, max_sec: float = MAX_AUDIO_SEC) -> np.ndarray:
         wav = wav.unsqueeze(0)
     if wav.shape[0] == 1:               # 复制成两轨，满足模型的立体声输入要求
         wav = wav.repeat(2, 1)
-    elif wav.shape[0] > 2:              # 多声道只取前两轨
+    elif wav.shape[0] > 2:
         wav = wav[:2]
 
     # apply_model 自己要一个 batch 维，返回 [B, 音轨数, 声道数, 采样数]。
@@ -177,7 +174,7 @@ def separate_vocal(path: Path, *, max_sec: float = MAX_AUDIO_SEC) -> np.ndarray:
     )[0]
 
     vocal = sources[model.sources.index(VOCAL_STEM)]
-    if vocal.shape[0] > 1:              # 立体声人声轨混成单声道
+    if vocal.shape[0] > 1:
         vocal = vocal.mean(dim=0)
 
     y = vocal.detach().numpy()

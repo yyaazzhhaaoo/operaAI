@@ -13,8 +13,6 @@ if TYPE_CHECKING:
 
 
 class Homework(Base):
-    """作业。"""
-
     __tablename__ = "homeworks"
 
     id: Mapped[int] = mapped_column(primary_key=True)

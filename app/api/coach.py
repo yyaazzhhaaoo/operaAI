@@ -19,12 +19,7 @@ from app.services import coach_service
 
 
 def _payload() -> dict:
-    """取 JSON 请求体。
-
-    客户端没带 Content-Type: application/json 时 get_json() 会抛 415；
-    silent=True 把它压成 None，这里再兜成 {}，让 pydantic 报「字段必填」
-    而不是让 Flask 抛一个前端看不懂的 415。与 homeworks/audio_analyze 同款。
-    """
+    """取 JSON 请求体（同 auth：silent=True 兜成 {}，免得 415）。"""
     return request.get_json(silent=True) or {}
 
 
@@ -79,7 +74,6 @@ def coach_chat():
 @login_required
 @student_required
 def coach_history(student_id):
-    """E3 历史对话。limit 走查询串，默认 50，上限 200。"""
     db = get_db()
     sid = coach_service.resolve_student_id(db, student_id, current_user_id())
     # request.args.get 拿到的永远是字符串，非数字会让 int() 抛 ValueError

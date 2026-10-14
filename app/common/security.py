@@ -15,7 +15,6 @@ HASH_METHOD = "pbkdf2:sha256"
 
 
 def hash_password(plain: str) -> str:
-    """生成密码哈希（自带随机盐）。"""
     return generate_password_hash(plain, method=HASH_METHOD)
 
 
