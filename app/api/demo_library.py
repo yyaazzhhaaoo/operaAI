@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """示范库接口（`DOC_ISSUES.md` 第 16–20 条 / spec `2026-09-21-demo-library-parse-design.md`）。
 
-    POST /api/demo/library/upload                     登录  上传示范音频，落库并自动投解析任务
+    POST /api/demo/library/upload                     登录  上传示范音频（可附带逐字数据 Excel）
     GET  /api/demo/library/list                       登录+教师  示范曲目列表（带解析状态）
     GET  /api/demo/library/<int:demo_id>              登录  详情（含分段列表与音频 url）
     GET  /api/demo/library/<int:demo_id>/parse/status 登录  解析进度（前端每 3 秒轮询）
@@ -20,13 +20,16 @@ from app.common.errors import BusinessError
 from app.db import get_db
 from app.response import ok
 from app.schemas.demo_library import DemoLibraryDetailOut, DemoLibraryListOut
-from app.services import audio_service, library_service, parse_service
+from app.services import audio_service, library_service, lyrics_excel, parse_service
 
 
 @api_bp.route("/demo/library/upload", methods=["POST"])
 @login_required
 def demo_library_upload():
-    """上传示范音频：落盘 + 建两行 + 投解析任务，返回 {demo_id, task_id}。
+    """上传示范音频：落盘 + 建两行，返回 {demo_id, task_id}。
+
+    带 `excel` 字段时按逐字数据建段、**不投 Demucs 任务**（task_id 为 null）；
+    不带时原路不变，投 demucs 队列由 worker 切分（spec 3.1）。
 
     鉴权只要求登录（本轮「权限先不管」的决策，见 spec 第 2 节）。`access`
     仍按角色取值——`audio_service.save_upload` 只允许教师设 public。
@@ -35,9 +38,15 @@ def demo_library_upload():
     if file is None or not file.filename:
         raise BusinessError(400, "缺少音频文件（multipart 字段名应为 audio）")
 
+    # 解析排在落盘之前：逐字数据有问题就整批回滚，连音频文件都不落盘（spec 3.4）
+    excel = request.files.get("excel")
+    segments = None
+    if excel is not None and excel.filename:
+        segments = lyrics_excel.parse_segments(excel.read())
+
     db = get_db()
     # commit=False：这一行先不提交，和下面 teacher_demos 那行合成一次事务，
-    # 由 demo_library_add() 末尾统一 commit（提交点见 service 层的说明）。
+    # 由 service 层末尾统一 commit（提交点见 service 层的说明）。
     audio = audio_service.save_upload(
         db,
         uploader_id=current_user_id(),
@@ -50,19 +59,31 @@ def demo_library_upload():
         commit=False,
     )
 
-    demo = library_service.demo_library_add(
+    # title 在库里是 NOT NULL，前端没填时退回文件名（不含扩展名）
+    title = request.form.get("title") or Path(file.filename).stem
+    if segments is None:
+        demo = library_service.demo_library_add(
+            db,
+            title=title,
+            role=request.form.get("role"),
+            banshi=request.form.get("banshi"),
+            audio_id=audio.id,
+        )
+        # 提交之后才投任务：submit() 需要 demo.id，而 redis 那条记录要在「两行都
+        # 落定」之后才存在，否则任务可能先跑起来、查库时 demo 还没提交。
+        return ok({"demo_id": demo.id, "task_id": parse_service.submit(db, demo)})
+
+    demo = library_service.demo_library_add_with_segments(
         db,
-        # title 在库里是 NOT NULL，前端没填时退回文件名（不含扩展名）
-        title=request.form.get("title") or Path(file.filename).stem,
+        title=title,
         role=request.form.get("role"),
         banshi=request.form.get("banshi"),
-        audio_id=audio.id,
+        audio=audio,
+        segments=segments,
     )
-
-    # 提交之后才投任务：submit() 需要 demo.id，而 redis 那条记录要在「两行都
-    # 落定」之后才存在，否则任务可能先跑起来、查库时 demo 还没提交。
-    task_id = parse_service.submit(db, demo)
-    return ok({"demo_id": demo.id, "task_id": task_id})
+    # 状态不写 redis：详情/状态接口走 parse_service.status 的派生路径
+    # （segments 有行 → parsed），前端即便轮询也是第一次就拿到 parsed（spec 3.1）。
+    return ok({"demo_id": demo.id, "task_id": None})
 
 
 @api_bp.route("/demo/library/list", methods=["GET"])

@@ -7,11 +7,13 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.common import storage
 from app.common.errors import BusinessError
 from app.models import TeacherDemo
+from app.models.audio import AudioFile
 from app.models.demo import Segment
 from app.repositories import annotations_repo, library_repo
-from app.services import parse_service
+from app.services import audio_service, parse_service
 
 
 def demo_list(db: Session) -> list[dict]:
@@ -88,15 +90,17 @@ def demo_library_add(
     role: str | None = None,
     banshi: str | None = None,
     audio_id: int | None = None,
+    commit: bool = True,
 ) -> TeacherDemo:
     """新增示范曲目。事务边界在本层，写操作显式 commit。
 
     audio_id 由调用方传入（audio_files flush 出来的自增主键），本层只负责把
     外键写进去，不反查、不补建。
 
-    下面这次 commit 同时提交前一步 save_upload(commit=False) 留在同一会话里的
-    audio_files 行——示范曲目上传要的就是「两行一次提交」：任何一边失败，
-    两边都留不下半条记录。
+    commit=True 时这次提交同时提交前一步 save_upload(commit=False) 留在同一
+    会话里的 audio_files 行——示范曲目上传要的就是「两行一次提交」：任何一边
+    失败，两边都留不下半条记录。commit=False 是给带逐字数据的上传用的：那条路
+    还得先写 segments、回填时长，唯一提交点在 demo_library_add_with_segments。
 
     **解析任务的投递不在这里做**：submit() 需要 demo.id，而这条 commit 之后
     才轮到 api 层调 parse_service.submit()。若 redis 挂了导致 submit 失败，
@@ -113,7 +117,39 @@ def demo_library_add(
         audio_id=audio_id,
     )
     library_repo.add_library(db, demo)
-    db.commit()
+    if commit:
+        db.commit()
+    return demo
+
+
+def demo_library_add_with_segments(
+    db: Session,
+    *,
+    title: str,
+    role: str | None = None,
+    banshi: str | None = None,
+    audio: AudioFile,
+    segments: list[dict],
+    commit: bool = True,
+) -> TeacherDemo:
+    """带逐字数据的示范上传：建 demo + 写 segments + 回填音频时长。
+
+    **这里的 commit 是这条链路唯一的提交点**：调它之前不能有任何提交，否则
+    解析失败就撤不干净。逐字数据的解析已经在调用方做完并先于落盘——坏文件
+    连音频文件都不会落盘（spec 3.1、3.4）。
+
+    与 Demucs 那条路的区别：段边界由唱词句给出，不再需要停顿切分，所以不投
+    解析任务；时长也在同一事务里回填（worker 那条路是解析时回填）。
+    """
+    demo = demo_library_add(
+        db, title=title, role=role, banshi=banshi, audio_id=audio.id, commit=False
+    )
+    library_repo.replace_segments(db, demo.id, segments)
+    duration = audio_service.probe_duration(storage.resolve(audio.file_path))
+    if duration is not None:
+        library_repo.update_audio_duration(db, demo.id, duration)
+    if commit:
+        db.commit()
     return demo
 
 
