@@ -63,11 +63,12 @@ def replace_segments(db: Session, demo_id: int, segments: list[dict]) -> None:
     不用「按 seq upsert」是因为段数可能变少（阈值调过、素材换过），
     upsert 会留下上一轮多出来的尾巴。
 
-    参数是纯 dict（[{seq,title,duration}]）而不是 ORM 对象：分段在 worker
-    进程里用 numpy 算出来，那边根本没有 Session。
+    参数是纯 dict（[{seq,title,duration,lyrics?}]）而不是 ORM 对象：分段可能
+    在 worker 进程里用 numpy 算出来，那边根本没有 Session。
 
-    lyrics_json 一律 NULL——第 20 条：没有 ASR 组件，音频给不出汉字。
-    segments 表也没有 start/end 列（本次不加），所以位置信息只有 seq 与 duration。
+    lyrics 来自上传时附带的逐字数据（app/services/lyrics_excel.py）；没有它
+    时（Demucs 那条路）为 None——第 20 条：音频本身给不出汉字。segments 表没有
+    start/end 列，逐字的位置信息全在 lyrics_json 里。
 
     只 flush 不 commit；DELETE 由 Core 语句当场发出，必然排在 flush 的
     INSERT 之前，不会出现「新行插进去又被删掉」。
@@ -78,7 +79,7 @@ def replace_segments(db: Session, demo_id: int, segments: list[dict]) -> None:
             demo_id=demo_id,
             seq=s["seq"],
             title=s["title"],
-            lyrics_json=None,
+            lyrics_json=s.get("lyrics"),
             duration=s["duration"],
         )
         for s in segments
