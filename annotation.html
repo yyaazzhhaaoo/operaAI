@@ -972,8 +972,18 @@ async function fetchDemos() {
     box.appendChild(btn);
   });
 
+  // 深链失效时回退到第一个可标注曲目，与加参数之前的行为一致。
+  // hit 只判「这条示范在不在」，与「能不能标注」分开：文案说的是「尚未解析出
+  // 分段」，套在 id 不存在/非数字上就是在说假话（同本文件 :951 的口径）
+  const raw = new URLSearchParams(location.search).get("demo_id");
+  const hit = rows.findIndex(d => d.id === Number(raw));
+  const idx = hit >= 0 && rows[hit].segment_count > 0 ? hit : -1;
   const first = rows.findIndex(d => d.segment_count > 0);
-  if (first >= 0) switchPiece(first);
+  if (idx >= 0) switchPiece(idx);
+  else if (first >= 0) {
+    switchPiece(first);
+    if (hit >= 0) showToast("info", "该示范尚未解析出分段", "已切换到其他曲目");
+  }
 }
 
 function switchPiece(idx) {

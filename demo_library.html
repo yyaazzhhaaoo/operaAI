@@ -2171,7 +2171,7 @@
             }, 3000);
         }
 
-        function annotateDemo(id) { showToast("info", "标注功能", `正在打开「${id}」的标注页面...`); }
+        function annotateDemo(id) { location.href = `annotation.html?demo_id=${encodeURIComponent(id)}`; }
 
         function showVersions(id) { selectDemo(id);
             showToast("info", "版本管理", `已切换到「${id}」的版本列表`); }
