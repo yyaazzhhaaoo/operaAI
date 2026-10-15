@@ -652,7 +652,9 @@ function renderLyrics() {
       let html = `<div class="lyric-char">${item.char}</div>`;
       html += `<div class="lyric-pitch">${item.pitch} ${midiToNote(item.pitch)}</div>`;
       html += `<div class="lyric-note">${noteLabel(item.note)}</div>`;
-      html += `<div class="lyric-time">${item.start.toFixed(1)}s</div>`;
+      // 缺时间的字 `null.toFixed` 会抛 TypeError、打断整个 renderLyrics，网格渲染到
+      // 一半就停。判定用 Number.isFinite 而不是 !== null：NaN 也会输出 "NaN"（与 sing_along.html 同口径）
+      html += `<div class="lyric-time">${Number.isFinite(item.start) ? item.start.toFixed(1) + "s" : "—"}</div>`;
       if (hasAnn) html += `<div class="ann-indicator" title="${annNote(hasAnn)}">✓</div>`;
       cell.innerHTML = html;
       cell.onclick = () => selectChar(idx);
@@ -681,7 +683,8 @@ function selectChar(idx) {
   document.getElementById("metaPitch").textContent = `音高: ${item.pitch} (${midiToNote(item.pitch)})`;
   // noteLabel 自带「拍」字，这里不要再拼一个
   document.getElementById("metaNote").textContent = `时值: ${noteLabel(item.note)}`;
-  document.getElementById("metaTime").textContent = `起止: ${item.start.toFixed(2)}s`;
+  document.getElementById("metaTime").textContent =
+    Number.isFinite(item.start) ? `起止: ${item.start.toFixed(2)}s` : "起止: —";
   const ctrl = document.getElementById("annotateControls");
   ctrl.style.opacity = "1"; ctrl.style.pointerEvents = "all";
   clearTagSelection();
