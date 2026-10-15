@@ -33,7 +33,7 @@ from app.models.demo import TeacherDemo
 from app.repositories import audio_repo
 from app.repositories import library_repo
 from app.repositories import parse_task_repo as task_repo
-from app.services import vocal_service
+from app.services import audio_service, vocal_service
 
 logger = logging.getLogger(__name__)
 
@@ -243,28 +243,6 @@ def _require_demo(db: Session, demo_id: int) -> tuple[TeacherDemo, Path]:
     return demo, path
 
 
-def _master_duration(path: Path) -> float | None:
-    """音频文件的真实全长（秒）。多数格式只读元数据，不解码。
-
-    走 librosa.get_duration(path=...)：它先试 soundfile 的 sf.info()，对
-    wav/mp3/flac/ogg 只读文件头；soundfile 打不开的容器（m4a / aac / webm，
-    都在 storage.ALLOWED_EXT 里）会回退到 audioread，那条路径经 ffmpeg 把整个
-    文件解一遍（秒级到几十秒）。所以这里是「通常很便宜」而非「一定零成本」。
-
-    读不出来返回 None 而不是 0.0：0 是个会写进 audio_files.duration_sec 的
-    「合法」值，列表页会如实显示成 0.0 秒，等于用一个假数据掩盖了读取失败。
-    返回 None 时调用方跳过回填，列保持 NULL（前端显示「—」）。
-
-    这个值是**文件真实时长**，不是 MAX_AUDIO_SEC 截断后的长度——列表页显示的
-    时长必须如实（spec 4.3），分段只覆盖前 3 分钟这件事由任务完成消息另行说明。
-    """
-    try:
-        return float(librosa.get_duration(path=str(path)))
-    except Exception:
-        logger.exception("读取音频时长失败：%s", path)
-        return None
-
-
 # ===== 内部：后台执行（Celery）=====
 
 def _dispatch(demo_id: int, task_id: str) -> None:
@@ -319,7 +297,7 @@ def _parse(demo_id: int) -> None:
         _, path = _require_demo(db, demo_id)
 
     # 时长在读文件头这一步拿，与后面的分离无关，先取好省得回填时再开一次会话
-    duration = _master_duration(path)
+    duration = audio_service.probe_duration(path)
 
     # --- 人声分离（8–15 分钟，进度停在 20%）---
     _enter_stage(demo_id, STAGE_SEPARATE, "正在分离人声，单条约需 8–15 分钟，请勿关闭页面…")

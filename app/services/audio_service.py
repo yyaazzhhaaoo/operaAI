@@ -7,8 +7,10 @@
 事务边界在本层：写操作显式 commit。
 """
 
+import logging
 from pathlib import Path
 
+import librosa
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import FileStorage
 
@@ -16,6 +18,8 @@ from app.common import storage
 from app.common.errors import BusinessError
 from app.models.audio import AudioFile
 from app.repositories import audio_repo
+
+logger = logging.getLogger(__name__)
 
 # 与 audio_files.access 列的取值域对齐（VARCHAR(10)）
 ACCESS_PUBLIC = "public"
@@ -69,6 +73,31 @@ def save_upload(
     if commit:
         db.commit()
     return audio
+
+
+def probe_duration(path: Path) -> float | None:
+    """音频文件的真实全长（秒）。多数格式只读元数据，不解码。
+
+    走 librosa.get_duration(path=...)：它先试 soundfile 的 sf.info()，对
+    wav/mp3/flac/ogg 只读文件头；soundfile 打不开的容器（m4a / aac / webm，
+    都在 storage.ALLOWED_EXT 里）会回退到 audioread，那条路径经 ffmpeg 把整个
+    文件解一遍（秒级到几十秒）。所以这里是「通常很便宜」而非「一定零成本」。
+
+    读不出来返回 None 而不是 0.0：0 是个会写进 audio_files.duration_sec 的
+    「合法」值，列表页会如实显示成 0.0 秒，等于用一个假数据掩盖了读取失败。
+    返回 None 时调用方跳过回填，列保持 NULL（前端显示「—」）。
+
+    两个调用方（上传接口同步回填、解析任务 worker 回填）共用这一份实现——
+    各写一份迟早会漂移。
+
+    回填的是**文件真实时长**，不是 MAX_AUDIO_SEC 截断后的长度——列表页显示的
+    时长必须如实（spec 4.3），分段只覆盖前 3 分钟这件事由任务完成消息另行说明。
+    """
+    try:
+        return float(librosa.get_duration(path=str(path)))
+    except Exception:
+        logger.exception("读取音频时长失败：%s", path)
+        return None
 
 
 def get_playable(
