@@ -744,6 +744,9 @@ async function loadDemos() {
     return o;
   }));
   sel.value = String(demos[0].id);
+  // 程序化赋值不触发 onchange，而 currentDemoId 只在 changePiece 里赋值；
+  // 库里只有一个曲目时用户也点不出 change 事件，分段列表会永远停在空态。
+  await changePiece();
 }
 
 async function loadSegments(demoId) {
