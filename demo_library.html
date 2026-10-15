@@ -1410,6 +1410,14 @@
                 </div>
                 <input type="file" id="fileInput" accept="audio/*" style="display:none" onchange="onFileSelect(event)">
             </div>
+            <div class="modal-row">
+                <label>逐字数据</label>
+                <div class="file-drop" id="excelDrop" onclick="document.getElementById('excelInput').click()">
+                    <div class="hint">可选：逐字声学数据 Excel<br><span style="color:var(--text-muted);font-size:11px">.xlsx，一页一段，表头含「字 / 音高 / 起始时间 / 结束时间」</span></div>
+                    <div class="file-name" id="excelName" style="display:none"></div>
+                </div>
+                <input type="file" id="excelInput" accept=".xlsx" style="display:none" onchange="onExcelSelect(event)">
+            </div>
             <div class="modal-actions">
                 <button class="btn-secondary" onclick="hideUploadModal()">取消</button>
                 <button class="btn-primary" onclick="doUpload()" id="uploadBtn">开始上传</button>
@@ -1632,7 +1640,8 @@
 		];
         let activeDemoId = null,
             pollTimer = null,
-            selectedFile = null;
+            selectedFile = null,
+            selectedExcel = null;
         let processingDemoId = null,
             processingFileName = "";
 
@@ -2035,6 +2044,10 @@
             document.getElementById("uploadTitle").value = "";
             document.getElementById("uploadRole").value = "";
             document.getElementById("uploadBanshi").value = "";
+            selectedExcel = null;
+            document.getElementById("excelName").style.display = "none";
+            document.getElementById("excelName").textContent = "";
+            document.getElementById("excelInput").value = "";
         }
 
         function hideUploadModal() { document.getElementById("uploadModal").classList.remove("show"); }
@@ -2050,6 +2063,16 @@
             }
         }
 
+        // **不参与 uploadTitle 的自动回填**：那个回填是音频文件名的逻辑
+        // （见 onFileSelect），被 Excel 抢走会把曲目名填成表名
+        function onExcelSelect(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            selectedExcel = file;
+            document.getElementById("excelName").textContent = file.name;
+            document.getElementById("excelName").style.display = "";
+        }
+
         async function doUpload() {
             if (!selectedFile) { showToast("error", "请选择文件", "请先选择要上传的音频文件"); return; }
             const title = document.getElementById("uploadTitle").value;
@@ -2057,6 +2080,7 @@
             const banshi = document.getElementById("uploadBanshi").value;
             const form = new FormData();
             form.append("audio", selectedFile);
+            if (selectedExcel) form.append("excel", selectedExcel);
             if (title) form.append("title", title);
             if (role) form.append("role", role);
             if (banshi) form.append("banshi", banshi);
@@ -2084,17 +2108,20 @@
                 const data = body.data || {};
                 if (!data.demo_id) throw new Error(body.message || "服务端未返回 demo_id");
                 hideUploadModal();
-                // body.message 恒为 "ok"（信封顶层的固定文案），说不了任何事；
-                // 真正有意义的是 task_id —— 用户报障时能拿去 grep worker 日志。
-                showToast("success", "上传成功", `已提交解析任务 ${data.task_id || ""}`.trim());
-
-                processingFileName = selectedFile ? selectedFile.name : (title || "未命名文件");
-                showProcessingModal(processingFileName, data.demo_id);
-
+                if (data.task_id) {
+                    // body.message 恒为 "ok"（信封顶层的固定文案），说不了任何事；
+                    // 真正有意义的是 task_id —— 用户报障时能拿去 grep worker 日志。
+                    showToast("success", "上传成功", `已提交解析任务 ${data.task_id}`);
+                    processingFileName = selectedFile ? selectedFile.name : (title || "未命名文件");
+                    showProcessingModal(processingFileName, data.demo_id);
+                } else {
+                    // 带逐字数据时不投 Demucs：段已经按唱词建好了，没有可轮询的任务
+                    showToast("success", "上传成功", "已按逐字数据建段，解析完成");
+                }
                 activeDemoId = data.demo_id;
                 await fetchDemos();
                 await fetchDemoDetail(data.demo_id);
-                startPolling(data.demo_id);
+                if (data.task_id) startPolling(data.demo_id);
             } catch (e) { showToast("error", "上传失败", e.message); } finally { btn.textContent = "开始上传";
                 btn.disabled = false; }
         }
