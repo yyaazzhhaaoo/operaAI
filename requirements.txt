@@ -36,6 +36,9 @@ psycopg2-binary==2.9.13     # 用 binary 版：免 pg_config，自带 libpq
 SQLAlchemy==2.0.52          # ORM，app/models/ 下的模型映射
 pydantic-settings==2.15.0   # 读取 .env 配置，app/config.py
 
+# --- 逐字声学数据（上传示范时附带的 Excel）---
+openpyxl==3.1.5             # 只读 .xlsx；纯 Python，Mac/Linux 都装得上
+
 # --- 生产部署：gunicorn + gevent + celery + redis（部署手册 2.3 节指定）---
 gunicorn==26.2.0            # WSGI 服务器，systemd 托管 xiyun-web
 gevent==26.8.0              # gunicorn 异步 worker
@@ -109,6 +112,7 @@ python-dotenv==1.2.3        # pydantic-settings 读取 .env
 typing-inspection==0.4.4    # pydantic
 
 # --- 其它 ---
+et_xmlfile==2.0.0           # openpyxl 的传递依赖，一并钉死
 packaging==26.3
 typing_extensions==4.16.0
 
