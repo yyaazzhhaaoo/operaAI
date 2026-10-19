@@ -217,3 +217,50 @@ def get_latest_for_student(db: Session, student_id: int) -> PracticeRecord | Non
         .limit(1)
     )
 
+
+def get_last_for_student_segment(
+    db: Session, student_id: int, segment_id: int
+) -> PracticeRecord | None:
+    """D3：某学生某分段最近一次练习；没练过返回 None（调用方按正常状态处理）。
+
+    同一秒内可能写入多条，再按 id 兜底排序，保证「最新」是确定的。
+    """
+    return db.scalar(
+        select(PracticeRecord)
+        .where(PracticeRecord.student_id == student_id)
+        .where(PracticeRecord.segment_id == segment_id)
+        .order_by(desc(PracticeRecord.created_at), desc(PracticeRecord.id))
+        .limit(1)
+    )
+
+
+def list_for_student(
+    db: Session,
+    student_id: int,
+    *,
+    segment_id: int | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[PracticeRecord]:
+    """D2：某学生的练习日志，按时间倒序。segment_id 为空时不按分段过滤。"""
+    stmt = select(PracticeRecord).where(PracticeRecord.student_id == student_id)
+    if segment_id is not None:
+        stmt = stmt.where(PracticeRecord.segment_id == segment_id)
+    return list(db.scalars(
+        stmt.order_by(desc(PracticeRecord.created_at), desc(PracticeRecord.id))
+        .limit(limit)
+        .offset(offset)
+    ).all())
+
+
+def count_for_student(
+    db: Session, student_id: int, *, segment_id: int | None = None
+) -> int:
+    """D2 分页用的总数，过滤条件与 list_for_student 保持一致。"""
+    stmt = select(func.count()).select_from(PracticeRecord).where(
+        PracticeRecord.student_id == student_id
+    )
+    if segment_id is not None:
+        stmt = stmt.where(PracticeRecord.segment_id == segment_id)
+    return int(db.scalar(stmt) or 0)
+

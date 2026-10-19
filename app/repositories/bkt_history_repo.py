@@ -46,6 +46,19 @@ def get_recent_by_skill(db:Session, limit:int = 2) -> list[BktHistory]:
     ).all())
 
 
+def get_latest_for_student_skill(
+    db: Session, student_id: int, skill: str
+) -> BktHistory | None:
+    """某学生某技法最新一条掌握度；没有记录返回 None（练习接口以 0.5 作先验）。"""
+    return db.scalar(
+        select(BktHistory)
+        .where(BktHistory.student_id == student_id)
+        .where(BktHistory.skill == skill)
+        .order_by(desc(BktHistory.recorded_at), desc(BktHistory.id))
+        .limit(1)
+    )
+
+
 def get_latest_per_skill_for_student(db: Session, student_id: int) -> list[BktHistory]:
     """某个学生每个技法只留 recorded_at 最新的那一条，即「当前掌握度」。
 

@@ -456,7 +456,12 @@ body{
 /* ===== 响应式 ===== */
 @media (max-width:1200px){.sidebar{display:none}.main-content{margin-left:0}.metric-row{grid-template-columns:1fr}}
 @media (max-width:768px){.canvas-wrap{height:300px}.control-bar{flex-direction:column;align-items:stretch}.nav-brand h1{font-size:14px}}
-</style>
+
+        /* 按登录角色显示导航分组：角色就绪前不显示，避免教师菜单闪现 */
+        .nav-group[data-role] { display: none; }
+        body.role-teacher .nav-group[data-role="teacher"] { display: block; }
+        body.role-student .nav-group[data-role="student"] { display: block; }
+    </style>
 </head>
 <body>
 
@@ -476,23 +481,23 @@ body{
 
 <div class="layout">
   <aside class="sidebar">
-    <div class="nav-group">
+    <div class="nav-group" data-role="teacher">
       <div class="nav-group-title">核心功能</div>
       <a href="dashboard.html" class="nav-item"><span class="icon">📊</span>班级看板</a>
     </div>
-    <div class="nav-group">
+    <div class="nav-group" data-role="teacher">
       <div class="nav-group-title">教学工作台</div>
       <a href="demo_library.html" class="nav-item"><span class="icon">🎵</span>示范库管理</a>
       <a href="annotation.html" class="nav-item"><span class="icon">🏷️</span>歌词级标注</a>
       <a href="homework.html" class="nav-item"><span class="icon">📝</span>作业批改</a>
     </div>
-    <div class="nav-group">
+    <div class="nav-group" data-role="student">
       <div class="nav-group-title">学生练习</div>
       <a href="sing_along.html" class="nav-item active"><span class="icon">🎙️</span>实时跟唱</a>
       <a href="AI_teacher.html" class="nav-item"><span class="icon">🤖</span>AI教练对话</a>
       <a href="cat_test.html" class="nav-item"><span class="icon">🎯</span>摸底测试</a>
     </div>
-    <div class="nav-group">
+    <div class="nav-group" data-role="teacher">
       <div class="nav-group-title">数据分析</div>
       <a href="tracking.html" class="nav-item"><span class="icon">📈</span>能力追踪</a>
       <a href="recommendation.html" class="nav-item"><span class="icon">🎯</span>渐进式推荐</a>
@@ -607,6 +612,7 @@ body{
 
     <div class="dimension-box" id="dimensionBox">
       <h4>📊 维度评分</h4>
+      <div id="lastPractice" style="display:none;font-size:13px;color:var(--text-secondary);margin-bottom:10px"></div>
       <div id="dimensionList"></div>
     </div>
 
@@ -647,10 +653,13 @@ let currentCoachingChar = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let stream = null;
+let isAnalyzing = false;     // 停录后的上传/轮询期间置真，挡住再次录音
+let discardRecording = false; // 切段/播示范时顺手停录，这一段不该提交
+let lastPracticeToken = 0;   // D3 请求令牌：切段太快时丢弃旧响应
 
 // ===== 实时音高检测（浏览器本地）=====
 // 《2-系统设计说明》5.2 的技术决策：逐字实时反馈要走 <100ms，音高检测必须在
-// 浏览器本地做（自相关法），后端只负责唱后整段录音的精算（D1/B2，本页暂未接）。
+// 浏览器本地做（自相关法），后端只负责唱后整段录音的精算（停录后走 D1/B2）。
 // 一处实现偏离：文档写的是 AudioWorklet，本页是单文件自包含原型、没有独立模块
 // 文件，改为主线程 rAF 轮询 AnalyserNode——每次检测约 55 万次乘加（553 个
 // lag × 1024 窗口），按 30ms 节流即约 1800 万次/秒。
@@ -778,6 +787,20 @@ async function apiGet(path) {
   const r = await fetch(path, { credentials: "same-origin" });
   let body = null;
   try { body = await r.json(); } catch (e) { /* 非 JSON（如 nginx 的 502 页） */ }
+  if (!r.ok) throw new Error((body && body.message) || ("HTTP " + r.status));
+  if (!body || body.code !== 0) throw new Error((body && body.message) || "响应格式错误");
+  return body.data;
+}
+
+// 上传音频与 D1 提交都走 multipart，不能复用 apiGet 的 GET 语义。
+async function apiPostForm(path, formData) {
+  const r = await fetch(path, {
+    method: "POST",
+    body: formData,
+    credentials: "same-origin",
+  });
+  let body = null;
+  try { body = await r.json(); } catch (e) { /* 非 JSON */ }
   if (!r.ok) throw new Error((body && body.message) || ("HTTP " + r.status));
   if (!body || body.code !== 0) throw new Error((body && body.message) || "响应格式错误");
   return body.data;
@@ -1135,10 +1158,17 @@ async function selectSegment(idx) {
   // 只停录音：录音与段落的教师曲线同步，换段落必须重来。
   // 示范播放（isPlaying）不停——播的是整首，与选哪一段无关（见 playDemo 注释），
   // 选段只是跟唱前的准备动作（加载歌词/曲线/提示），不打断播放。
-  if (isRecording) stopAll();
+  if (isRecording) { discardRecording = true; stopAll(); }
   currentSegmentIdx = idx;
   renderSegments();
   const seg = segments[idx];
+  // 上一个分段的评分留在面板上会被误读成本段的结果
+  document.getElementById("dimensionBox").classList.remove("show");
+  document.getElementById("dimensionList").innerHTML = "";
+  const lastEl = document.getElementById("lastPractice");
+  lastEl.style.display = "none";
+  lastEl.textContent = "";
+  loadLastPractice(seg.id);
   try {
     const detail = await apiGet(`/api/segments/${seg.id}`);
     currentLyrics = Array.isArray(detail.lyrics) ? detail.lyrics : [];
@@ -1213,9 +1243,9 @@ function dismissCoaching() {
 
 // ============================================================
 // 跟唱录音：真实录音（getUserMedia + MediaRecorder）
-// 音高曲线来自浏览器本地实时检测（见「实时音高检测」一节）；
-// 录音中右侧面板的节奏/气息读数仍是模拟；停录后的五维面板里这两项已换成真算
-// （见「纯算法」段）——两处用的是两套东西，别只改一处就以为都改了。
+// 音高曲线来自浏览器本地实时检测（见「实时音高检测」一节）；录音中的
+// 节奏/气息读数由「纯算法」段本地算；停录后的五维评分走 D1/B2 的后端分析，
+// 两处是两套算法，别只改一处就以为都改了。
 // ============================================================
 // 检测坏了只降级（曲线画不出来），不挡录音本身。
 function startPitchDetection() {
@@ -1249,6 +1279,7 @@ function stopPitchDetection() {
 
 async function toggleRecord() {
   if (isRecording) { stopAll(); return; }
+  if (isAnalyzing) { addLog("上一次录音还在分析中，请稍候", "warn"); return; }
   if (currentSegmentIdx < 0) { alert("请先选择一个练习段落"); return; }
   if (isPlaying) stopAll();
 
@@ -1263,8 +1294,18 @@ async function toggleRecord() {
   audioChunks = [];
   mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
   mediaRecorder.onstop = () => {
-    addLog("录音完成，准备分析...", "success");
-    simulateAnalysisAfterRecord();
+    // 先摘走这一轮的块：onstop 是异步的，期间可能已经开了下一轮录音
+    const chunks = audioChunks;
+    const mimeType = mediaRecorder.mimeType;
+    audioChunks = [];
+    if (discardRecording) {
+      discardRecording = false;
+      addLog("录音已丢弃", "warn");
+      return;
+    }
+    if (!chunks.length) return;
+    addLog("录音完成，准备上传分析…", "success");
+    analyzeRecording(chunks, mimeType);
   };
   mediaRecorder.start();
   startPitchDetection();
@@ -1408,7 +1449,7 @@ function updateLiveMetrics() {
   const tea = thinTeacher(teacherPoints, stu.length, DTW_MAX_CELLS);
   const mapping = dtwAlign(stu, tea, { bandSec: RHYTHM_BAND_SEC });
   if (!mapping.length) return;
-  // 可信度门限：与停录后的维度面板同一个判据（tempo 越界就整轮不出数、不写日志）
+  // 可信度门限：速度比越界时对齐结果没有意义（学生多半只唱了半段），整轮不出数
   const tempo = rhythmMetrics(stu, tea, mapping).tempo;
   if (!(tempo >= 0.5 && tempo <= 2)) return;
 
@@ -1488,7 +1529,7 @@ function stopRecordingAndAnalyze() {
 }
 
 // ===== BEGIN 纯算法 =====
-// 停录后本地算「节奏偏差」与「气息稳定性」的全部纯函数。
+// 录音中本地算「节奏偏差」与「气息稳定性」的全部纯函数。
 // 这一段不碰 DOM、不碰音频句柄、不读页面上的可变全局——scripts/test_sing_along_algo.js
 // 会把标记之间的代码原样抽到 Node 的 vm 里跑断言，往里塞 document.xxx 会当场炸。
 // 阈值常数也刻意留在这一段而不是顶部常量区，好让抽出来的代码自足。
@@ -1704,78 +1745,7 @@ function breathMetrics(stu) {
     sustainCount: kept.length,
   };
 }
-// 【临时诊断：定位完「气息不出数」立即删除】把 breathMetrics 内部各道门的分流数一次算出来，
-// 用来判断是静音门、帧距门还是音高门把长音段砍没了。
-function breathDiagnose(stu) {
-  const out = { pts: stu.length };
-  if (!stu.length) return out;
-  out.span = +(stu[stu.length - 1].t - stu[0].t).toFixed(2);
-  const sorted = stu.map(p => p.rms).sort((a, b) => a - b);
-  const pctl = q => sorted[Math.floor(q * (sorted.length - 1))];
-  const floor = Math.min(pctl(BREATH_SILENCE_PCTL), pctl(0.8) * BREATH_FLOOR_RATIO);
-  out.rmsMin = sorted[0]; out.rmsP50 = pctl(0.5); out.floor = floor;
-  const voiced = stu.filter(p => p.rms > floor);
-  out.voiced = voiced.length;
-  const gaps = [];
-  for (let i = 1; i < stu.length; i++) gaps.push(stu[i].t - stu[i - 1].t);
-  gaps.sort((a, b) => a - b);
-  const gp = q => (gaps.length ? +gaps[Math.floor(q * (gaps.length - 1))].toFixed(3) : 0);
-  out.gapP50 = gp(0.5); out.gapP90 = gp(0.9);
-  out.gapMax = gaps.length ? +gaps[gaps.length - 1].toFixed(3) : 0;
-  const phrases = [];
-  let cur = [];
-  for (const p of voiced) {
-    if (cur.length && p.t - cur[cur.length - 1].t > BREATH_GAP_SEC) { phrases.push(cur); cur = []; }
-    cur.push(p);
-  }
-  if (cur.length) phrases.push(cur);
-  out.phrases = phrases.length;
-  out.phraseMax = phrases.length
-    ? +Math.max(...phrases.map(p => p[p.length - 1].t - p[0].t)).toFixed(2) : 0;
-  const span = s => s[s.length - 1].t - s[0].t;
-  // 只按帧距门切：看音高门之外还剩多长
-  const gapOnly = [];
-  for (const ph of phrases) {
-    let seg = [ph[0]];
-    for (let i = 1; i < ph.length; i++) {
-      if (ph[i].t - ph[i - 1].t <= BREATH_FRAME_GAP_SEC) seg.push(ph[i]);
-      else { gapOnly.push(seg); seg = [ph[i]]; }
-    }
-    gapOnly.push(seg);
-  }
-  out.gapOnlySegs = gapOnly.length;
-  out.gapOnlyMax = gapOnly.length ? +Math.max(...gapOnly.map(span)).toFixed(3) : 0;
-  // 再加音高门（现在的实现）
-  const longs = [];
-  for (const ph of phrases) {
-    let seg = [ph[0]];
-    for (let i = 1; i < ph.length; i++) {
-      const movable = ph[i].t - ph[i - 1].t <= BREATH_FRAME_GAP_SEC;
-      const flat = Math.abs(ph[i].pitch - seg[0].pitch) <= BREATH_FLAT_SEMI;
-      if (movable && flat) seg.push(ph[i]); else { longs.push(seg); seg = [ph[i]]; }
-    }
-    longs.push(seg);
-  }
-  out.segs = longs.length;
-  out.segMax = longs.length ? +Math.max(...longs.map(span)).toFixed(3) : 0;
-  // 最长那条「只按帧距」的段上量音高：锚点最大偏离、逐帧步长——用来定新容差
-  let best = null;
-  for (const s of gapOnly) if (!best || span(s) > span(best)) best = s;
-  if (best && best.length > 1) {
-    let maxDev = 0, sumStep = 0, maxStep = 0;
-    for (let i = 1; i < best.length; i++) {
-      maxDev = Math.max(maxDev, Math.abs(best[i].pitch - best[0].pitch));
-      const st = Math.abs(best[i].pitch - best[i - 1].pitch);
-      sumStep += st; maxStep = Math.max(maxStep, st);
-    }
-    out.anchorMaxDev = +maxDev.toFixed(2);
-    out.stepMean = +(sumStep / (best.length - 1)).toFixed(2);
-    out.stepMax = +maxStep.toFixed(2);
-  }
-  return out;
-}
 // 气息稳定度 = 1 − 长音段能量变异系数，取整并钳在 0–100。
-// 实时卡片与停录后的维度面板共用这一个式子——两处的「气息」数字在数学上不可能漂移。
 // cv 为 null（全段没有 ≥0.4s 的平稳音）时返回 null，由调用方显示「待分析」而不是假装满分。
 function breathScoreFromCv(cv) {
   if (cv === null || !Number.isFinite(cv)) return null;
@@ -1814,110 +1784,167 @@ function median(a) {
 }
 // ===== END 纯算法 =====
 
-function simulateAnalysisAfterRecord() {
-  addLog("🔍 正在分析演唱...", "info");
-  // 音准分用真实数据算。旧模拟按下标配对两个不同采样率的数组；教师曲线是
-  // 20ms 均匀采样、学生点由 rAF 驱动，两串必须按时间配。其余四个维度仍是
-  // 模拟（无算法可依，等 D1/B2 接入后再换真）。
-  if (studentPoints.length === 0) {
-    addLog("未检测到有效演唱音高，本次不出评分（检查麦克风或再唱一遍）", "warn");
-    return;
-  }
-  const diffs = [];
-  let ti = 0;
-  for (const s of studentPoints) {
-    while (ti + 1 < teacherPoints.length && teacherPoints[ti + 1].t <= s.t) ti++;
-    let t = teacherPoints[ti];
-    const nxt = teacherPoints[ti + 1];
-    if (nxt && (!t || Math.abs(nxt.t - s.t) < Math.abs(t.t - s.t))) t = nxt;
-    if (!t || Math.abs(t.t - s.t) > 0.1) continue;
-    diffs.push(Math.abs(s.pitch - t.pitch) * 100);
-  }
-  const medianDiff = diffs.length > 0 ? diffs.reduce((a,b)=>a+b,0)/diffs.length : 50;
-  let score = 100;
-  if (medianDiff < 10) score = 100;
-  else if (medianDiff < 30) score = 95 - (medianDiff - 10) * 1.0;
-  else if (medianDiff < 50) score = 75 - (medianDiff - 30) * 1.0;
-  else if (medianDiff < 100) score = 55 - (medianDiff - 50) * 0.4;
-  else score = Math.max(0, 35 - (medianDiff - 100) * 0.2);
+// ============================================================
+// 停录后的真实分析：录音 → B1 上传 → D1 提交 → B3 轮询 → B4 回显
+// ============================================================
+const WAV_SAMPLE_RATE = 16000;   // 与后端 librosa 的采样率一致，省一次重采样
+const ANALYZE_POLL_MS = 1000;
+const ANALYZE_TIMEOUT_MS = 180000; // 单段 3 分钟的人声分离 + 音高提取，留足余量
 
-  // 节奏与气息：用整段真实数据本地算，不走后端（见上方「纯算法」段）
-  const tea = thinTeacher(teacherPoints, studentPoints.length, DTW_MAX_CELLS);
-  const mapping = dtwAlign(studentPoints, tea, { bandSec: RHYTHM_BAND_SEC });
-  const rhythm = rhythmMetrics(studentPoints, tea, mapping);
-  const breath = breathMetrics(studentPoints);
-  addLog("【诊断】" + JSON.stringify(breathDiagnose(studentPoints)), "warn"); // 临时，定位完删
-
-  // 速度比离谱时对齐结果没有意义（学生多半只唱了半段，或唱的压根不是这一段），
-  // 这种情况宁可不给节奏分，也不要拿一个强行拉齐出来的数糊弄人。
-  let rhythmScore = null;
-  if (rhythm.tempo >= 0.5 && rhythm.tempo <= 2) {
-    rhythmScore = Math.round(logistic(rhythm.warpStd, RHYTHM_MID, RHYTHM_K));
-    addLog(
-      `节奏：抖动 ${rhythm.warpStd.toFixed(2)}s · 速度比 ${rhythm.tempo.toFixed(2)}`
-      + `（${rhythm.tempo > 1.05 ? "偏慢" : rhythm.tempo < 0.95 ? "偏快" : "基本同步"}）`
-      + ` · 整体${rhythm.offset >= 0 ? "晚" : "早"} ${Math.abs(rhythm.offset).toFixed(2)}s`,
-      "info"
-    );
-  } else {
-    addLog(`演唱与乐谱的速度差到 ${rhythm.tempo.toFixed(2)} 倍，节奏分本次不出`, "warn");
+// MediaRecorder 默认产 webm/opus，soundfile 解不了，先解回 PCM 再写成 16k 单声道 WAV。
+async function recordedWav(chunks, mimeType) {
+  const raw = new Blob(chunks, { type: mimeType || "audio/webm" });
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  let decoded;
+  try {
+    decoded = await audioCtx.decodeAudioData(await raw.arrayBuffer());
+  } finally {
+    audioCtx.close().catch(() => {});
   }
 
-  // 气息：稳定度 = 1 − 长音内的能量变异系数。没有够长的音就报「待分析」，
-  // 不拿 100 分充数——那会让学生以为「没测出来」等于「唱得好」。
-  const breathScore = breathScoreFromCv(breath.cv);
-  if (breathScore === null) {
-    addLog("气息：没数到 0.4s 以上的长音，稳定度本次不出", "warn");
-  } else {
-    const tail = breath.tailRatio === null ? "" : ` · 句尾/句首能量比 ${breath.tailRatio.toFixed(2)}`;
-    addLog(`气息：稳定度 ${breathScore}% · 长音 ${breath.sustainCount} 段${tail}`, "info");
-    if (breath.tailRatio !== null && breath.tailRatio < 0.8) {
-      addLog("⚠ 句尾能量掉得比句首多，注意乐句收尾时的气息支撑", "warn");
-    }
-  }
+  const frames = Math.max(1, Math.ceil(decoded.duration * WAV_SAMPLE_RATE));
+  const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  // 目的通道数给 1，Web Audio 会自动把立体声下混成单声道
+  const offline = new OfflineCtx(1, frames, WAV_SAMPLE_RATE);
+  const src = offline.createBufferSource();
+  src.buffer = decoded;
+  src.connect(offline.destination);
+  src.start();
+  const samples = (await offline.startRendering()).getChannelData(0);
 
-  // 逐字偏差：只说相对本人整体节拍最跑偏的那几个字，整体偏移由上面那条日志交代，
-  // 否则「整体晚 0.5s」会把每个字都算成问题字，反而看不出哪句真出了问题。
-  const words = wordDeviations(studentPoints, tea, mapping, currentLyrics);
-  if (words.items.length >= 3) {
-    const off = words.items
-      .map(it => ({ ...it, rel: it.diff - words.median }))
-      .sort((a, b) => Math.abs(b.rel) - Math.abs(a.rel))
-      .slice(0, 3)
-      .filter(it => Math.abs(it.rel) >= 0.15);
-    if (off.length) {
-      addLog(
-        "偏差最大的字：" + off.map(it =>
-          `${currentLyrics[it.index].char || `第${it.index + 1}字`} ${it.rel > 0 ? "晚" : "早"}${Math.abs(it.rel).toFixed(2)}s`
-        ).join(" · "),
-        "warn"
-      );
-    }
-  }
-
-  const dimensions = {
-    "音准": Math.round(score),
-    "节奏": rhythmScore,
-    "气息": breathScore,
-    // 咬字与拖腔仍是模拟：这两项要分别对齐到逐字歌词与音高变化率上才算得准，
-    // 等接后端 B 组（analyze_service._dimensions）时一起换真。
-    "咬字": Math.round(Math.max(0, Math.min(100, score * (0.85 + 0.15 * Math.random())))),
-    "拖腔": Math.round(Math.max(0, Math.min(100, score * (0.7 + 0.3 * Math.random()))))
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const writeStr = (offset, s) => {
+    for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
   };
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);                   // PCM
+  view.setUint16(22, 1, true);                   // 单声道
+  view.setUint32(24, WAV_SAMPLE_RATE, true);
+  view.setUint32(28, WAV_SAMPLE_RATE * 2, true); // 字节率
+  view.setUint16(32, 2, true);                   // 块对齐
+  view.setUint16(34, 16, true);                  // 位深
+  writeStr(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+  for (let i = 0, o = 44; i < samples.length; i++, o += 2) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return {
+    blob: new Blob([buffer], { type: "audio/wav" }),
+    duration: samples.length / WAV_SAMPLE_RATE,
+  };
+}
 
-  const box = document.getElementById('dimensionBox');
-  const list = document.getElementById('dimensionList');
-  box.classList.add('show');
-  // 值为 null 的维度（本次没测出来）显示「待分析」且不画进度条——
-  // 直接写进 width 会得到 "width:null%"，条会静默变成 0 宽，看起来像得了 0 分。
-  list.innerHTML = Object.entries(dimensions).map(([name, val]) => {
-    if (val === null) {
+async function analyzeRecording(chunks, mimeType) {
+  if (isAnalyzing) return;
+  const seg = segments[currentSegmentIdx];
+  if (!seg || !seg.id) { addLog("请先选择一个练习段落", "warn"); return; }
+
+  isAnalyzing = true;
+  const btnRecord = document.getElementById("btnRecord");
+  btnRecord.disabled = true;
+  try {
+    addLog("🔍 正在处理录音…", "info");
+    const wav = await recordedWav(chunks, mimeType);
+    if (wav.duration < 0.5) {
+      addLog("录音太短（不足 0.5 秒），本次不提交", "warn");
+      return;
+    }
+
+    const upForm = new FormData();
+    upForm.append("audio", wav.blob, `practice_${Date.now()}.wav`);
+    const up = await apiPostForm("/api/audio/upload", upForm);
+
+    const subForm = new FormData();
+    subForm.append("segment_id", String(seg.id));
+    subForm.append("audio_id", String(up.file_id));
+    subForm.append("duration_sec", wav.duration.toFixed(2));
+    const sub = await apiPostForm("/api/practice/submit", subForm);
+
+    const result = await pollAnalysis(sub.task_id);
+    const cur = segments[currentSegmentIdx];
+    // 分析期间切了段：结果属于上一段，不往新段的面板上贴
+    if (cur && cur.id === seg.id) {
+      renderAnalysisResult(result);
+      const overall = Number.isFinite(result.overall) ? Math.round(result.overall) : "—";
+      addLog(`✅ 分析完成！综合评分: ${overall} 分`, "success");
+      loadLastPractice(seg.id);
+    }
+  } catch (e) {
+    addLog(`分析失败：${e.message}`, "error");
+  } finally {
+    isAnalyzing = false;
+    btnRecord.disabled = false;
+  }
+}
+
+async function pollAnalysis(taskId) {
+  const startedAt = Date.now();
+  let lastMessage = null;
+  while (true) {
+    if (Date.now() - startedAt > ANALYZE_TIMEOUT_MS) {
+      throw new Error("分析超时，请稍后重试");
+    }
+    const s = await apiGet(`/api/analyze/status/${taskId}`);
+    if (s.status === "failed") throw new Error(s.message || "分析失败");
+    if (s.status === "done") return apiGet(`/api/analyze/result/${taskId}`);
+    if (s.message && s.message !== lastMessage) {
+      lastMessage = s.message;
+      addLog(s.message, "info");
+    }
+    await new Promise(r => setTimeout(r, ANALYZE_POLL_MS));
+  }
+}
+
+function renderAnalysisResult(result) {
+  renderDimensionPanel(result.overall, result.dimensions, "");
+}
+
+function renderDimensionPanel(score, dimensions, subtitle) {
+  const overall = Number.isFinite(score) ? Math.round(score) : null;
+  const dims = dimensions || {};
+  document.getElementById("dimensionBox").classList.add("show");
+  const subtitleEl = document.getElementById("lastPractice");
+  subtitleEl.textContent = subtitle || "";
+  subtitleEl.style.display = subtitle ? "block" : "none";
+
+  const rows = ["音准", "节奏", "气息", "咬字", "拖腔"].map(name => {
+    const val = dims[name];
+    // 没有读数时留空条 + 「待分析」：写进 width 会得到 "width:undefined%"，静默变成 0 分
+    if (!Number.isFinite(val)) {
       return `<div class="dimension-item"><div class="dim-label">${name}</div><div class="dim-bar-wrap"></div><div class="dim-value" style="color:var(--text-muted)">待分析</div></div>`;
     }
-    const color = val >= 80 ? '#4A8F6B' : val >= 60 ? '#C9A84C' : '#B83A2F';
-    return `<div class="dimension-item"><div class="dim-label">${name}</div><div class="dim-bar-wrap"><div class="dim-bar" style="width:${val}%;background:${color}"></div></div><div class="dim-value" style="color:${color}">${val}</div></div>`;
-  }).join('');
-  addLog(`✅ 分析完成！综合评分: ${Math.round(score)} 分`, "success");
+    const rounded = Math.round(val);
+    const color = rounded >= 80 ? '#4A8F6B' : rounded >= 60 ? '#C9A84C' : '#B83A2F';
+    return `<div class="dimension-item"><div class="dim-label">${name}</div><div class="dim-bar-wrap"><div class="dim-bar" style="width:${rounded}%;background:${color}"></div></div><div class="dim-value" style="color:${color}">${rounded}</div></div>`;
+  }).join("");
+
+  document.getElementById("dimensionList").innerHTML =
+    `<div style="display:flex;align-items:baseline;gap:6px;margin-bottom:12px">`
+    + `<span style="font-size:13px;color:var(--text-secondary)">综合评分</span>`
+    + `<strong style="font-size:22px;color:var(--primary)">${overall === null ? "—" : overall}</strong>`
+    + `<span style="font-size:13px;color:var(--text-secondary)">分</span></div>` + rows;
+}
+
+// D3：该分段最近一次练习。切段快时旧响应可能后到，用令牌丢弃旧结果。
+// 失败（含教师账号的 403）按「没有上次练习」处理，不该打断选段。
+async function loadLastPractice(segmentId) {
+  const token = ++lastPracticeToken;
+  try {
+    const data = await apiGet(`/api/practice/last/${segmentId}`);
+    if (token !== lastPracticeToken) return;
+    const record = data && data.record;
+    if (!record) return;
+    const at = String(record.created_at || "").replace("T", " ").slice(5, 16);
+    renderDimensionPanel(record.ai_score, record.dimensions, `上次练习 ${at}`);
+  } catch (e) {
+    /* 没有历史记录或无权查看都按「没有上次练习」处理 */
+  }
 }
 
 // ============================================================
@@ -1926,7 +1953,7 @@ function simulateAnalysisAfterRecord() {
 async function playDemo() {
   // 播的是整首，与段落无关
   if (currentDemoId === null) { alert("请先选择曲目"); return; }
-  if (isRecording) stopAll();
+  if (isRecording) { discardRecording = true; stopAll(); }
 
   // 连点两次时两次调用都在 await 里，后者会设 src 打断前者的 play()。
   // 用令牌让先到的那次在 await 之后直接放弃，只剩最后一次真正落地。
@@ -2102,6 +2129,7 @@ init();
   }
   if (!user) return;
 
+  document.body.classList.add('role-' + user.role);
   const isTeacher = user.role === 'teacher';
   const roleText = isTeacher ? '教师' : '学生';
 

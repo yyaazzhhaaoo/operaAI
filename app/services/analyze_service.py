@@ -90,7 +90,9 @@ REGION_GAP_SEC = 0.3        # 合并相邻同色字的时间上限（字与字�
 
 # ===== B2 提交 =====
 
-def submit(db: Session, data: AnalyzeSubmitIn) -> str:
+def submit(
+    db: Session, data: AnalyzeSubmitIn, *, practice: dict | None = None
+) -> str:
     student = _require_audio(db, data.student_audio_id, "学生录音")
 
     if data.teacher_audio_id is not None:
@@ -121,7 +123,9 @@ def submit(db: Session, data: AnalyzeSubmitIn) -> str:
         message="任务已创建，排队中",
         result=None,
     )
-    _dispatch(task_id, t_path, s_path, lyrics)
+    # practice 非空时表示这是 D1 练习提交：任务完成后要落 practice_records 并
+    # 更新 BKT。它必须随 Celery 消息序列化过去，所以只装 int/float 这类纯数据。
+    _dispatch(task_id, t_path, s_path, lyrics, practice)
     return task_id
 
 
@@ -182,7 +186,13 @@ def _require_file(audio: AudioFile) -> Path:
 
 # ===== 内部：后台执行（Celery） =====
 
-def _dispatch(task_id: str, t_path: Path, s_path: Path, lyrics: list | None) -> None:
+def _dispatch(
+    task_id: str,
+    t_path: Path,
+    s_path: Path,
+    lyrics: list | None,
+    practice: dict | None,
+) -> None:
     """参数一律先转成纯数据：消息要序列化成 JSON 跨进程送给 worker，Path 不是
     JSON 类型，ORM 对象更是完全过不去——所以这里传的是路径字符串，而不是
     上面那几个 AudioFile。
@@ -195,13 +205,19 @@ def _dispatch(task_id: str, t_path: Path, s_path: Path, lyrics: list | None) -> 
     TTL 自然过期——比让前端拿着一个永远查不到终态的 task_id 干等要好。
     """
     run_analysis.apply_async(
-        args=(task_id, str(t_path), str(s_path), lyrics),
+        args=(task_id, str(t_path), str(s_path), lyrics, practice),
         task_id=task_id,
     )
 
 
 @shared_task(name="analyze.run")
-def run_analysis(task_id: str, t_path: str, s_path: str, lyrics: list | None) -> None:
+def run_analysis(
+    task_id: str,
+    t_path: str,
+    s_path: str,
+    lyrics: list | None,
+    practice: dict | None = None,
+) -> None:
     """**任何异常都必须落成 failed 状态**。任务抛出的异常若不在这里兜住，任务会
     永远停在 queued，前端按 3.1 一直轮询也拿不到终态——比报错更难排查。文档 3.1
     也要求 failed 时 message 给用户可读原因。
@@ -210,7 +226,7 @@ def run_analysis(task_id: str, t_path: str, s_path: str, lyrics: list | None) ->
     看不到；B3 只能读到下面写进 redis 的这一份。两边都要有，别只留一边。
     """
     try:
-        _analyze(task_id, Path(t_path), Path(s_path), lyrics)
+        _analyze(task_id, Path(t_path), Path(s_path), lyrics, practice)
     except Exception as exc:
         logger.exception("分析任务 %s 失败", task_id)
         # 可以透给用户的两种文案：BusinessError 的 message 本来就是写给用户看的
@@ -228,7 +244,13 @@ def run_analysis(task_id: str, t_path: str, s_path: str, lyrics: list | None) ->
             logger.exception("分析任务 %s 的失败状态写入 redis 也失败了", task_id)
 
 
-def _analyze(task_id: str, t_path: Path, s_path: Path, lyrics: list | None) -> None:
+def _analyze(
+    task_id: str,
+    t_path: Path,
+    s_path: Path,
+    lyrics: list | None,
+    practice: dict | None = None,
+) -> None:
     """B2 的算法主体，按 3.2 契约产出结果。
 
     后五个阶段与文档 3.1 的 stage 取值一一对应，每进入一个上报一次进度
@@ -293,6 +315,13 @@ def _analyze(task_id: str, t_path: Path, s_path: Path, lyrics: list | None) -> N
         "student_onset": round(float(s_onset), 3),
         "ref_hz": round(float(ref_hz), 2),
     }
+
+    # D1 练习提交：先落库再报 done。反过来写的话，一旦落库失败，前端会看到
+    # 一个已完成的分数，而 practice_records 里没有对应行。
+    # 函数内 import 是为了避开 practice_service → analyze_service 的循环导入。
+    if practice:
+        from app.services import practice_service
+        practice_service.save_result(practice, result)
 
     task_repo.update(
         task_id,

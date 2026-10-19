@@ -325,7 +325,12 @@ body{
 /* ===== 响应式 ===== */
 @media (max-width:1200px){.sidebar{display:none}.main-content{margin-left:0}.stats-row{grid-template-columns:repeat(2,1fr)}.alert-section{grid-template-columns:1fr}}
 @media (max-width:768px){.stats-row{grid-template-columns:1fr}.metric-grid{grid-template-columns:1fr}}
-</style>
+
+        /* 按登录角色显示导航分组：角色就绪前不显示，避免教师菜单闪现 */
+        .nav-group[data-role] { display: none; }
+        body.role-teacher .nav-group[data-role="teacher"] { display: block; }
+        body.role-student .nav-group[data-role="student"] { display: block; }
+    </style>
 </head>
 <body>
 <nav class="navbar">
@@ -341,23 +346,23 @@ body{
 
 <div class="layout">
 <aside class="sidebar">
-  <div class="nav-group">
+  <div class="nav-group" data-role="teacher">
     <div class="nav-group-title">核心功能</div>
     <a href="dashboard.html" class="nav-item active"><span class="icon">📊</span>班级看板</a>
   </div>
-  <div class="nav-group">
+  <div class="nav-group" data-role="teacher">
     <div class="nav-group-title">🧑‍🏫 教学工作台</div>
     <a href="demo_library.html" class="nav-item"><span class="icon">🎵</span>示范库管理</a>
     <a href="annotation.html" class="nav-item"><span class="icon">🏷️</span>歌词级标注</a>
     <a href="homework.html" class="nav-item"><span class="icon">📝</span>作业批改</a>
   </div>
-  <div class="nav-group">
+  <div class="nav-group" data-role="student">
     <div class="nav-group-title">🎤 学生练习</div>
     <a href="sing_along.html" class="nav-item"><span class="icon">🎙️</span>实时跟唱</a>
     <a href="AI_teacher.html" class="nav-item"><span class="icon">🤖</span>AI教练对话</a>
     <a href="cat_test.html" class="nav-item"><span class="icon">🎯</span>摸底测试</a>
   </div>
-  <div class="nav-group">
+  <div class="nav-group" data-role="teacher">
     <div class="nav-group-title">📈 数据分析</div>
     <a href="tracking.html" class="nav-item"><span class="icon">📈</span>能力追踪</a>
     <a href="recommendation.html" class="nav-item"><span class="icon">🎯</span>渐进式推荐</a>
@@ -1103,6 +1108,7 @@ loadHomeworkProgress();
   }
   if (!user) return;
 
+  document.body.classList.add('role-' + user.role);
   const isTeacher = user.role === 'teacher';
   const roleText = isTeacher ? '教师' : '学生';
 

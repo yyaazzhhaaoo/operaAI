@@ -1584,6 +1584,25 @@ if path.parent != root:
 
 ---
 
+## 44. D1–D3 练习接口的请求/响应体、错误码与 BKT 更新规则均未定义
+
+《5-接口清单》2.4 对三条智能陪练接口只有一句话描述：
+
+- D1 `POST /api/practice/submit`：「入参 segment_id + audio_id；内部走 B2 同一分析管线（基准=该分段示范），结果落 practice_records 并更新 BKT；返回 task_id」；
+- D2 `GET /api/practice/logs?student_id=`：「练习日志（功能 2.14；学生仅本人）」；
+- D3 `GET /api/practice/last/<segment_id>`：「上次练习结果回显（对比进步）」。
+
+**文档没有规定的部分**（2026-10-19 实现时定的口径，设计见 `docs/superpowers/specs/2026-10-19-practice-api-design.md`）：
+
+1. **响应体**：D1 只回 `{"task_id"}`；D2 回 `{"records": [...], "total": n}`；D3 回 `{"record": {...} | null}`。记录字段以 `practice_records` 表为准，`dimensions_json` 对外叫 `dimensions`。`created_at` 是北京时间墙上时间，不带时区偏移。
+2. **D2 权限**：文档权限列只写「登录」。实现收紧为学生只能查本人（省略 `student_id` 默认本人，传别人 403），教师必须显式指定 `student_id`（缺省 400）。
+3. **D1 归属校验**：`audio_id` 的 `uploader_id` 必须是当前登录用户，否则 403——否则学生可以拿别人的录音提交，把分数记到自己名下。
+4. **duration_sec 来源**：`audio_files.duration_sec` 在上传时不填，文档也没规定练习时长从哪来。D1 接受选填的表单字段 `duration_sec`（前端按录音时长传入），不传则为 NULL。
+5. **BKT 更新规则完全未定义**：文档只说「更新 BKT」，没给算法、学习率、先验，也没规定五个评分维度如何映射到 8 个技法。当前临时口径：音准→音准控制、节奏→节奏感知、气息→气息支撑、咬字→归韵咬字、拖腔→拖腔；先验 0.5；`new = old + 0.3 * (score/100 - old)`；confidence 每次 +0.05。**滑音/装饰音技巧/颤音没有对应维度，本次不更新。** 这条规则未标定，第 4 周算法标定时需要替换或追认。
+6. **异步落库的失败语义**：D1 返回 task_id 后，worker 必须先写 `practice_records` + `bkt_history` 再把 redis 状态置 `done`；落库失败按分析失败处理（任务置 `failed`）。文档未规定，取「宁可不显示分数，也不能有分数却查不到记录」。
+
+---
+
 ## 待核实
 
 - `CLAUDE.md` 记载《5-接口清单》共 49 个接口，但按 `方法 + 路径` 提取只得 43 条、按资源路径去重得 37 个。差异可能来自提取方式（表格结构、路径参数写法），也可能是文档自身统计有误，**尚未确认，不作为问题登记**。
