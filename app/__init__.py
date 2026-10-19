@@ -37,6 +37,15 @@ def create_app(config_overrides=None):
             worker_prefetch_multiplier=1,
             # Celery 6 会把这个默认值翻成 False，显式写死免得升级后行为漂移
             broker_connection_retry_on_startup=True,
+            # 死连接必须能超时。kombu 关闭通道时会在挂起的 BRPOP 上同步
+            # parse_response，socket_timeout 为空时 recv() 无限阻塞，worker
+            # 从此不再消费（2026-10-19 实测：redis 连接被 reset 后两个 worker
+            # 都卡死在 kombu/transport/redis.py 的 _brpop_read）。
+            # 30s 必须大于 brpop_timeout（kombu 默认 1s），正常消费不受影响。
+            broker_transport_options={
+                "socket_timeout": 30,
+                "socket_connect_timeout": 5,
+            },
         ),
         SECRET_KEY=settings.secret_key,
         PERMANENT_SESSION_LIFETIME=timedelta(days=7),   # 《6》第 3 节：会话 7 天

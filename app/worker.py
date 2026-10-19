@@ -2,12 +2,16 @@
 
 在项目根目录、激活 venv 之后：
 
-    celery -A app.worker:celery_app worker --loglevel=info --concurrency=2
+    celery -A app.worker:celery_app worker -n default@%h --loglevel=info --concurrency=2
+
+两个 worker 都要带 `-n` 起不同的 nodename：不给的话默认都是 `celery@<主机名>`，
+`celery inspect` 会报 `DuplicateNodenameWarning` 且只看到一个节点，控制命令
+（ping/active/shutdown）会串到错误的 worker 上。
 
 另外，**示范库解析任务走的是独立的 `demucs` 队列**（`parse_service._dispatch`
 里 `apply_async(queue="demucs")`）。不带 `-Q demucs` 的 worker 不消费这个队列：
 
-    celery -A app.worker:celery_app worker -Q demucs --concurrency=1 --loglevel=info
+    celery -A app.worker:celery_app worker -Q demucs -n demucs@%h --concurrency=1 --loglevel=info
 
 漏掉的症状是「上传成功但解析永远停在 parsing」——前端一直轮询，没有任何报错。
 `--concurrency=1` 而不是 B 组的 2：`torch.set_num_threads(4)`（`demucs_threads`）
