@@ -1312,7 +1312,7 @@
                             <div class="icon" style="background:rgba(139,92,246,0.10);color:#7C3AED">📚</div>
                             已入库示范
                         </div>
-                        <span style="font-size:12px;color:var(--text-muted)">共 5 首</span>
+                        <span id="demoCount" style="font-size:12px;color:var(--text-muted)">共 0 首</span>
                     </div>
                     <div class="demo-list" id="demoList"></div>
                 </div>
@@ -1743,6 +1743,8 @@
         function renderDemoList(demos) {
             const container = document.getElementById("demoList");
             if (!container) return;
+            const countEl = document.getElementById("demoCount");
+            if (countEl) countEl.textContent = `共 ${demos.length} 首`;
             if (!demos.length) {
                 container.innerHTML =
                     `<div style="padding:40px;text-align:center;color:var(--text-muted)">暂无示范，点击右上角上传</div>`;
