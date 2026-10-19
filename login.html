@@ -188,8 +188,11 @@ form.addEventListener('submit', async (e) => {
   }
 
   if (body && body.code === 0) {
+    // 按角色分流：学生落地到跟唱页，教师仍是班级看板。
+    // 学生打开看板会因 /api/dashboard/students 的 @teacher_required 得 403。
+    const role = body.data && body.data.role;
     // replace 而非 href：避免用户按返回键退回登录表单
-    location.replace('/dashboard.html');
+    location.replace(role === 'student' ? '/sing_along.html' : '/dashboard.html');
     return;
   }
 
