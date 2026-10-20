@@ -4,6 +4,8 @@
 事务边界在本层：写操作显式 commit。
 """
 
+import logging
+
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -13,7 +15,9 @@ from app.models import TeacherDemo
 from app.models.audio import AudioFile
 from app.models.demo import Segment
 from app.repositories import annotations_repo, library_repo
-from app.services import audio_service, parse_service
+from app.services import audio_service, parse_service, segment_audio_service
+
+logger = logging.getLogger(__name__)
 
 
 def demo_list(db: Session) -> list[dict]:
@@ -132,19 +136,40 @@ def demo_library_add_with_segments(
     segments: list[dict],
     commit: bool = True,
 ) -> TeacherDemo:
-    """带逐字数据的示范上传：建 demo + 写 segments + 回填音频时长。
+    """带逐字数据的示范上传：建 demo + 写 segments + 切分段音频 + 回填音频时长。
 
     **这里的 commit 是这条链路唯一的提交点**：调它之前不能有任何提交，否则
     解析失败就撤不干净。逐字数据的解析已经在调用方做完并先于落盘——坏文件
     连音频文件都不会落盘（spec 3.1、3.4）。
 
     与 Demucs 那条路的区别：段边界由唱词句给出，不再需要停顿切分，所以不投
-    解析任务；时长也在同一事务里回填（worker 那条路是解析时回填）。
+    解析任务；切片失败也不拦上传——该段没有音频时 B2 自动回退整曲。
     """
     demo = demo_library_add(
         db, title=title, role=role, banshi=banshi, audio_id=audio.id, commit=False
     )
-    library_repo.replace_segments(db, demo.id, segments)
+    rows = library_repo.replace_segments(db, demo.id, segments)
+
+    bounds = [
+        (s["seq"], s["start"], s["end"])
+        for s in segments
+        if s.get("start") is not None and s.get("end") is not None
+    ]
+    if bounds:
+        try:
+            slices = segment_audio_service.slice_files(
+                storage.resolve(audio.file_path), bounds
+            )
+            segment_audio_service.attach(
+                db,
+                demo_title=title,
+                uploader_id=audio.uploader_id,
+                slices=slices,
+                segments=rows,
+            )
+        except Exception:
+            logger.exception("示范「%s」的分段音频切片失败，分析将回退整曲", title)
+
     duration = audio_service.probe_duration(storage.resolve(audio.file_path))
     if duration is not None:
         library_repo.update_audio_duration(db, demo.id, duration)
