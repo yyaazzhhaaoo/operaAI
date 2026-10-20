@@ -32,8 +32,9 @@ audio_id INT REFERENCES audio_files(id),   -- 该段的示范音频（切自整�
 
 新增 `app/services/segment_audio_service.py`：
 
-- `slice_and_attach(db, *, demo, source_audio, bounds) -> dict[int, int]`
-  - `bounds`：`[(seq, start_sec, end_sec)]`，秒，相对整曲。
+- `slice_files(source_path, bounds) -> list[dict]`：只碰文件系统。
+  - `bounds`：`[(seq, start_sec, end_sec)]`，秒，相对整曲；返回 `[{seq, file_path, file_size, duration_sec}]`。
+- `attach(db, *, demo_title, uploader_id, slices, segments) -> None`：只碰数据库。拆两步是为了让 worker 在解码写盘（1–3 秒）期间不持有数据库连接。
 
 - 读取：`librosa.load(storage.resolve(source_audio.file_path), sr=16000, mono=True, duration=max_end + 1)`。与 `analyze_service._load_vocal` 的取样口径一致（16k 单声道），切出的段音频直接可被分析链路消费。
 - 写盘：按边界切 numpy 数组，`soundfile.write` 到 `uploads/segments/<uuid>.wav`，每段一行 `audio_files`：`uploader_id = source_audio.uploader_id`、`access = 'public'`、`original_name = "<曲目名>_第N段.wav"`、`file_size`/`duration_sec` 按实际写回。
