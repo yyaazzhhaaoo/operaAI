@@ -37,5 +37,6 @@ class Segment(Base):
     # JSONB 不跟踪原地修改（d["k"]=v 不会自动标脏），改动需整体重新赋值
     lyrics_json: Mapped[list | None] = mapped_column(JSONB)    # [{word,midi,start,end,note,tip}]
     duration: Mapped[float | None] = mapped_column(Float)
+    audio_id: Mapped[int | None] = mapped_column(ForeignKey("audio_files.id"))
 
     demo: Mapped["TeacherDemo | None"] = relationship()
