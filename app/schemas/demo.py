@@ -47,6 +47,8 @@ class DemoSegmentOut(BaseModel):
     seq: int | None = None
     title: str | None = None
     duration: float | None = None
+    # 该段音频的播放地址（B5）。没有独立音频时为 None，前端回退到整首。
+    url: str | None = None
 
 
 class LyricCharOut(BaseModel):

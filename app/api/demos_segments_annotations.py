@@ -1,4 +1,4 @@
-from flask import request
+from flask import request, url_for
 
 from app.api import api_bp
 from app.common.decorators import current_user_id, login_required, teacher_required
@@ -46,7 +46,16 @@ def demos_segments(demo_id):
     曲目不存在回 404；曲目存在但没有分段回 200 + []（spec 3.3）。
     """
     rows = library_service.demo_segments(get_db(), demo_id)
-    return ok([DemoSegmentOut.model_validate(r).model_dump(mode="json") for r in rows])
+    return ok([
+        DemoSegmentOut.model_validate({
+            "id": r.id,
+            "seq": r.seq,
+            "title": r.title,
+            "duration": r.duration,
+            "url": url_for("api.audio_download", file_id=r.audio_id) if r.audio_id else None,
+        }).model_dump(mode="json")
+        for r in rows
+    ])
 
 @api_bp.route("/segments/<int:segment_id>", methods=["GET"])
 @login_required

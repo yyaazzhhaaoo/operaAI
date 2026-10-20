@@ -69,7 +69,8 @@ CREATE TABLE segments (
   seq INT,
   title VARCHAR(100),
   lyrics_json JSONB,   -- [{word,midi,start,end,note,tip}]，tip=功能2.4唱前提示
-  duration FLOAT
+  duration FLOAT,
+  audio_id INT REFERENCES audio_files(id)  -- 该段独立音频（Demucs 解析产出）；NULL=无
 );
 
 -- 6. 歌词级标注规则（模块9）

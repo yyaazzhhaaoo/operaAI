@@ -1157,8 +1157,9 @@ function renderSegments() {
 async function selectSegment(idx) {
   // 只停录音：录音与段落的教师曲线同步，换段落必须重来。
   // 示范播放（isPlaying）不停——播的是整首，与选哪一段无关（见 playDemo 注释），
-  // 选段只是跟唱前的准备动作（加载歌词/曲线/提示），不打断播放。
+  // 播放的是选中段的切片，切段后旧段的声音必须停下；录音同样要丢弃。
   if (isRecording) { discardRecording = true; stopAll(); }
+  else if (isPlaying) stopAll();
   currentSegmentIdx = idx;
   renderSegments();
   const seg = segments[idx];
@@ -1951,22 +1952,27 @@ async function loadLastPractice(segmentId) {
 // 示范播放
 // ============================================================
 async function playDemo() {
-  // 播的是整首，与段落无关
   if (currentDemoId === null) { alert("请先选择曲目"); return; }
   if (isRecording) { discardRecording = true; stopAll(); }
 
   // 连点两次时两次调用都在 await 里，后者会设 src 打断前者的 play()。
   // 用令牌让先到的那次在 await 之后直接放弃，只剩最后一次真正落地。
   const token = ++playToken;
+  const seg = currentSegmentIdx >= 0 ? segments[currentSegmentIdx] : null;
+  const isSegmentPlayback = !!(seg && seg.url);
 
   let url;
-  try {
-    url = await resolveAudioUrl(currentDemoId);
-  } catch (e) {
-    if (token === playToken) addLog(`获取示范音频失败：${e.message}`, "error");
-    return;
+  if (isSegmentPlayback) {
+    url = seg.url;
+  } else {
+    try {
+      url = await resolveAudioUrl(currentDemoId);
+    } catch (e) {
+      if (token === playToken) addLog(`获取示范音频失败：${e.message}`, "error");
+      return;
+    }
+    if (token !== playToken) return;
   }
-  if (token !== playToken) return;
   if (!url) {
     addLog("该曲目没有示范音频", "warn");
     document.getElementById("btnPlayDemo").disabled = true;
@@ -1984,7 +1990,7 @@ async function playDemo() {
   document.getElementById("btnPlayDemo").style.display = "none";
   document.getElementById("btnStopDemo").style.display = "inline-flex";
   document.getElementById("btnRecord").disabled = true;
-  addLog("▶️ 播放示范音频…", "info");
+  addLog(isSegmentPlayback ? "▶️ 播放本段示范音频…" : "▶️ 播放整首示范音频…", "info");
 
   try {
     await demoAudio.play();

@@ -1603,6 +1603,26 @@ if path.parent != root:
 
 ---
 
+## 45. `segments` 表新增 `audio_id`，文档未定义分段级音频
+
+《4-数据库设计-V1.1》的 `segments` 表只有 `demo_id/seq/title/lyrics_json/duration`，
+没有分段音频列；《5-接口清单》C2 也没有音频地址字段。但跟唱页要「按段示范 +
+按段对比」，整首 `teacher_demos.audio_id` 无法表达。
+
+2026-10-20 的口径：
+
+1. `segments` 增加 `audio_id INT REFERENCES audio_files(id)`，Demucs 解析时按
+   停顿切出的每段各存一份**原始混音**切片（`uploads/segments/<demo_id>/<uuid>.wav`，
+   `access=public`）；
+2. C2 `GET /api/demos/<id>/segments` 增加 `url` 字段，无音频时为 `null`；
+3. B2 的教师轨优先取 `segments.audio_id`，为空才回退到整首；
+4. Excel 逐字数据路径不切音频，仍走整首回退；
+5. 重新解析会删除旧分段音频的 `audio_files` 行，并在事务提交后删除旧文件。
+
+这是数据模型与接口契约的扩展，需求文档方如需另定口径，以文档为准再调整。
+
+---
+
 ## 待核实
 
 - `CLAUDE.md` 记载《5-接口清单》共 49 个接口，但按 `方法 + 路径` 提取只得 43 条、按资源路径去重得 37 个。差异可能来自提取方式（表格结构、路径参数写法），也可能是文档自身统计有误，**尚未确认，不作为问题登记**。

@@ -70,6 +70,9 @@ def replace_segments(db: Session, demo_id: int, segments: list[dict]) -> None:
     时（Demucs 那条路）为 None——第 20 条：音频本身给不出汉字。segments 表没有
     start/end 列，逐字的位置信息全在 lyrics_json 里。
 
+    dict 里的 audio_id 由解析管线在登记 audio_files 后填入；Excel 路径没有，
+    s.get("audio_id") 得到 None。
+
     只 flush 不 commit；DELETE 由 Core 语句当场发出，必然排在 flush 的
     INSERT 之前，不会出现「新行插进去又被删掉」。
     """
@@ -81,6 +84,7 @@ def replace_segments(db: Session, demo_id: int, segments: list[dict]) -> None:
             title=s["title"],
             lyrics_json=s.get("lyrics"),
             duration=s["duration"],
+            audio_id=s.get("audio_id"),
         )
         for s in segments
     ])

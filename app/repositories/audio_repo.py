@@ -4,7 +4,7 @@
 写操作只 flush()、不 commit——事务边界在 service 层，理由见 CLAUDE.md。
 """
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models.audio import AudioFile
@@ -19,14 +19,19 @@ def create(
     original_name: str | None,
     file_size: int,
     access: str,
+    duration_sec: float | None = None,
 ) -> AudioFile:
     """登记一条上传记录。file_path 存的是**相对 uploads/ 的路径**（可含一层
-    demos/ 这样的子目录），不是绝对路径，也不是裸文件名（见 common/storage.py）。"""
+    demos/ 这样的子目录），不是绝对路径，也不是裸文件名（见 common/storage.py）。
+
+    duration_sec 供解析管线登记分段音频时直接写入；普通上传不传，仍为 NULL。
+    """
     audio = AudioFile(
         uploader_id=uploader_id,
         file_path=file_path,
         original_name=original_name,
         file_size=file_size,
+        duration_sec=duration_sec,
         access=access,
     )
     db.add(audio)
@@ -48,14 +53,20 @@ def get_segment(db: Session, segment_id: int) -> Segment | None:
 
 
 def get_segment_teacher_audio(db: Session, segment_id: int) -> AudioFile | None:
-    """分段所属剧目上的示范音频（B2 模式二）。
+    """B2 模式二的教师轨：优先用该分段自己的音频，其次回退到整首示范音频。
 
-    分段（segments）本身不挂音频，示范音频挂在它所属的剧目（teacher_demos）
-    上，所以这里要跨三张表：segments → teacher_demos → audio_files。
-
-    片段不存在、或剧目没绑音频，都返回 None；调用方统一当作 404 处理——
-    对前端而言「这个分段现在没法比对」是同一种情况，不必区分。
+    segments.audio_id 由 Demucs 解析产出；Excel 路径与旧数据为 NULL，
+    继续走 segments → teacher_demos → audio_files 的老路。
+    两者都没有返回 None，调用方统一按 404 处理。
     """
+    segment = db.get(Segment, segment_id)
+    if segment is None:
+        return None
+    if segment.audio_id is not None:
+        audio = db.get(AudioFile, segment.audio_id)
+        if audio is not None:
+            return audio
+
     stmt = (
         select(AudioFile)
         .join(TeacherDemo, TeacherDemo.audio_id == AudioFile.id)
@@ -63,3 +74,13 @@ def get_segment_teacher_audio(db: Session, segment_id: int) -> AudioFile | None:
         .where(Segment.id == segment_id)
     )
     return db.scalar(stmt)
+
+
+def delete_ids(db: Session, ids: list[int]) -> None:
+    """按主键批量删除音频登记。只 flush 不 commit，事务边界在 service 层。
+
+    segments.audio_id 的外键行必须先于本调用删除，否则会撞外键约束。
+    """
+    if not ids:
+        return
+    db.execute(delete(AudioFile).where(AudioFile.id.in_(ids)))

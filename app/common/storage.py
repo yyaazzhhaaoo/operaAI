@@ -84,3 +84,47 @@ def resolve(stored_name: str) -> Path:
     if root not in path.parents:
         raise BusinessError(400, "非法的音频文件名")
     return path
+
+
+def save_generated(
+    samples, sr: int, *, subdir: str, suffix: str = ".wav"
+) -> tuple[str, int]:
+    """把内存里的音频样本写成 WAV，返回 (相对 uploads/ 的路径, 字节数)。
+
+    samples 形状与 librosa.load(mono=False) 一致：(channels, frames) 或一维
+    (frames,)。soundfile.write 要的是 (frames, channels)，这里负责转置。
+
+    与 save() 一样，只允许写到 uploads/ 之内；subdir 由本仓库代码显式传入。
+    """
+    import numpy as np
+    import soundfile as sf
+
+    data = np.asarray(samples)
+    if data.ndim == 1:
+        data = data[:, None]
+    else:
+        data = data.T
+
+    root = settings.upload_dir.resolve()
+    dest_dir = (root / subdir).resolve()
+    if dest_dir != root and root not in dest_dir.parents:
+        raise BusinessError(400, "非法的存储子目录")
+
+    dest = dest_dir / f"{uuid.uuid4().hex}{suffix}"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    sf.write(dest, data, sr)
+
+    size = dest.stat().st_size
+    if size == 0:
+        dest.unlink(missing_ok=True)
+        raise BusinessError(400, "生成的音频为空")
+    return dest.relative_to(root).as_posix(), size
+
+
+def remove(stored_name: str) -> None:
+    """删除一个存储文件；路径非法或文件已不在都静默返回。"""
+    try:
+        path = resolve(stored_name)
+    except BusinessError:
+        return
+    path.unlink(missing_ok=True)
