@@ -56,8 +56,8 @@ def get_segment_demo_map(db: Session) -> dict[int, int]:
     }
 
 
-def replace_segments(db: Session, demo_id: int, segments: list[dict]) -> None:
-    """整批替换某 demo 的分段：先按 demo_id DELETE，再 INSERT。
+def replace_segments(db: Session, demo_id: int, segments: list[dict]) -> list[Segment]:
+    """整批替换某 demo 的分段：先按 demo_id DELETE，再 INSERT，返回新插入的行。
 
     幂等的关键：同一 demo 重跑解析不会累积脏行（解析任务整体可重入）。
     不用「按 seq upsert」是因为段数可能变少（阈值调过、素材换过），
@@ -67,14 +67,16 @@ def replace_segments(db: Session, demo_id: int, segments: list[dict]) -> None:
     在 worker 进程里用 numpy 算出来，那边根本没有 Session。
 
     lyrics 来自上传时附带的逐字数据（app/services/lyrics_excel.py）；没有它
-    时（Demucs 那条路）为 None——第 20 条：音频本身给不出汉字。segments 表没有
-    start/end 列，逐字的位置信息全在 lyrics_json 里。
+    时（Demucs 那条路）为 None——第 20 条：音频本身给不出汉字。逐字的位置信息
+    全在 lyrics_json 里，segments 没有起止列。
+
+    返回新行是为了让调用方按 seq 挂分段音频（自增 id 由本函数 flush 出来）。
 
     只 flush 不 commit；DELETE 由 Core 语句当场发出，必然排在 flush 的
     INSERT 之前，不会出现「新行插进去又被删掉」。
     """
     db.execute(delete(Segment).where(Segment.demo_id == demo_id))
-    db.add_all([
+    rows = [
         Segment(
             demo_id=demo_id,
             seq=s["seq"],
@@ -83,7 +85,34 @@ def replace_segments(db: Session, demo_id: int, segments: list[dict]) -> None:
             duration=s["duration"],
         )
         for s in segments
-    ])
+    ]
+    db.add_all(rows)
+    db.flush()
+    return rows
+
+
+def segment_audio_ids(db: Session, demo_id: int) -> list[int]:
+    """某 demo 现有分段挂着的音频 id。重入解析前先取，替完再删旧行。"""
+    return [i for i in db.scalars(
+        select(Segment.audio_id).where(Segment.demo_id == demo_id)
+    ) if i is not None]
+
+
+def audio_paths_by_ids(db: Session, audio_ids: list[int]) -> list[str]:
+    """audio_files.file_path 批量查。取不到（历史脏 id）就是空列表。"""
+    if not audio_ids:
+        return []
+    return list(db.scalars(
+        select(AudioFile.file_path).where(AudioFile.id.in_(audio_ids))
+    ))
+
+
+def delete_audio_rows(db: Session, audio_ids: list[int]) -> None:
+    """删掉分段音频的登记行。**必须先删 segments**（replace_segments），
+    否则 segments.audio_id 的外键会挡住。磁盘文件由调用方在提交后 unlink。"""
+    if not audio_ids:
+        return
+    db.execute(delete(AudioFile).where(AudioFile.id.in_(audio_ids)))
     db.flush()
 
 
