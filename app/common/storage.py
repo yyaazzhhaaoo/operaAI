@@ -65,6 +65,26 @@ def save(file: FileStorage, *, subdir: str | None = None) -> tuple[str, int]:
     return dest.relative_to(root).as_posix(), size
 
 
+def save_bytes(data: bytes, *, subdir: str) -> tuple[str, int]:
+    """把内存里的音频字节落盘，返回 (存储路径, 字节数)。
+
+    与 save() 同一套路径约定，只是不收 FileStorage——解析任务切片时手里
+    只有 numpy 切出来的字节，没有上传流。固定 .wav：调用方只会写 WAV。
+    """
+    if not data:
+        raise BusinessError(400, "写入的音频为空")
+
+    root = settings.upload_dir.resolve()
+    dest_dir = (root / subdir).resolve()
+    if dest_dir != root and root not in dest_dir.parents:
+        raise BusinessError(400, "非法的存储子目录")
+
+    dest = dest_dir / f"{uuid.uuid4().hex}.wav"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    return dest.relative_to(root).as_posix(), len(data)
+
+
 def resolve(stored_name: str) -> Path:
     """存储路径 → 磁盘绝对路径，并确保没有跑出 uploads/ 之外。
 

@@ -4,7 +4,6 @@
 写操作只 flush()、不 commit——事务边界在 service 层，理由见 CLAUDE.md。
 """
 
-from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models.audio import AudioFile
@@ -19,19 +18,14 @@ def create(
     original_name: str | None,
     file_size: int,
     access: str,
-    duration_sec: float | None = None,
 ) -> AudioFile:
     """登记一条上传记录。file_path 存的是**相对 uploads/ 的路径**（可含一层
-    demos/ 这样的子目录），不是绝对路径，也不是裸文件名（见 common/storage.py）。
-
-    duration_sec 供解析管线登记分段音频时直接写入；普通上传不传，仍为 NULL。
-    """
+    demos/ 这样的子目录），不是绝对路径，也不是裸文件名（见 common/storage.py）。"""
     audio = AudioFile(
         uploader_id=uploader_id,
         file_path=file_path,
         original_name=original_name,
         file_size=file_size,
-        duration_sec=duration_sec,
         access=access,
     )
     db.add(audio)
@@ -53,34 +47,24 @@ def get_segment(db: Session, segment_id: int) -> Segment | None:
 
 
 def get_segment_teacher_audio(db: Session, segment_id: int) -> AudioFile | None:
-    """B2 模式二的教师轨：优先用该分段自己的音频，其次回退到整首示范音频。
+    """分段要用的示范音频：优先该段切出来的音频，没有则回退整首（B2 模式二）。
 
-    segments.audio_id 由 Demucs 解析产出；Excel 路径与旧数据为 NULL，
-    继续走 segments → teacher_demos → audio_files 的老路。
-    两者都没有返回 None，调用方统一按 404 处理。
+    历史示范（切分上线前解析的）没有 segments.audio_id，走回退分支，行为与
+    改造前完全一致。分段不存在、或剧目没绑音频，都返回 None——调用方统一
+    当作 404 处理，对前端而言「这个分段现在没法比对」是同一种情况。
     """
     segment = db.get(Segment, segment_id)
     if segment is None:
         return None
+
     if segment.audio_id is not None:
         audio = db.get(AudioFile, segment.audio_id)
         if audio is not None:
             return audio
 
-    stmt = (
-        select(AudioFile)
-        .join(TeacherDemo, TeacherDemo.audio_id == AudioFile.id)
-        .join(Segment, Segment.demo_id == TeacherDemo.id)
-        .where(Segment.id == segment_id)
-    )
-    return db.scalar(stmt)
-
-
-def delete_ids(db: Session, ids: list[int]) -> None:
-    """按主键批量删除音频登记。只 flush 不 commit，事务边界在 service 层。
-
-    segments.audio_id 的外键行必须先于本调用删除，否则会撞外键约束。
-    """
-    if not ids:
-        return
-    db.execute(delete(AudioFile).where(AudioFile.id.in_(ids)))
+    if segment.demo_id is None:
+        return None
+    demo = db.get(TeacherDemo, segment.demo_id)
+    if demo is None or demo.audio_id is None:
+        return None
+    return db.get(AudioFile, demo.audio_id)

@@ -1603,23 +1603,16 @@ if path.parent != root:
 
 ---
 
-## 45. `segments` 表新增 `audio_id`，文档未定义分段级音频
+## 45. 分段音频是否存在、切自哪条音轨、B2 参考轨取段还是取整曲，文档均未规定
 
-《4-数据库设计-V1.1》的 `segments` 表只有 `demo_id/seq/title/lyrics_json/duration`，
-没有分段音频列；《5-接口清单》C2 也没有音频地址字段。但跟唱页要「按段示范 +
-按段对比」，整首 `teacher_demos.audio_id` 无法表达。
+《4-数据库设计》的 `segments` 没有音频字段，《5-接口清单》B2 只写「基准=该分段示范」，没说这个「分段示范」是整曲还是切出来的段；PRD 也没提上传时要产出分段音频。
 
-2026-10-20 的口径：
+本轮口径（spec `docs/superpowers/specs/2026-10-20-segment-audio-slicing-design.md`）：
 
-1. `segments` 增加 `audio_id INT REFERENCES audio_files(id)`，Demucs 解析时按
-   停顿切出的每段各存一份**原始混音**切片（`uploads/segments/<demo_id>/<uuid>.wav`，
-   `access=public`）；
-2. C2 `GET /api/demos/<id>/segments` 增加 `url` 字段，无音频时为 `null`；
-3. B2 的教师轨优先取 `segments.audio_id`，为空才回退到整首；
-4. Excel 逐字数据路径不切音频，仍走整首回退；
-5. 重新解析会删除旧分段音频的 `audio_files` 行，并在事务提交后删除旧文件。
-
-这是数据模型与接口契约的扩展，需求文档方如需另定口径，以文档为准再调整。
+- `segments.audio_id` 指向该段的示范音频（`audio_files` 一行，`access=public`）；
+- 切的是**原始整曲**（含伴奏），16k 单声道 WAV，不是 Demucs 分离出的人声；
+- B2 模式二优先用段音频，`audio_id` 为空（历史数据、Excel 页无时间）时回退整曲；
+- C2 `GET /api/demos/<id>/segments` 每段返回 `url`（无段音频时为 `null`），跟唱页「播放示范」选中段后播该段切片、否则回退整首。
 
 ---
 

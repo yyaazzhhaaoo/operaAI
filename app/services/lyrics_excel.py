@@ -59,7 +59,10 @@ MAX_RATIO = 1.5          # 超出词表能表达的最长档
 
 
 def parse_segments(blob: bytes) -> list[dict]:
-    """xlsx 字节流 → `[{seq, title, duration, lyrics}]`，按 seq 升序。
+    """xlsx 字节流 → `[{seq, title, duration, lyrics, start?, end?}]`，按 seq 升序。
+
+    带 `start`/`end` 的项给了该页在整曲里的**全局秒**，只用于切分段音频；
+    整页没标时间的段没有这两个键。
 
     失败一律抛 `BusinessError(400, ...)`：这张表是教师自己做的，报错文案会
     原样给他看，「第3段 缺少列：起始时间」比「服务器内部错误」有用得多。
@@ -104,6 +107,7 @@ def _parse_page(seq: int, title: str, sheet) -> dict:
         # 整页没标时间（如第 1、2 段，那些字唱在被剪掉的开头里）：字照存、
         # 时间全空，duration 也给 None——前端对段长非有限值有「时长未知」分支。
         duration = None
+        span = {}
     else:
         base = min(starts)
         for char in lyrics:
@@ -113,8 +117,16 @@ def _parse_page(seq: int, title: str, sheet) -> dict:
         # 该页最后一个有时间的字的 end（已转相对）就是段长。中间缺时间的字
         # 只是没有自己的 start/end，不影响这个值（spec 3.3）。
         duration = ends[-1] if ends else None
+        # start/end 是**全局秒**，只给切分段音频用；上面已把字时间转成段内相对
+        span = {"start": base, "end": base + duration} if duration is not None else {}
 
-    return {"seq": seq, "title": title or f"第 {seq} 段", "duration": duration, "lyrics": lyrics}
+    return {
+        "seq": seq,
+        "title": title or f"第 {seq} 段",
+        "duration": duration,
+        "lyrics": lyrics,
+        **span,
+    }
 
 
 def _char(row: list, cols: dict[str, int]) -> dict | None:

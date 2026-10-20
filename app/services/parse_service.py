@@ -33,7 +33,7 @@ from app.models.demo import TeacherDemo
 from app.repositories import audio_repo
 from app.repositories import library_repo
 from app.repositories import parse_task_repo as task_repo
-from app.services import audio_service, vocal_service
+from app.services import audio_service, segment_audio_service, vocal_service
 
 logger = logging.getLogger(__name__)
 
@@ -102,14 +102,13 @@ TRUNCATE_NOTE = "音频超过 3 分钟，仅解析了前 3 分钟"
 # ===== 唱段切分（纯函数，不碰 redis / 不碰数据库，可单独调）=====
 
 def _split_segments(y: np.ndarray, sr: int) -> list[dict]:
-    """把 16k 单声道人声轨按停顿切成唱段，返回 [{seq, title, duration}]。
+    """把 16k 单声道人声轨按停顿切成唱段，返回
+    [{seq, title, duration, start, end}]（时间单位：秒）。
 
-    最后那步回退是刻意的：任何输入都要有分段、都要能走到 `parsed` 终态。
-    没有它，一段全静音的人声轨（分离失败、纯伴奏）会让 segments 一行不落，
-    而前端还在轮询一个永远不会到来的 `parsed`。
-
-    duration 只落时长、不落起止时间（第 2 节已定：不加 start_sec 列），
-    所以前端只能显示「第 N 段 · 6.6s」，做不了「点击定位到该段」。
+    start/end 只用于把原始整曲切成分段音频，不入库——segments 没有起止列，
+    前端也就做不了「点击定位到该段」。最后那步回退是刻意的：任何输入都要有
+    分段、都要能走到 `parsed` 终态。没有它，一段全静音的人声轨（分离失败、
+    纯伴奏）会让 segments 一行不落，而前端还在轮询一个永远不会到来的 `parsed`。
     """
     intervals = librosa.effects.split(
         y, top_db=TOP_DB, frame_length=FRAME_LENGTH, hop_length=HOP_LENGTH
@@ -124,7 +123,6 @@ def _split_segments(y: np.ndarray, sr: int) -> list[dict]:
             "seq": i,
             "title": f"第 {i} 段",
             "duration": round((e - s) / sr, 3),
-            # start/end 只给切片用，不进 segments 表
             "start": round(s / sr, 3),
             "end": round(e / sr, 3),
         }
@@ -145,44 +143,6 @@ def _merge_intervals(intervals, min_gap: int) -> list[tuple[int, int]]:
         else:
             merged.append((int(start), int(end)))
     return merged
-
-
-def _slice_segment_audio(
-    demo_id: int, path: Path, segments: list[dict]
-) -> list[dict]:
-    """按 segments 的 start/end 从原始混音切出每段音频并落盘。
-
-    时间边界来自 16k 的人声轨，这里按秒切原生采样率的原文件、保留声道数。
-    返回新列表，每项带 audio_path / file_size / duration（按切片实际长度）。
-    """
-    y, sr = librosa.load(
-        str(path), sr=None, mono=False, duration=vocal_service.MAX_AUDIO_SEC
-    )
-    if y.size == 0:
-        raise BusinessError(400, "音频是空的，无法切分唱段")
-
-    samples = y if y.ndim == 2 else y[None, :]
-    total = samples.shape[1]
-
-    out: list[dict] = []
-    for seg in segments:
-        start = max(0, min(int(round(seg["start"] * sr)), total))
-        end = max(start, min(int(round(seg["end"] * sr)), total))
-        clip = samples[:, start:end]
-        if clip.shape[1] == 0:
-            raise BusinessError(400, f"第 {seg['seq']} 段切分结果为空")
-
-        audio_path, file_size = storage.save_generated(
-            clip, sr, subdir=f"segments/{demo_id}"
-        )
-        out.append({
-            "seq": seg["seq"],
-            "title": seg["title"],
-            "duration": round(clip.shape[1] / sr, 3),
-            "audio_path": audio_path,
-            "file_size": file_size,
-        })
-    return out
 
 
 # ===== 提交 =====
@@ -334,14 +294,16 @@ def run_parse(demo_id: int) -> None:
 
 def _parse(demo_id: int) -> None:
     """跑在 worker 进程里，没有请求上下文，所以自己开 session_scope()，不走 get_db()。
-    会话**分两段开、中间不留连接**：Demucs 要跑 8–15 分钟，攥着连接不放会把
-    连接池（pool_size=5）白占一个。中间那段纯计算不碰数据库。
+    会话**分三段开、中间不留连接**：Demucs 要跑 8–15 分钟，切片还要解码 1–3 秒，
+    攥着连接不放会把连接池（pool_size=5）白占一个。
     """
-    # --- 取路径（短会话）---
+    # --- 取路径与旧分段音频（短会话）---
     with session_scope() as db:
         demo, path = _require_demo(db, demo_id)
-        uploader_id = demo.audio.uploader_id if demo.audio else None
-        title = demo.title
+        uploader_id = demo.audio.uploader_id
+        demo_title = demo.title or ""
+        old_audio_ids = library_repo.segment_audio_ids(db, demo_id)
+        old_paths = _resolve_all(library_repo.audio_paths_by_ids(db, old_audio_ids))
 
     # 时长在读文件头这一步拿，与后面的分离无关，先取好省得回填时再开一次会话
     duration = audio_service.probe_duration(path)
@@ -354,44 +316,38 @@ def _parse(demo_id: int) -> None:
     _enter_stage(demo_id, STAGE_SEGMENT, "正在按停顿切分唱段…")
     segments = _split_segments(y, vocal_service.SR)
 
-    # --- 结果入库（切音频 + 写分段，进度 80%）---
-    _enter_stage(demo_id, STAGE_SAVE, "正在切分唱段音频并写入数据库…")
-    # 切片放在会话之外：读写音频是秒级 IO，不占数据库连接
-    segments_with_audio = _slice_segment_audio(demo_id, path, segments)
+    # --- 分段音频切片（1–3 秒，进度 80%）---
+    _enter_stage(demo_id, STAGE_SAVE, "正在切分分段音频并写入分段…")
+    slice_failed = False
+    slices: list[dict] = []
+    try:
+        slices = segment_audio_service.slice_files(
+            path, [(s["seq"], s["start"], s["end"]) for s in segments]
+        )
+    except Exception:
+        # 切片失败不该让整条解析作废：分段照落，分析自动回退整曲
+        logger.exception("示范 %s 的分段音频切片失败，分析将回退整曲", demo_id)
+        slice_failed = True
 
-    old_files = []
-    with session_scope() as db:
-        for seg in segments_with_audio:
-            audio = audio_repo.create(
-                db,
-                uploader_id=uploader_id,
-                file_path=seg["audio_path"],
-                original_name=f"{title} 第 {seg['seq']} 段.wav",
-                file_size=seg["file_size"],
-                duration_sec=seg["duration"],
-                access=audio_service.ACCESS_PUBLIC,
-            )
-            seg["audio_id"] = audio.id
-
-        # 重新解析：旧分段音频行随新分段在同一事务里删除，文件等提交后再删
-        old_files = [
-            audio
-            for old in library_repo.list_segments(db, demo_id)
-            if old.audio_id and (audio := audio_repo.get_by_id(db, old.audio_id))
-        ]
-        library_repo.replace_segments(db, demo_id, segments_with_audio)
-        audio_repo.delete_ids(db, [a.id for a in old_files])
-        if duration is not None:
-            library_repo.update_audio_duration(db, demo_id, duration)
-
-    for old in old_files:
-        storage.remove(old.file_path)
+    # --- 结果入库（毫秒级）---
+    _save_results(
+        demo_id,
+        demo_title=demo_title,
+        uploader_id=uploader_id,
+        segments=segments,
+        slices=slices,
+        duration=duration,
+        old_audio_ids=old_audio_ids,
+        old_paths=old_paths,
+    )
 
     # --- 终态 ---
     #
     # 处理被 MAX_AUDIO_SEC 截断时把话说清楚，而不是让「只有前 3 分钟的分段」
     # 这件事藏在库里。message 会原样显示在前端的处理中弹窗与 toast 上。
     note = f" · {TRUNCATE_NOTE}" if duration and duration > vocal_service.MAX_AUDIO_SEC else ""
+    if slice_failed:
+        note += " · 分段音频未生成"
     task_repo.update(
         demo_id,
         status=STATUS_PARSED,
@@ -399,3 +355,44 @@ def _parse(demo_id: int) -> None:
         stage=STAGE_SAVE,
         message=f"解析完成，共 {len(segments)} 段{note}",
     )
+
+
+def _resolve_all(stored_names: list[str]) -> list[Path]:
+    """file_path → 磁盘路径。脏数据抛错时宁可少删一个文件，也不能中断解析。"""
+    paths: list[Path] = []
+    for name in stored_names:
+        try:
+            paths.append(storage.resolve(name))
+        except BusinessError:
+            logger.warning("分段音频路径非法，跳过删除：%s", name)
+    return paths
+
+
+def _save_results(
+    demo_id: int,
+    *,
+    demo_title: str,
+    uploader_id: int | None,
+    segments: list[dict],
+    slices: list[dict],
+    duration: float | None,
+    old_audio_ids: list[int],
+    old_paths: list[Path],
+) -> None:
+    """一次事务写完全部分段与切片，提交后再删旧文件。"""
+    with session_scope() as db:
+        rows = library_repo.replace_segments(db, demo_id, segments)
+        if slices:
+            segment_audio_service.attach(
+                db,
+                demo_title=demo_title,
+                uploader_id=uploader_id,
+                slices=slices,
+                segments=rows,
+            )
+        library_repo.delete_audio_rows(db, old_audio_ids)
+        if duration is not None:
+            library_repo.update_audio_duration(db, demo_id, duration)
+
+    for path in old_paths:
+        path.unlink(missing_ok=True)
