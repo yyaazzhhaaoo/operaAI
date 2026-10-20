@@ -4,7 +4,6 @@
 写操作只 flush()、不 commit——事务边界在 service 层，理由见 CLAUDE.md。
 """
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.audio import AudioFile
@@ -48,18 +47,24 @@ def get_segment(db: Session, segment_id: int) -> Segment | None:
 
 
 def get_segment_teacher_audio(db: Session, segment_id: int) -> AudioFile | None:
-    """分段所属剧目上的示范音频（B2 模式二）。
+    """分段要用的示范音频：优先该段切出来的音频，没有则回退整首（B2 模式二）。
 
-    分段（segments）本身不挂音频，示范音频挂在它所属的剧目（teacher_demos）
-    上，所以这里要跨三张表：segments → teacher_demos → audio_files。
-
-    片段不存在、或剧目没绑音频，都返回 None；调用方统一当作 404 处理——
-    对前端而言「这个分段现在没法比对」是同一种情况，不必区分。
+    历史示范（切分上线前解析的）没有 segments.audio_id，走回退分支，行为与
+    改造前完全一致。分段不存在、或剧目没绑音频，都返回 None——调用方统一
+    当作 404 处理，对前端而言「这个分段现在没法比对」是同一种情况。
     """
-    stmt = (
-        select(AudioFile)
-        .join(TeacherDemo, TeacherDemo.audio_id == AudioFile.id)
-        .join(Segment, Segment.demo_id == TeacherDemo.id)
-        .where(Segment.id == segment_id)
-    )
-    return db.scalar(stmt)
+    segment = db.get(Segment, segment_id)
+    if segment is None:
+        return None
+
+    if segment.audio_id is not None:
+        audio = db.get(AudioFile, segment.audio_id)
+        if audio is not None:
+            return audio
+
+    if segment.demo_id is None:
+        return None
+    demo = db.get(TeacherDemo, segment.demo_id)
+    if demo is None or demo.audio_id is None:
+        return None
+    return db.get(AudioFile, demo.audio_id)
