@@ -35,6 +35,7 @@ from app.models.audio import AudioFile
 from app.repositories import analyze_task_repo as task_repo
 from app.repositories import audio_repo
 from app.schemas.audio import AnalyzeSubmitIn
+from app.services import cdm_service
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ REGION_GAP_SEC = 0.3        # 合并相邻同色字的时间上限（字与字�
 # ===== B2 提交 =====
 
 def submit(
-    db: Session, data: AnalyzeSubmitIn, *, practice: dict | None = None
+    db: Session, data: AnalyzeSubmitIn, *, persist: dict | None = None
 ) -> str:
     student = _require_audio(db, data.student_audio_id, "学生录音")
 
@@ -123,9 +124,10 @@ def submit(
         message="任务已创建，排队中",
         result=None,
     )
-    # practice 非空时表示这是 D1 练习提交：任务完成后要落 practice_records 并
-    # 更新 BKT。它必须随 Celery 消息序列化过去，所以只装 int/float 这类纯数据。
-    _dispatch(task_id, t_path, s_path, lyrics, practice)
+    # persist 非空时表示这次任务完成后要落库：D1 练习写 practice_records，
+    # F3 作业回填 submissions。它必须随 Celery 消息序列化过去，所以只装
+    # int/float/str 这类纯数据。
+    _dispatch(task_id, t_path, s_path, lyrics, persist)
     return task_id
 
 
@@ -191,7 +193,7 @@ def _dispatch(
     t_path: Path,
     s_path: Path,
     lyrics: list | None,
-    practice: dict | None,
+    persist: dict | None,
 ) -> None:
     """参数一律先转成纯数据：消息要序列化成 JSON 跨进程送给 worker，Path 不是
     JSON 类型，ORM 对象更是完全过不去——所以这里传的是路径字符串，而不是
@@ -205,7 +207,7 @@ def _dispatch(
     TTL 自然过期——比让前端拿着一个永远查不到终态的 task_id 干等要好。
     """
     run_analysis.apply_async(
-        args=(task_id, str(t_path), str(s_path), lyrics, practice),
+        args=(task_id, str(t_path), str(s_path), lyrics, persist),
         task_id=task_id,
     )
 
@@ -216,7 +218,7 @@ def run_analysis(
     t_path: str,
     s_path: str,
     lyrics: list | None,
-    practice: dict | None = None,
+    persist: dict | None = None,
 ) -> None:
     """**任何异常都必须落成 failed 状态**。任务抛出的异常若不在这里兜住，任务会
     永远停在 queued，前端按 3.1 一直轮询也拿不到终态——比报错更难排查。文档 3.1
@@ -226,7 +228,7 @@ def run_analysis(
     看不到；B3 只能读到下面写进 redis 的这一份。两边都要有，别只留一边。
     """
     try:
-        _analyze(task_id, Path(t_path), Path(s_path), lyrics, practice)
+        _analyze(task_id, Path(t_path), Path(s_path), lyrics, persist)
     except Exception as exc:
         logger.exception("分析任务 %s 失败", task_id)
         # 可以透给用户的两种文案：BusinessError 的 message 本来就是写给用户看的
@@ -243,13 +245,33 @@ def run_analysis(
             # 连状态都写不进去（redis 挂了），只能记日志——此时已无路可退。
             logger.exception("分析任务 %s 的失败状态写入 redis 也失败了", task_id)
 
+        _discard_pending_homework(persist)
+
+
+def _discard_pending_homework(persist: dict | None) -> None:
+    """作业提交分析失败时删掉 F3 建的占位行，让学生能重交。
+
+    清理是 best-effort：它自己出错不能掩盖原始失败，也不能让任务停在 queued。
+    所以调用点先写 failed，再调这里，而且这里整体兜异常。
+    """
+    if not persist or persist.get("kind") != "homework":
+        return
+    try:
+        from app.services import homework_service
+        homework_service.discard_pending(persist)
+    except Exception:
+        logger.exception(
+            "分析失败后清理作业占位提交失败：submission_id=%s",
+            persist.get("submission_id"),
+        )
+
 
 def _analyze(
     task_id: str,
     t_path: Path,
     s_path: Path,
     lyrics: list | None,
-    practice: dict | None = None,
+    persist: dict | None = None,
 ) -> None:
     """B2 的算法主体，按 3.2 契约产出结果。
 
@@ -297,6 +319,9 @@ def _analyze(
     _enter_stage(task_id, STAGE_SCORE, "正在计算评分…")
     dimensions = _dimensions(t_cents, s_aligned, t_track, s_track, mapping)
     words = _words(lyrics, t_track.times, t_cents, s_aligned, ref_hz, t_onset)
+    # CDM 归因（功能 4.6）：规则引擎吃已经算好的五维与逐字偏差，不重新分析音频。
+    # 结果随 B4 一起返回，并由 practice_service.save_result 落 practice_records.cdm_json。
+    cdm = cdm_service.build(dimensions, words)
     result = {
         # overall 是五个维度的均值：文档 3.2 的例子（80/85/78/84/86 → 82.5）
         # 与算术平均只差 0.1，看不出另有加权，这里就按等权处理。
@@ -306,6 +331,8 @@ def _analyze(
         # regions 由逐字结果合并而来（没有歌词时退回滑窗），所以必须在 words 之后。
         "regions": _regions(words, t_track.times, s_aligned - t_cents),
         "words": words,
+        # 文档 3.2 没有 cdm 字段，但 E1 的数据源与 B4 的展示都要它（同下条口径）。
+        "cdm": cdm,
         # ↓↓↓ 文档 3.2 未定义这四个字段，但前端展示需要 → DOC_ISSUES 第 14 条。
         # 尤其 octave_shift：student_pitch 已经是它修正之后的结果，不单独给出，
         # 前端无从知道修正发生过（也就无法提示「学生整体低了八度」），
@@ -316,12 +343,17 @@ def _analyze(
         "ref_hz": round(float(ref_hz), 2),
     }
 
-    # D1 练习提交：先落库再报 done。反过来写的话，一旦落库失败，前端会看到
-    # 一个已完成的分数，而 practice_records 里没有对应行。
-    # 函数内 import 是为了避开 practice_service → analyze_service 的循环导入。
-    if practice:
-        from app.services import practice_service
-        practice_service.save_result(practice, result)
+    # 先落库再报 done。反过来写的话，一旦落库失败，前端会看到一个已完成的
+    # 分数，而库里没有对应行。函数内 import 是为了避开
+    # homework_service → analyze_service 的循环导入。
+    if persist:
+        kind = persist.get("kind", "practice")   # 老任务没有 kind，默认练习
+        if kind == "homework":
+            from app.services import homework_service
+            homework_service.save_result(persist, result)
+        else:
+            from app.services import practice_service
+            practice_service.save_result(persist, result)
 
     task_repo.update(
         task_id,
