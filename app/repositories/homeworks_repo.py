@@ -1,4 +1,4 @@
-from sqlalchemy import Date, cast, distinct, func, select, tuple_
+from sqlalchemy import Date, and_, cast, distinct, func, select, tuple_
 from sqlalchemy.orm import Session
 
 from app.models import Homework, ScoreCalibration, Student, Submission, TeacherDemo, User
@@ -13,9 +13,9 @@ def get_progress_rows(
 ) -> list[tuple[Homework, TeacherDemo | None, int, int]]:
     """作业进度（功能 5.9）的原始行，[(作业, 曲目或 None, 已提交人数, 待批条数)]。
 
-    提交数**按学生去重**（`count(distinct student_id)`）：表上没有「一个学生一份作业
-    只能提交一次」的唯一约束，重复提交时若按条数算，页面会出现「6/5 人已提交」。
-    这也是页面文案是「人」而不是「份」的原因。
+    提交数**按学生去重**（`count(distinct student_id)`）：2026-10-21 起
+    `(homework_id, student_id)` 有唯一索引；去重保留为防御，历史数据或
+    别的环境仍可能有重复行。这也是页面文案是「人」而不是「份」的原因。
 
     **只统计在册学生**（传入的 student_ids）：分母是这份名单，分子若把名单外的人
     （`students` 表里连 teacher01 都有自己的行，见 students.id=1）也算进来，
@@ -63,8 +63,9 @@ def get_submission_stats(db: Session, student_ids: list[int]) -> tuple[int, int,
     作业截止日不随周滚动，按周切分母会频繁为 0（当前库 3 份作业的截止日全在
     2026-07/08），本周与上周共用同一个值。
 
-    组合 = (homework_id, student_id)，**去重**（表上没有唯一约束，重复提交时按条数
-    算会得出「6/5 人已提交」）。只统计 `student_ids` 里的在册学生，与分母同一份名单。
+    组合 = (homework_id, student_id)，**去重**（2026-10-21 起有唯一索引；
+    去重保留为防御，历史数据可能重复）。只统计 `student_ids` 里的在册学生，
+    与分母同一份名单。
 
     逾期 = `submitted_at` 的日期**晚于** `deadline`。deadline 为 NULL 的作业不会有
     逾期（判不了就当没逾期，不猜）。逾期属于「已提交」，所以它**不是**「未提交」的
@@ -98,6 +99,86 @@ def get_submission_stats(db: Session, student_ids: list[int]) -> tuple[int, int,
 def get_homework(db: Session, homework_id: int) -> Homework | None:
     """按 id 取作业，不存在返回 None。供 F4 判 404。"""
     return db.get(Homework, homework_id)
+
+
+def add_homework(db: Session, homework: Homework) -> Homework:
+    """插入一份作业。只 flush（要拿自增 id 组装出参），commit 交给 service 层。
+
+    与 `add_calibration` 不同：那条不需要 id 所以不 flush，这条 F2 要按 F1 的行
+    形状回参与 `homework_id`。
+    """
+    db.add(homework)
+    db.flush()
+    return homework
+
+
+def get_homeworks_with_submission(
+    db: Session, student_id: int
+) -> list[tuple[Homework, TeacherDemo | None, Submission | None]]:
+    """学生端「我的作业」原始行：[(作业, 曲目, 本人提交)]。
+
+    不做班级/名单过滤——`homeworks` 表没有班级字段，与 F1 一致。
+    提交用 LEFT JOIN 且必须带 `student_id`：只连本人，别的同学的提交不会把
+    作业复制成多行；没有提交时第三列是 None。
+
+    排序在 service 里做：无提交与有提交两组的排序方向不同（一个按截止日
+    升序、一个按提交时间降序），SQL 里用 CASE 混着写不如 Python 直观。
+    """
+    stmt = (
+        select(Homework, TeacherDemo, Submission)
+        .outerjoin(TeacherDemo, TeacherDemo.id == Homework.demo_id)
+        .outerjoin(
+            Submission,
+            and_(
+                Submission.homework_id == Homework.id,
+                Submission.student_id == student_id,
+            ),
+        )
+        .order_by(Homework.id.desc())
+    )
+    return [tuple(row) for row in db.execute(stmt).all()]
+
+
+def get_homework_with_submission(
+    db: Session, homework_id: int, student_id: int
+) -> tuple[Homework, TeacherDemo | None, Submission | None] | None:
+    """学生端作业详情原始行；作业不存在返回 None。口径同上条。"""
+    stmt = (
+        select(Homework, TeacherDemo, Submission)
+        .outerjoin(TeacherDemo, TeacherDemo.id == Homework.demo_id)
+        .outerjoin(
+            Submission,
+            and_(
+                Submission.homework_id == Homework.id,
+                Submission.student_id == student_id,
+            ),
+        )
+        .where(Homework.id == homework_id)
+    )
+    row = db.execute(stmt).first()
+    return tuple(row) if row is not None else None
+
+
+def get_submission_for_student(
+    db: Session, homework_id: int, student_id: int
+) -> Submission | None:
+    """该学生该作业的提交；没有返回 None。F3 的重复提交判断用它。"""
+    return db.scalar(
+        select(Submission).where(
+            Submission.homework_id == homework_id,
+            Submission.student_id == student_id,
+        )
+    )
+
+
+def add_submission(db: Session, submission: Submission) -> Submission:
+    """插入一条提交。只 flush（要拿自增 id 随 Celery 任务传下去），
+    commit 交给 service 层。唯一索引冲突时 flush 会抛 IntegrityError，
+    由 service 回 422。
+    """
+    db.add(submission)
+    db.flush()
+    return submission
 
 
 def get_pending_submissions(
@@ -179,6 +260,19 @@ def get_submission_detail(
     )
     row = db.execute(stmt).first()
     return tuple(row) if row is not None else None
+
+
+def get_latest_submission_for_student(db: Session, student_id: int) -> Submission | None:
+    """该学生最近一次作业提交（按提交时间倒序，时间相同按 id 倒序）。
+
+    E1 的 CDM 目前复用作业链路写入的 `ai_detail.defects`；没有提交返回 None。
+    """
+    return db.scalars(
+        select(Submission)
+        .where(Submission.student_id == student_id)
+        .order_by(Submission.submitted_at.desc().nullslast(), Submission.id.desc())
+        .limit(1)
+    ).first()
 
 
 def get_submission(db: Session, submission_id: int) -> Submission | None:
