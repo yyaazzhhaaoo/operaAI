@@ -82,14 +82,16 @@ def homeworks_submit(homework_id):
     # 路径参数用 <int:...> 而不是 <id>：<id> 是字符串转换器，会把
     # /homeworks/abc/submit 也匹配进来再进视图；<int:...> 让 Werkzeug 在路由层
     # 挡掉，走 errors.py 的统一 404「接口不存在」。同 F4/F5/F6。
-    task_id = homework_service.submit_homework(
+    #
+    # 返回两种形状：复用练习成绩时是 {"submission_id": N}（同步完成，不用轮询）；
+    # 没有练习记录、回退分析管线时是 {"task_id": "..."}（照旧走 B3）。
+    return ok(homework_service.submit_homework(
         get_db(),
         user_id=current_user_id(),
         homework_id=homework_id,
         segment_id=_form_int("segment_id"),
         audio_id=_form_int("audio_id"),
-    )
-    return ok({"task_id": task_id})
+    ))
 
 @api_bp.route("/homeworks/<int:homework_id>/submissions",methods=["GET"])
 @login_required

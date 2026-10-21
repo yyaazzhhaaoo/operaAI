@@ -234,6 +234,24 @@ def get_last_for_student_segment(
     )
 
 
+def get_by_student_audio(
+    db: Session, student_id: int, audio_id: int
+) -> PracticeRecord | None:
+    """某学生某次录音对应的练习记录；F3「复用练习成绩」用。
+
+    按 audio_id 定位而不是 segment_id：同一段可能练过多次，F3 要归档的是学生
+    在页面上点「提交」时对应的那一次录音。audio_id 每次上传唯一，命中至多一条；
+    查不到返回 None，由调用方决定回退到分析管线。
+    """
+    return db.scalar(
+        select(PracticeRecord)
+        .where(PracticeRecord.student_id == student_id)
+        .where(PracticeRecord.audio_id == audio_id)
+        .order_by(desc(PracticeRecord.id))
+        .limit(1)
+    )
+
+
 def list_for_student(
     db: Session,
     student_id: int,

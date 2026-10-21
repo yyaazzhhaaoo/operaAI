@@ -5,6 +5,8 @@
 关联：《5-接口清单-V1.0》F3；《3-功能清单》模块 4（作业）；《6-登录与数据隔离方案》
 前置：F1（作业列表）、F2（布置作业）、B1–B5、D1–D3 均已实现
 
+> **修订（2026-10-21 晚）**：用户反馈「学生唱了第一段就不能唱第二段了」。原设计在停录后直接调 F3，一份作业只能提交一次且提交后锁录音，学生没有「只练不交」的出口。现改为 **先练习、再提交**：跟唱页作业模式录音走 D1，结果出来后学生自行决定是否点「提交本段为作业」；F3 复用该次练习成绩归档，不重跑分析、不重复计分，提交后仍可继续练习。下文已按新语义更新，§3.1、§3.2、§4.3、§5.2、§7.3、§10、§11 为重点修订处。
+
 ## 1. 背景与目标
 
 教师端已经有「布置作业 → 待批改 → 批改」的完整链路（F1/F2/F4–F7），但学生端没有任何作业入口：`homework.html` 只对教师可见，`sing_along.html` 的录音只落 `practice_records`，`submissions` 表里的数据全部是种子数据。F3 `POST /api/homeworks/<id>/submit` 至今是一个直接 `return ok(id)` 的桩。
@@ -17,13 +19,15 @@
 
 1. **逾期仍可提交**，列表与详情显示「已逾期」徽标；逾期口径与教师端「逾期提交组合数」一致。
 2. **每份作业每个学生只允许提交一次**；已有提交后 F3 回 422，前端不再显示「去完成」。
+3. **练习不提交、不限次数**：录音先落 `practice_records`，学生可换任意允许的唱段反复练；只看结果不提交也算练习。
+4. **提交复用练习成绩**：点「提交本段为作业」时把最近一次练习（按 `audio_id` 定位）的成绩归档进 `submissions`，不重跑分析、不重复更新 BKT；提交后仍可继续练习，但成绩不再变化。
 
 ## 2. 范围
 
 **做**：
 
 - 学生作业列表与详情接口（文档没有，新增，登记 `DOC_ISSUES.md` 第 46 条）。
-- F3 真实实现：校验 → 建提交行（`status='submitted'`）→ 复用 B2 分析管线 → worker 回填 `ai_scored`。
+- F3 真实实现：校验 → 命中练习记录则同步归档为 `ai_scored`（返回 `submission_id`）；未命中则建 `status='submitted'` 占位行 → 复用 B2 分析管线 → worker 回填 `ai_scored`（返回 `task_id`）。
 - `submissions` 补 `segment_id` 列与 `(homework_id, student_id)` 唯一索引。
 - 新页面 `my_homework.html`；`sing_along.html` 增加作业模式；学生侧导航补入口。
 - 冒烟脚本、`check_db.py`、`CLAUDE.md`、`DOC_ISSUES.md` 同步。
@@ -37,9 +41,9 @@
 
 ## 3. 关键决策
 
-### 3.1 提交行在 F3 当场创建，而不是 worker 成功后才创建
+### 3.1 提交行在 F3 当场创建，而不是 worker 成功后才创建（仅回退路径）
 
-`submissions.status` 的 DDL 注释本来就定义了 `submitted / ai_scored / reviewed` 三档，但全项目至今没有代码写 `submitted`（`DOC_ISSUES.md` 第 38 条已登记）。本设计让 F3 在提交时插入一行：
+`submissions.status` 的 DDL 注释本来就定义了 `submitted / ai_scored / reviewed` 三档，但全项目至今没有代码写 `submitted`（`DOC_ISSUES.md` 第 38 条已登记）。**复用练习成绩的路径直接写 `ai_scored`**，本节的 `submitted` 占位行只用于「没有练习记录、回退分析管线」的非页面客户端。回退路径在 F3 提交时插入一行：
 
 ```
 status='submitted', audio_id=..., segment_id=..., submitted_at=DEFAULT NOW()
@@ -62,7 +66,7 @@ worker 成功后在同一行上回填 `ai_score / ai_detail / bkt_before / bkt_a
 - 新增 `submissions.segment_id`（**普通 INT，不加外键**）。不加外键的原因：`library_repo.replace_segments` 会按 `demo_id` 整批删除旧分段再插入，外键会让「重新解析一个已经有作业提交的曲目」直接失败。分段被重解析后这个 id 可能悬空，它与 `homeworks.segment_ids` 的 JSONB 一样，是历史引用而不是强引用。
 - 新增唯一索引 `uq_submissions_homework_student (homework_id, student_id)`。教师端 F1 的提交人数本来就是按 `(homework_id, student_id)` 去重的，这个索引把页面上的口径变成库级事实。
 
-**多段作业的口径**：`homeworks.segment_ids` 是「本次作业的指定唱段集合」，学生可在集合内任选一段录制并提交；提交一次后作业即完成，其余唱段不再接受提交。这与现有种子数据一致：12 号作业挂了 10 个分段，5 个学生各只有 1 条提交。
+**多段作业的口径**：`homeworks.segment_ids` 是「本次作业的指定唱段集合」，学生可在集合内任选一段录制并提交；提交一次后作业即完成，其余唱段不再接受提交。**提交前的练习不受这条限制**：每个允许的唱段都可以反复练，提交入口只在学生点开的那一次练习结果下出现，归档的是那一次录音。这与现有种子数据一致：12 号作业挂了 10 个分段，5 个学生各只有 1 条提交。
 
 ### 3.3 作业的 `segment_ids` 为空 = 该曲目任一分段都可选
 
@@ -75,6 +79,16 @@ F2 的既有口径是「不选唱段 = 按整曲布置」。跟唱页是以分�
 ### 3.4 截止日与 `homeworks.status` 都不阻止提交
 
 用户已确认逾期可交。`homeworks.status` 目前没有「关闭」入口（F2 恒写 `open`，全项目没有写 `closed` 的代码），本轮不发明关闭语义，F3 不检查它。学生端的状态徽标只看「有没有提交」与「是否逾期」。
+
+### 3.5 F3 复用练习成绩，而不是重跑一遍分析
+
+页面上的「练习」与「提交」是两个动作：
+
+- 录音（含作业模式）走 D1 `POST /api/practice/submit`，B3/B4 出五维、逐字与 CDM，落 `practice_records`，同时按 D1 既有规则更新 BKT（`source_type='practice'`）。
+- 学生点「提交本段为作业」才调 F3。F3 用 `(student_id, audio_id)` 查 `practice_records`，并要求 `segment_id` 一致、`ai_score` 非空；命中则复制 `ai_score` / `words_json` / `cdm_json` 到 `submissions`，`status='ai_scored'`，返回 `{"submission_id"}`。
+- **不重复计分**：这一次的 BKT 已在练习落库时更新过，归档不再写 `bkt_history`，`submissions.bkt_before/bkt_after` 留 NULL。
+- 找不到练习记录时（非页面客户端直接调 F3、或练习分析失败后重试）回退到 B2 分析管线，保持原契约；此时才写 `source_type='homework'` 的 BKT 并回填 `bkt_before/bkt_after`。
+- 同一份作业仍只收一次提交（唯一索引），但**提交后允许继续练习**：练习不改变已归档的作业成绩，页面只是不再显示提交入口。
 
 ## 4. 接口设计
 
@@ -191,13 +205,14 @@ F2 的既有口径是「不选唱段 = 按整曲布置」。跟唱页是以分�
   3. `audio_id` 不存在 → 404「音频不存在」；`uploader_id != user_id` → 403「只能提交本人录音」（同 D1）。
   4. 解析 `allowed_segment_ids`（同 4.2）；`segment_id` 不在集合内 → 422「唱段不在本次作业范围内」；集合为空 → 422「该作业没有可提交的唱段」。
   5. 已有该学生该作业的提交 → 422「该作业已提交，不能重复提交」。
-  6. 插入 `Submission(homework_id, student_id, segment_id, audio_id, status='submitted')` 并 `flush()`；`IntegrityError`（并发撞唯一索引）→ `rollback()` 后 422 同上文案。
-  7. `analyze_service.submit(db, AnalyzeSubmitIn(segment_id=..., student_audio_id=audio_id), persist={"kind": "homework", "submission_id": sub.id})`。
-  8. 第 7 步抛任何异常（含分段没绑示范音频的 404、broker 不可达等）→ 删除占位行、commit、原样抛出，避免留下一条永远「分析中」的提交。成功 → `db.commit()`，返回 `{"task_id": "..."}`。
+  6. **复用练习成绩**：`practice_records_repo.get_by_student_audio(db, student_id, audio_id)`；命中且 `segment_id` 一致、`ai_score` 非空 → 插入 `Submission(..., status='ai_scored', ai_score=record.ai_score, ai_detail={words, defects, overallConfidence})`，`flush` 后 `commit`，返回 `{"submission_id": N}`。**不派发任务、不写 BKT**。并发撞唯一索引 → `rollback()` 后 422 同上文案。
+  7. 未命中则回退：插入 `Submission(..., status='submitted')` 并 `flush()`；`IntegrityError` → `rollback()` 后 422 同上文案。
+  8. `analyze_service.submit(db, AnalyzeSubmitIn(segment_id=..., student_audio_id=audio_id), persist={"kind": "homework", "submission_id": sub.id})`。
+  9. 第 8 步抛任何异常（含分段没绑示范音频的 404、broker 不可达等）→ 删除占位行、commit、原样抛出，避免留下一条永远「分析中」的提交。成功 → `db.commit()`，返回 `{"task_id": "..."}`。
 
-  先 `flush` 拿 id、再派发、最后 `commit`：派发失败时占位行还没提交，可以干净删除；派发成功但 `commit` 失败时，worker 末尾找不到提交行会把任务置 `failed`，不会写出错误数据。`save_result` 在分析结束前才执行，正常情况下远晚于这次 `commit`。
+  回退路径先 `flush` 拿 id、再派发、最后 `commit`：派发失败时占位行还没提交，可以干净删除；派发成功但 `commit` 失败时，worker 末尾找不到提交行会把任务置 `failed`，不会写出错误数据。`save_result` 在分析结束前才执行，正常情况下远晚于这次 `commit`。
 
-- 说明：`analyze_service.submit` 内部会再次校验分段与教师轨（404「片段不存在或未绑定示范音频」），这是 F3 之外的第二道闸门，不重复实现音轨查找逻辑。
+- 说明：`analyze_service.submit` 内部会再次校验分段与教师轨（404「片段不存在或未绑定示范音频」），这是 F3 之外的第二道闸门，不重复实现音轨查找逻辑。**练习路径不经过这道闸门**：它是把已经分析成功、已经写进 `practice_records` 的结果归档，不再访问教师轨。
 
 ### 4.4 错误码
 
@@ -225,8 +240,9 @@ F2 的既有口径是「不选唱段 = 按整曲布置」。跟唱页是以分�
 | `scripts/add_submission_segment_id.sql` | 新增，`ALTER TABLE ... ADD COLUMN IF NOT EXISTS` |
 | `scripts/add_submission_unique_index.sql` | 新增，`CREATE UNIQUE INDEX IF NOT EXISTS`；执行前先查重（本机已确认无重复） |
 | `app/repositories/homeworks_repo.py` | 新增 `get_homeworks_with_submission(db, student_id)`、`get_homework_with_submission(db, homework_id, student_id)`、`get_submission_for_student(db, homework_id, student_id)`、`add_submission(db, sub)`（只 flush）。`get_progress_rows` / `get_submission_stats` 里「表上没有唯一约束、所以要去重」的注释同步改为「历史数据可能重复，去重保留为防御；2026-10-21 起有唯一索引」 |
+| `app/repositories/practice_records_repo.py` | 新增 `get_by_student_audio(db, student_id, audio_id)`：F3 复用练习成绩时按录音定位那一次练习；查不到返回 None，由 service 决定回退 |
 | `app/schemas/homework.py` | 新增 `StudentHomeworkItem` / `StudentHomeworkListResponse` / `StudentHomeworkDetail` / `StudentSubmissionBrief` / `StudentSubmissionDetail` |
-| `app/services/homework_service.py` | 新增 `list_my_homeworks`、`my_homework_detail`、`submit_homework`、`save_result`（worker 用）、`discard_pending`（worker 失败用）、`_allowed_segment_ids`、`_student_id_or_403` |
+| `app/services/homework_service.py` | 新增 `list_my_homeworks`、`my_homework_detail`、`submit_homework`（含复用与回退两条路径）、`save_result`（worker 用）、`discard_pending`（worker 失败用）、`_allowed_segment_ids`、`_student_id_or_403` |
 | `app/api/homeworks.py` | 新增两条 GET；F3 桩替换为真实实现（路由参数改为 `<int:homework_id>`）；加本地 `_form_int` |
 | `app/services/analyze_service.py` | `practice` 形参改名 `persist`；末尾按 `persist["kind"]` 分派到 `practice_service.save_result` 或 `homework_service.save_result`；失败分支调用 `homework_service.discard_pending` |
 | `app/services/practice_service.py` | `submit` 的 metadata 加 `"kind": "practice"`；`_update_bkt` 改为公开的 `apply_bkt(db, *, student_id, dimensions, source_type, source_id) -> (before, after)`，`save_result` 调用它但忽略返回值 |
@@ -246,9 +262,9 @@ if persist:
 
 `run_analysis` 的 `except` 分支在写 `failed` 状态之后做一次 best-effort 清理：`persist["kind"] == "homework"` 时调用 `homework_service.discard_pending(persist)`，自身包一层 try/except 并记日志——清理失败不能掩盖原始失败。先写失败状态再清理，是为了即使清理抛错，前端也能拿到 `failed`。
 
-### 5.2 worker 成功落库
+### 5.2 worker 成功落库（仅回退路径）
 
-`homework_service.save_result(metadata, result)` 用 `session_scope()`（请求之外，不能用 `get_db()`）：
+复用练习成绩的 F3 在请求线程内同步写库，不经过本节；只有「没有练习记录、回退 B2」的提交才由 worker 调 `save_result`。`homework_service.save_result(metadata, result)` 用 `session_scope()`（请求之外，不能用 `get_db()`）：
 
 1. 按 `metadata["submission_id"]` 取行；不存在 → 抛 `BusinessError(500, ...)`。
 2. 若 `status != 'submitted'` → 抛错（重复任务或已被处理），由 `run_analysis` 置 failed；`discard_pending` 的 `status='submitted'` 守卫确保不会删掉已评分的行。
@@ -339,26 +355,30 @@ with session_scope() as db:
 - 作业标题、截止日、「已逾期」徽标、重点技法；
 - 状态文案：可提交 / 分析中 / 已提交（AI 分 X）/ 已批改（教师分 X）。
 
-### 7.3 录音与提交
+### 7.3 录音、练习与提交
 
-`analyzeRecording()` 在 B1 上传后分叉：
+**录音不再分叉**：作业模式与普通模式一样，停录后 B1 上传 → D1 `POST /api/practice/submit`（带 `duration_sec`）→ `pollAnalysis` 轮询 B3 → B4 → `renderAnalysisResult`。
+
+结果渲染成功后：
+
+- 普通模式：照旧 `loadLastPractice(seg.id)` 回显 D3。
+- 作业模式：把这次录音记到 `lastPracticeUpload = {segmentId, audioId, seq}`，并显示「📤 提交第 N 段为作业」按钮（`#homeworkSubmitBox`）。按钮只在 `homeworkId && homework && !homeworkSubmitted && lastPracticeUpload` 时出现；换段重练会覆盖它，**提交的永远是最近一次练习**。
+- 分析失败（B3 `failed` / 超时）不设置 `lastPracticeUpload`：没有成绩可归档，不给提交入口。
+
+点击提交按钮：
 
 ```js
-const subForm = new FormData();
-subForm.append("segment_id", String(seg.id));
-subForm.append("audio_id", String(up.file_id));
-const sub = homeworkMode
-  ? await apiPostForm(`/api/homeworks/${homeworkId}/submit`, subForm)
-  : /* 原 D1：追加 duration_sec 后 POST /api/practice/submit */;
+const form = new FormData();
+form.append("segment_id", String(lastPracticeUpload.segmentId));
+form.append("audio_id", String(lastPracticeUpload.audioId));
+const res = await apiPostForm(`/api/homeworks/${homeworkId}/submit`, form);
 ```
 
-作业模式下：
-
-- F3 成功 → `homeworkSubmitted = true`，横幅显示「已提交，AI 分析中…」，录音按钮禁用；继续用现有 `pollAnalysis` 轮询 B3/B4。B4 返回后照常 `renderAnalysisResult`，横幅显示「已提交（AI 分 X）」。
-- B3 返回 `failed` → 横幅显示失败原因，`homeworkSubmitted = false`，允许重试（worker 已删除占位行）。
-- F3 回 422「已提交」→ 视为已提交：禁用录音并刷新详情（处理「刷新页面后重交」的竞态）。
-- 页面加载时详情里已有 `submission` → 只读模式：禁用录音与选段提交，横幅显示分数与状态；仍可播放示范与查看唱词。
-- 不调用 D3 `loadLastPractice`（作业模式结果以本次提交为准，避免把练习记录误认成作业成绩）；普通模式保持原样。
+- `res.submission_id`（复用练习成绩）→ `homeworkSubmitted = true`，`refreshHomework()` 拉服务端详情刷新横幅，按钮消失；**录音入口不受影响**，学生可以继续练其它唱段。
+- `res.task_id`（回退分析管线）→ `homeworkSubmitted = true`，照旧 `pollAnalysis` → `renderAnalysisResult`，结束后 `refreshHomework()`。
+- F3 回 422「已提交」→ 视为已提交：`refreshHomework()` 后隐藏入口（处理「刷新页面后重交」的竞态）。
+- 页面加载时详情里已有 `submission` → `homeworkSubmitted = true`，只隐藏提交入口；**录音与选段不锁**，横幅显示分数与状态。
+- 不调用 D3 `loadLastPractice`（作业模式的练习记录由后端 F3 按 `audio_id` 复用，页面不需要再把练习记录误认成作业成绩）；普通模式保持原样。
 
 `stopAll()` 的既有行为会触发 `mediaRecorder.onstop` 从而上传——作业模式下与普通模式一致，不额外改。
 
@@ -390,10 +410,10 @@ const sub = homeworkMode
 2. 列表：学生 `GET /mine` → 200 且含教师刚布置的作业（F2 建）。
 3. 详情：404（不存在）、`allowed_segment_ids` 与作业 `segment_ids` 一致。
 4. F3 校验：缺字段 → 400；音频不存在 → 404；用另一学生的 `audio_id` → 403；不在作业范围的 `segment_id` → 422。
-5. 成功路径：B1 上传 → F3 → 200 且返回 `task_id`；立即再提交 → 422；B3 轮询到 `done`。
-6. 落库校验（直连库）：`submissions` 一行，`status='ai_scored'`、`ai_score` 非空、`ai_detail` 含 `words`/`defects`/`overallConfidence`、`segment_id`/`audio_id` 正确、`bkt_before`/`bkt_after` 非空且键为技法名；`bkt_history` 新增 5 行 `source_type='homework'`、`source_id=submission.id`。
-7. 教师端回显：F4 `GET /homeworks/<id>/submissions` 能看到该提交；F5 详情的 `lyrics` 与 B4 `words` 一致。所选示范没有 `lyrics_json` 时两边都是空数组（Demucs 路径的曲目本来就没有逐字数据），脚本按该段是否有歌词分别断言，不硬写「非空」。
-8. 清理：按 EXIT trap 删除 `bkt_history`（按 source_type/source_id）、`submissions`、F2 建的 `homeworks`、B1 的 `audio_files` 行与磁盘文件。脚本可重复执行。
+5. 成功路径：B1 上传 → D1 练习 → B3 轮询到 `done` → D3 回显本次练习 → F3 提交 → 200 且返回 `submission_id`、**不返回 `task_id`**；立即再提交 → 422。
+6. 落库校验（直连库）：`submissions` 一行，`status='ai_scored'`、`ai_score` 与练习记录一致、`ai_detail` 含 `words`/`defects`/`overallConfidence`、`segment_id`/`audio_id` 正确、`submitted_at` 非空、`bkt_before`/`bkt_after` **为 NULL**、没有 `source_type='homework'` 的 BKT 行；同一份录音的 `practice_records` 一行，练习链路 `bkt_history` 5 行 `source_type='practice'`、`source_id=practice_record.id`。
+7. 教师端回显：F4 `GET /homeworks/<id>/submissions` 能看到该提交；F5 详情的 `lyrics` 与练习 B4 `words` 一致。所选示范没有 `lyrics_json` 时两边都是空数组（Demucs 路径的曲目本来就没有逐字数据），脚本按该段是否有歌词分别断言，不硬写「非空」。
+8. 清理：按 EXIT trap 删除 `bkt_history`（homework 与 practice 两种来源）、`submissions`、`practice_records`、F2 建的 `homeworks`、B1 的 `audio_files` 行与磁盘文件。**practice 来源的 BKT 行必须清**，否则每跑一次冒烟都会把 stu001 的掌握度往前推。脚本可重复执行。
 
 ### 10.2 前端验证
 
@@ -401,7 +421,8 @@ const sub = homeworkMode
 
 - 学生登录 → `my_homework.html` 列表与详情渲染真实数据；教师访问显示「仅学生可见」。
 - 点「去完成」→ URL 带 `homework_id`，跟唱页曲目锁定、分段只剩作业范围、横幅显示正确。
-- 已有提交的作业进入跟唱页 → 录音按钮禁用、横幅显示分数。
+- 已有提交的作业进入跟唱页 → **录音按钮仍可用**，只隐藏「提交本段为作业」入口；横幅显示分数。
+- 练习出结果后出现提交入口；提交成功后入口消失、横幅刷新为「已提交（AI 分 X）」，且仍可继续录下一段（不实际提交）。
 - 录音提交链路（`getUserMedia`）若浏览器无麦克风权限，以后端冒烟脚本为准，页面侧只验到「点击后按钮禁用、请求发出」。
 
 ### 10.3 其他
@@ -419,6 +440,7 @@ const sub = homeworkMode
 5. `submitted_at` 沿用库内 `NOW()`（UTC）；逾期判定与教师端一样按「UTC 日期 > deadline」比较，跨零点的极端情况会与北京时间直觉差一天。这是既有时间区口径，不在本轮修。
 6. 无「重交/补交」「教师退回」「作业关闭」「班级维度」。
 7. 唯一索引上线前的历史数据已确认无重复；若别的环境有重复行，迁移脚本会失败，需先人工清理（脚本头部写明）。
+8. **归档的是「点提交时最近一次练习」**：F3 按 `(student_id, audio_id)` 定位，学生换段重练后页面上的提交入口指向最新那次录音；更早的练习记录仍留在 `practice_records`，但不影响作业成绩。练习成绩复用意味着作业分与当次 D1 练习分完全一致，不再有「提交时重新分析」的第二次评分。
 
 ## 12. 实施顺序
 

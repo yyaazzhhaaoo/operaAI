@@ -6,7 +6,13 @@ from sqlalchemy.orm import Session
 
 from app.common.errors import BusinessError
 from app.models import Homework, ScoreCalibration, Submission
-from app.repositories import audio_repo, homeworks_repo, library_repo, user_repo
+from app.repositories import (
+    audio_repo,
+    homeworks_repo,
+    library_repo,
+    practice_records_repo,
+    user_repo,
+)
 from app.schemas.audio import AnalyzeSubmitIn
 from app.schemas.homework import (
     BktChange,
@@ -338,12 +344,16 @@ def submit_homework(
     homework_id: int,
     segment_id: int,
     audio_id: int,
-) -> str:
-    """F3：校验后建占位提交，投 B2 管线，返回 task_id。
+) -> dict:
+    """F3：校验后把一次练习归档为作业提交；没有练习记录时回退分析管线。
 
-    顺序是「先 flush 拿 id、再派发、最后 commit」：派发失败时占位行还没提交，
-    可以干净删除；派发成功但 commit 失败时，worker 末尾找不到提交行会把任务
-    置为 failed，不会写出错误数据。
+    2026-10-21 起页面的动作是「先练习、再提交」：跟唱页录音走 D1，结果出来后
+    学生点「提交本段为作业」才调本接口。此时 practice_records 里已有这次录音的
+    五维与逐字结果，直接复制进 submissions（status=ai_scored），不重跑 librosa、
+    也不重复更新 BKT（练习时已更新过），返回 {"submission_id": ...}，前端不用轮询。
+
+    找不到对应练习记录（例如非页面客户端直接调 F3）时保持原契约：建占位提交、
+    投 B2 管线，返回 {"task_id": ...}，由 worker 回填分数与 BKT。
     """
     student_id = _student_id_or_403(db, user_id)
 
@@ -366,6 +376,42 @@ def submit_homework(
     if homeworks_repo.get_submission_for_student(db, homework_id, student_id) is not None:
         raise BusinessError(422, "该作业已提交，不能重复提交")
 
+    record = practice_records_repo.get_by_student_audio(db, student_id, audio_id)
+    if (
+        record is not None
+        and record.segment_id == segment_id
+        and record.ai_score is not None
+    ):
+        cdm = record.cdm_json or {}
+        sub = Submission(
+            homework_id=homework_id,
+            student_id=student_id,
+            segment_id=segment_id,
+            audio_id=audio_id,
+            status="ai_scored",
+            ai_score=record.ai_score,
+            # 形状与 worker 的 save_result 一致；bkt_before/after 留空——这一次的
+            # BKT 已在 D1 落 practice_records 时更新过，提交只是归档，不重复计分。
+            ai_detail={
+                "words": record.words_json,
+                "defects": cdm.get("defects"),
+                "overallConfidence": cdm.get("overallConfidence"),
+            },
+        )
+        try:
+            homeworks_repo.add_submission(db, sub)
+            submission_id = sub.id
+            db.commit()
+        except IntegrityError:
+            # 并发两个请求同时通过了上面的查询，唯一索引在这里挡住第二个。
+            # 必须先 rollback，否则会话处于失败状态，后续任何查询都会报错。
+            db.rollback()
+            raise BusinessError(422, "该作业已提交，不能重复提交") from None
+        return {"submission_id": submission_id}
+
+    # 回退路径：顺序是「先 flush 拿 id、再派发、最后 commit」——派发失败时占位行
+    # 还没提交，可以干净删除；派发成功但 commit 失败时，worker 末尾找不到提交行
+    # 会把任务置为 failed，不会写出错误数据。
     sub = Submission(
         homework_id=homework_id,
         student_id=student_id,
@@ -398,7 +444,7 @@ def submit_homework(
         raise
 
     db.commit()
-    return task_id
+    return {"task_id": task_id}
 
 
 # 标签的置信度下限（spec 3.5）。0.7 这个数是**页面自己声明的**（待批改卡片区写着

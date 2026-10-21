@@ -1642,18 +1642,18 @@ if path.parent != root:
 1. **接口**：
    - `GET /api/homeworks/mine`：学生本人的作业列表，含 `status`（`todo` / `submitted` / `ai_scored` / `reviewed`）、`overdue` 与轻量 `submission`；
    - `GET /api/homeworks/mine/<homework_id>`：追加 `segment_ids`、`allowed_segment_ids`、`can_submit`、`submission.words` 与 `submission.cdm_tags`；
-   - `POST /api/homeworks/<homework_id>/submit`：`multipart`，字段 `segment_id` + `audio_id`，返回 `{"task_id"}`，后续复用 B3/B4。
-2. **提交行在 F3 当场创建**（`status='submitted'`、`submitted_at=DEFAULT NOW()`），worker 成功后原位回填 `ai_score / ai_detail / bkt_before / bkt_after` 并改为 `ai_scored`。这使 `submitted` 这一档**首次有人写**，第 38 条「全项目没有任何代码写它」的记录自本次起不再成立。
-3. **每份作业只收一次提交**：新增唯一索引 `uq_submissions_homework_student (homework_id, student_id)`；已有提交再提交回 422。
+   - `POST /api/homeworks/<homework_id>/submit`：`multipart`，字段 `segment_id` + `audio_id`，**两种响应形状**：命中练习记录时同步归档、返回 `{"submission_id"}`（不用轮询）；未命中时回退分析管线、返回 `{"task_id"}`（照旧走 B3/B4）。
+2. **「先练习、再提交」（2026-10-21 晚修正）**：跟唱页在作业模式下录音先走 D1 `POST /api/practice/submit`，成绩落 `practice_records`；学生看过结果后点「提交本段为作业」才调 F3。F3 按 `(student_id, audio_id)` 找到练习记录（且 `segment_id` 一致、`ai_score` 非空）时，直接建一条 `status='ai_scored'` 的提交行，`ai_score` / `ai_detail` 复制自练习记录，**不重跑 librosa、不重复更新 BKT**。找不到练习记录（例如非页面客户端直接调 F3）时保持原契约：当场建 `status='submitted'` 的占位行并投 B2，worker 成功后原位回填并改为 `ai_scored`。这使 `submitted` 这一档仍然有人写（仅回退路径）。
+3. **每份作业只收一次提交**：新增唯一索引 `uq_submissions_homework_student (homework_id, student_id)`；已有提交再提交回 422。**练习不受此限制**：提交前可任选段反复练；提交后仍可继续练习（练习不改变作业成绩），只是不再显示提交入口。
 4. **多段作业的口径**：`homeworks.segment_ids` 是候选集合，学生任选一段录制并提交，提交一次后作业完成，其余唱段不再评。现有种子数据（12 号作业挂 10 段、5 名学生各 1 条提交）与这个口径一致。
 5. **整曲作业降级**：`segment_ids=[]` 时可选集合 = 该曲目当前全部分段；曲目没有分段时 `can_submit=false`，F3 回 422。本轮不做整曲录音。
 6. **逾期可交**：`overdue` 对未提交作业看 `deadline < 北京时间今天`；对已提交作业看 `submitted_at` 日期是否晚于 `deadline`，与教师端「逾期提交组合数」(`get_submission_stats`) 同口径。
 7. **`submissions.segment_id` 为普通 INT，不加外键**：`replace_segments` 会整批删除旧分段，外键会让「重新解析已有提交的曲目」失败；分段重解析后该 id 可能悬空，与 `homeworks.segment_ids` 的 JSONB 一样按历史引用处理。
-8. **`ai_detail` 写入形状**：`{"words": [...], "defects": [...], "overallConfidence": number}`。不写 `featureMatrix`（B4 没有该数据源），不写 `dimensions`（五维只在当次 B4/redis 里，TTL 1 小时）。
-9. **BKT**：沿用 D1 的临时规则，写 `source_type='homework'`、`source_id=submissions.id`，`bkt_before` / `bkt_after` 为「技法名 → P(L)」扁平字典。
+8. **`ai_detail` 写入形状**：`{"words": [...], "defects": [...], "overallConfidence": number}`。两条路径同形；复用练习成绩时 `words` / `defects` / `overallConfidence` 取自 `practice_records.words_json` 与 `cdm_json`。不写 `featureMatrix`（B4 没有该数据源），不写 `dimensions`（五维只在当次 B4/redis 里，TTL 1 小时）。
+9. **BKT**：练习（D1）与作业回退路径都沿用 D1 的临时规则；**复用练习成绩的提交不写任何 BKT 行**，`bkt_before` / `bkt_after` 留 NULL——这一次的掌握度已在练习落库时更新过，提交只是归档。回退路径仍写 `source_type='homework'`、`source_id=submissions.id`，`bkt_before` / `bkt_after` 为「技法名 → P(L)」扁平字典。
 10. **学生看全部作业**：`homeworks` 没有班级/名单维度，与 F1 一致，不按教师过滤。`homeworks.status` 目前没有「关闭」入口，F3 不检查它；截止日只影响 `overdue`，不阻止提交。
 
-**已知限制**：各条见 spec 第 11 节（多段作业只评一段、整曲降级、无重交/退回/关闭、回看无五维、`submitted_at` 的 UTC 口径、唯一索引上线前需确认无重复行）。
+**已知限制**：各条见 spec 第 11 节（多段作业只评一段、整曲降级、无重交/退回/关闭、回看无五维、`submitted_at` 的 UTC 口径、唯一索引上线前需确认无重复行）；另有「练习成绩只能归档学生点提交时对应的那一次录音」（按 `audio_id` 定位，换段重练后再提交的是最新那次）。
 
 ---
 

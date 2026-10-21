@@ -632,6 +632,14 @@ body{
       <div id="dimensionList"></div>
     </div>
 
+    <!-- 作业模式：练习完成后才出现。提交的是「刚练完的那一段」，与当前选中段无关 -->
+    <div class="card" id="homeworkSubmitBox" style="display:none;padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <button class="btn-primary" id="btnSubmitHomework" onclick="submitHomeworkPractice()">📤 提交本段为作业</button>
+        <span id="homeworkSubmitHint" style="font-size:12px;color:var(--text-secondary)"></span>
+      </div>
+    </div>
+
     <div class="card" style="padding:16px">
       <div class="card-header" style="margin-bottom:8px">
         <div class="card-title">
@@ -681,7 +689,10 @@ let homeworkId = (() => {
   return Number.isInteger(n) && n > 0 ? n : null;
 })();
 let homework = null;           // 作业详情；加载失败时退回普通跟唱模式
-let homeworkSubmitted = false; // 已提交（含加载时已有提交），录音按钮锁定
+let homeworkSubmitted = false; // 已提交（含加载时已有提交），只隐藏提交入口，不锁录音
+// 作业模式下刚练完的那一次录音：{ segmentId, audioId, seq }。练习结果出来后才
+// 显示「提交本段为作业」；新练一段会覆盖它，提交的永远是最近一次练习。
+let lastPracticeUpload = null;
 
 // ===== 实时音高检测（浏览器本地）=====
 // 《2-系统设计说明》5.2 的技术决策：逐字实时反馈要走 <100ms，音高检测必须在
@@ -777,8 +788,8 @@ async function loadDemos() {
     o.textContent = d.title;
     return o;
   }));
-  // 作业模式锁定到作业指定的曲目；该曲目不在 C1 列表里时退回第一条，
-  // 录音按钮仍会被 updateHomeworkLock 锁住（作业没有可提交的唱段）。
+  // 作业模式锁定到作业指定的曲目；该曲目不在 C1 列表里时退回第一条——
+  // 分段仍会按 allowed_segment_ids 过滤成空列表，录音入口自然不可用。
   const lockedDemo = homeworkId && homework && homework.demo_id != null
     ? demos.find(d => d.id === homework.demo_id)
     : null;
@@ -1324,8 +1335,8 @@ async function toggleRecord() {
   if (isAnalyzing) { addLog("上一次录音还在分析中，请稍候", "warn"); return; }
   if (homeworkId) {
     if (!homework) { alert("作业信息还没加载完成"); return; }
-    if (homeworkSubmitted) { alert("该作业已提交，不能重复录制"); return; }
-    if (!homework.can_submit) { alert("该作业没有可提交的唱段"); return; }
+    // 已提交后仍可继续练习（练习不改变作业成绩），所以这里不挡 homeworkSubmitted；
+    // 「有没有可提交的唱段」由分段列表是否为空自然体现。
     if (homework.demo_id != null && currentDemoId !== homework.demo_id) {
       alert("作业模式只能练习作业指定的曲目"); return;
     }
@@ -1914,22 +1925,17 @@ async function analyzeRecording(chunks, mimeType) {
     const subForm = new FormData();
     subForm.append("segment_id", String(seg.id));
     subForm.append("audio_id", String(up.file_id));
-    let sub;
-    if (homeworkId) {
-      // F3：作业提交。成功即锁定录音（一份作业只收一次），随后照常轮询
-      // B3/B4 拿本次分析的五维与逐字结果。
-      sub = await apiPostForm(`/api/homeworks/${homeworkId}/submit`, subForm);
-      homeworkSubmitted = true;
-      renderHomeworkBanner();
-      updateHomeworkLock();
-      addLog("作业已提交，AI 分析中…", "success");
-      await refreshHomework();
-    } else {
-      subForm.append("duration_sec", wav.duration.toFixed(2));
-      sub = await apiPostForm("/api/practice/submit", subForm);
-    }
+    subForm.append("duration_sec", wav.duration.toFixed(2));
+    // 作业模式也先走 D1 练习：录音只是练习，成绩落 practice_records。学生看过
+    // 结果后点「提交本段为作业」才调 F3；提交前可换任意段反复练。
+    const sub = await apiPostForm("/api/practice/submit", subForm);
 
     const result = await pollAnalysis(sub.task_id);
+    // 分析成功才记下这次练习：F3 复用 practice_records 里这一行；失败时没有
+    // 可归档的成绩，别给「提交」入口去触发一条重复分析的兜底链路。
+    if (homeworkId) {
+      lastPracticeUpload = { segmentId: seg.id, audioId: up.file_id, seq: seg.seq };
+    }
     const cur = segments[currentSegmentIdx];
     // 分析期间切了段：结果属于上一段，不往新段的面板上贴
     if (cur && cur.id === seg.id) {
@@ -1937,31 +1943,14 @@ async function analyzeRecording(chunks, mimeType) {
       const overall = Number.isFinite(result.overall) ? Math.round(result.overall) : "—";
       addLog(`✅ 分析完成！综合评分: ${overall} 分`, "success");
       if (!homeworkId) loadLastPractice(seg.id);
+      else updateHomeworkSubmitBox();
     }
-    // 提交已经落库，与「当前有没有停在原分段」无关，作业状态都要刷新
-    if (homeworkId) await refreshHomework();
   } catch (e) {
     addLog(`分析失败：${e.message}`, "error");
-    // 作业模式下以服务端为准：F3 若回 422「已提交」或上方已提交但分析失败，
-    // 刷新详情能把「占位行已被 worker 删除、可以重交」与「确实已提交」分开。
-    if (homeworkId) {
-      await refreshHomework();
-      if (homeworkSubmitted) {
-        // worker 的失败分支先写 failed 状态、再删占位行，两步之间有一个
-        // 很窄的窗口。刷新正好落在窗口里时会看到「已提交」，稍等再刷一次。
-        await new Promise(r => setTimeout(r, 1200));
-        await refreshHomework();
-      }
-      // 服务端仍认为「已提交」时不覆盖状态（F3 的 422 竞态就是这种情形）；
-      // 占位行已被 worker 删掉时，把失败原因写在横幅上（spec 7.3）。
-      if (!homeworkSubmitted) {
-        document.getElementById("hbStatus").textContent = `分析失败：${e.message}`;
-      }
-    }
   } finally {
     isAnalyzing = false;
     btnRecord.disabled = false;
-    updateHomeworkLock();
+    updateHomeworkSubmitBox();
   }
 }
 
@@ -2229,12 +2218,58 @@ function renderHomeworkBanner() {
 }
 
 function updateHomeworkLock() {
+  // 录音按钮不再按作业状态锁定：提交前后都能继续练习，锁定只作用于提交入口。
   if (!homeworkId) return;
-  const btn = document.getElementById("btnRecord");
-  const locked = !homework || homeworkSubmitted || !homework.can_submit;
-  btn.disabled = locked;
-  btn.style.opacity = locked ? "0.55" : "";
-  btn.style.cursor = locked ? "not-allowed" : "";
+  updateHomeworkSubmitBox();
+}
+
+function updateHomeworkSubmitBox() {
+  const box = document.getElementById("homeworkSubmitBox");
+  if (!box) return;
+  const ready = !!homeworkId && !!homework && !homeworkSubmitted && !!lastPracticeUpload;
+  box.style.display = ready ? "block" : "none";
+  if (!ready) return;
+  const seq = (lastPracticeUpload.seq != null) ? lastPracticeUpload.seq : "—";
+  document.getElementById("btnSubmitHomework").textContent = `📤 提交第 ${seq} 段为作业`;
+  document.getElementById("homeworkSubmitHint").textContent =
+    "提交后作业完成、不能重交；仍可继续练习其它唱段。";
+}
+
+async function submitHomeworkPractice() {
+  if (!homeworkId || homeworkSubmitted || !lastPracticeUpload) return;
+  const btn = document.getElementById("btnSubmitHomework");
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const form = new FormData();
+    form.append("segment_id", String(lastPracticeUpload.segmentId));
+    form.append("audio_id", String(lastPracticeUpload.audioId));
+    const res = await apiPostForm(`/api/homeworks/${homeworkId}/submit`, form);
+
+    if (res && res.task_id) {
+      // 后端没找到这次练习的记录，回退到 B2 分析管线：照旧轮询 B3/B4。
+      // 横幅状态等 refreshHomework 拉到服务端详情后再刷新，不在这里用旧数据渲染。
+      homeworkSubmitted = true;
+      isAnalyzing = true;
+      try {
+        const result = await pollAnalysis(res.task_id);
+        renderAnalysisResult(result);
+        addLog("✅ 作业已提交，AI 分析完成", "success");
+      } finally {
+        isAnalyzing = false;
+      }
+    } else {
+      // 复用练习成绩：秒级完成，无需轮询。重新拉详情拿服务端算好的状态。
+      homeworkSubmitted = true;
+      addLog("✅ 作业已提交，成绩已归档", "success");
+    }
+    await refreshHomework();
+  } catch (e) {
+    addLog(`提交作业失败：${e.message}`, "error");
+  } finally {
+    btn.disabled = false;
+    updateHomeworkSubmitBox();
+  }
 }
 
 // ============================================================
@@ -2257,9 +2292,6 @@ async function init() {
   if (homeworkId) await enterHomeworkMode();
   try {
     await loadDemos();
-    // loadDemos → changePiece → stopAll() 会把 btnRecord.disabled 重置成 false，
-    // 必须在它之后再套一次锁，否则「已提交 / 无可提交唱段」的作业按钮看着可点。
-    updateHomeworkLock();
     addLog(homeworkId
       ? "📝 作业模式已加载，选择作业要求的分段开始录制"
       : "🚀 智能陪练已加载，选择曲目和段落开始练习", "info");
