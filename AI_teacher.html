@@ -229,6 +229,7 @@ body{
 }
 .cdm-tag.high{background:var(--danger-soft);color:var(--danger);border:1px solid rgba(184,58,47,0.2)}
 .cdm-tag.medium{background:var(--warning-soft);color:var(--warning);border:1px solid rgba(201,168,76,0.2)}
+.cdm-tag.low{background:var(--bg-secondary);color:var(--text-muted);border:1px solid var(--border-light)}
 
 .data-lock-banner{
   display:flex;
@@ -560,6 +561,7 @@ body{
 
   <div class="nav-group" data-role="student">
     <div class="nav-group-title">🎤 学生练习</div>
+    <a href="my_homework.html" class="nav-item"><span class="icon">📝</span>我的作业</a>
     <a href="sing_along.html" class="nav-item"><span class="icon">🎙️</span>实时跟唱</a>
     <a href="AI_teacher.html" class="nav-item active"><span class="icon">🤖</span>AI教练对话</a>
     <a href="cat_test.html" class="nav-item"><span class="icon">🎯</span>摸底测试（CAT）</a>
@@ -630,7 +632,7 @@ body{
 
         <div class="divider-label"><span>CDM 归因诊断</span></div>
 
-        <!-- CDM 标签：库里无对应表，renderContext() 会落进「待接入」分支 -->
+        <!-- CDM 标签：E1 优先读练习 cdm_json，无则回退作业 ai_detail；两处都无时落进「待接入」 -->
         <div class="data-section" id="cdmList"></div>
 
       </div>
@@ -851,12 +853,20 @@ function renderContext(ctx) {
     }
   }
 
-  // CDM：库里无数据源，显式空位
+  // CDM：优先最近一次练习的 cdm_json，无则回退作业提交的 ai_detail.defects（E1），按置信度降序
   const cdmList = document.getElementById("cdmList");
   if (cdmList) {
-    cdmList.innerHTML = ctx.cdm
-      ? ctx.cdm.map(c => `<div class="cdm-tag high">✓ ${escapeHtml(String(c))}</div>`).join("")
-      : placeholder("CDM 归因待接入");
+    if (ctx.cdm === null || ctx.cdm === undefined) {
+      cdmList.innerHTML = placeholder("CDM 归因待接入");
+    } else if (!ctx.cdm.length) {
+      cdmList.innerHTML = placeholder("暂无归因标签");
+    } else {
+      cdmList.innerHTML = ctx.cdm.map(c => {
+        const sev = c.severity === "high" ? "high" : (c.severity === "low" ? "low" : "medium");
+        const conf = Number.isFinite(c.confidence) ? ` · ${Math.round(c.confidence * 100)}%` : "";
+        return `<div class="cdm-tag ${sev}">✓ ${escapeHtml(String(c.label))}${conf}</div>`;
+      }).join("");
+    }
   }
 }
 

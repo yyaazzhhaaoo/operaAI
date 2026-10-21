@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""页面路由：把 14 个 HTML 收进 Flask，逐页挂鉴权。
+"""页面路由：把 15 个 HTML 收进 Flask，逐页挂鉴权。
 
 页面不是接口，所以这个蓝图**没有 url_prefix**——/api 是接口的 Base URL
 （《5-接口清单》第 1 节），页面挂在站点根下（/dashboard.html）。
@@ -38,6 +38,7 @@ PROTECTED_PAGES = [
     "demo_library",
     "annotation",
     "homework",
+    "my_homework",
     "tracking",
     "knowledge_graph",
     "cdm_report",
@@ -62,9 +63,9 @@ def _serve(name):
     return view
 
 
-# 循环注册而非写 13 个视图函数：它们的函数体完全相同，逐个写只是把同一个
-# 字符串抄 13 遍。endpoint 必须显式命名——不指定的话 Flask 会从函数名
-# "view" 推导，13 条路由全叫 page.view 而当场冲突。
+# 循环注册而非写 14 个视图函数：它们的函数体完全相同，逐个写只是把同一个
+# 字符串抄 14 遍。endpoint 必须显式命名——不指定的话 Flask 会从函数名
+# "view" 推导，14 条路由全叫 page.view 而当场冲突。
 for _name in PROTECTED_PAGES:
     page_bp.add_url_rule(
         f"/{_name}.html",

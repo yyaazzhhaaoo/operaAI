@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>戏韵AI · 我的作业</title>
+<style>
+/* ============================================================
+   全新浅色高对比度配色 · 宣纸背景 + 景泰蓝/朱砂红
+   专为中老年教师优化：大字体、高对比度、清晰色彩
+   ============================================================ */
+:root {
+  /* 宣纸背景系 */
+  --bg-primary: #F5EDE4;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F0E8DC;
+  --bg-hover: #F5F0EA;
+  --bg-card-header: #F8F3EC;
+
+  /* 文字色 — 深褐暖调，高对比 */
+  --text-primary: #2D1F14;
+  --text-secondary: #5A4A3A;
+  --text-muted: #8A7A6A;
+  --text-light: #B0A090;
+
+  /* 边框 — 暖灰 */
+  --border-light: #E8DDD0;
+  --border-medium: #D5C8B8;
+  --border-strong: #C0B0A0;
+
+  /* 曲线主色 — 高饱和、高辨识 */
+  --teacher-color: #0066B3;
+  --teacher-glow: rgba(0, 102, 179, 0.25);
+  --teacher-shadow: rgba(0, 102, 179, 0.15);
+  --student-color: #C0392B;
+  --student-glow: rgba(192, 57, 43, 0.20);
+  --tolerance-color: rgba(90, 143, 123, 0.18);
+
+  /* UI 主色 */
+  --primary: #0066B3;
+  --primary-hover: #0055A0;
+  --primary-glow: rgba(0, 102, 179, 0.30);
+  --primary-soft: rgba(0, 102, 179, 0.08);
+  --primary-border: rgba(0, 102, 179, 0.25);
+
+  /* 功能语义 */
+  --success: #4A8F6B;
+  --success-soft: rgba(74, 143, 107, 0.12);
+  --warning: #C9A84C;
+  --warning-soft: rgba(201, 168, 76, 0.12);
+  --danger: #B83A2F;
+  --danger-soft: rgba(184, 58, 47, 0.12);
+
+  /* 维度评分 */
+  --dim-high: #4A8F6B;
+  --dim-mid: #C9A84C;
+  --dim-low: #B83A2F;
+
+  /* 导航渐变 — 宣纸暖调 */
+  --nav-gradient: linear-gradient(90deg, #F5EDE4, #E8DDD0 40%, #D5C8B8 50%, #E8DDD0 60%, #F5EDE4);
+  --progress-gradient: linear-gradient(90deg, #0066B3, #4A8AF4);
+
+  /* 字体 */
+  --font-base: 16px;
+  --font-large: 19px;
+  --font-small: 13px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg-primary);
+  color:var(--text-primary);
+  min-height:100vh;
+  line-height:1.7;
+  font-size:var(--font-base);
+}
+
+/* ===== Navbar 浅色宣纸风格 ===== */
+.navbar{
+  background:var(--nav-gradient);
+  border-bottom:2px solid var(--border-medium);
+  padding:0 24px;
+  height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  position:sticky;
+  top:0;
+  z-index:50;
+}
+.nav-brand{display:flex;align-items:center;gap:12px}
+.nav-brand .logo{
+  width:34px;height:34px;
+  background:linear-gradient(135deg, var(--primary), #004080);
+  border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:700;color:#fff;
+  box-shadow:0 2px 12px var(--primary-glow);
+}
+.nav-brand h1{font-size:17px;color:var(--text-primary);font-weight:700}
+.nav-brand .badge{
+  background:var(--primary-soft);
+  color:var(--primary);
+  padding:2px 10px;border-radius:12px;
+  font-size:11px;font-weight:600;
+  border:1px solid var(--primary-border);
+}
+.nav-user{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary)}
+.nav-user .avatar{
+  width:30px;height:30px;border-radius:50%;
+  background:linear-gradient(135deg, #B89076, #8B6B4F);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;color:#fff;
+}
+
+/* ===== Layout ===== */
+.layout{display:flex;min-height:calc(100vh - 58px)}
+.sidebar{
+  width:200px;background:var(--bg-secondary);
+  border-right:2px solid var(--border-light);
+  padding:12px 0;position:fixed;height:100%;overflow-y:auto;z-index:40;
+}
+.nav-group{margin-bottom:6px}
+.nav-group-title{
+  padding:6px 16px;font-size:11px;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:0.8px;font-weight:700;
+}
+.nav-item{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 16px;margin:0 8px;
+  color:var(--text-secondary);font-size:13px;
+  cursor:pointer;transition:all 0.2s;text-decoration:none;
+  border-radius:8px;border-left:4px solid transparent;
+}
+.nav-item:hover{color:var(--text-primary);background:var(--bg-hover)}
+.nav-item.active{
+  color:var(--primary);
+  background:var(--primary-soft);
+  border-left-color:var(--primary);
+  font-weight:600;
+}
+.nav-item .icon{font-size:16px;width:22px;text-align:center}
+.nav-badge{
+  margin-left:auto;background:var(--danger);color:#fff;
+  font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600;
+}
+/* min-width:0 不能删：它是 flex item 的默认值 auto 的覆盖。auto 让本块不能
+   窄于内容的 min-content，而 .segment-list 是横向滚动的一行卡片——段落一多
+   （demo 16 有 10 段），min-content 就大到把本块顶到 max-width，整页横向溢出
+   （实测视口 1440 撑到 1800）。归零后本块恒定收住，溢出交给卡片区自己滚。 */
+.main-content{margin-left:200px;flex:1;min-width:0;padding:20px;max-width:1600px}
+
+/* ===== 页面头部 ===== */
+.page-header{margin-bottom:16px}
+.page-header h2{font-size:20px;color:var(--text-primary);font-weight:700;margin-bottom:2px}
+.page-header p{font-size:14px;color:var(--text-secondary)}
+
+/* ===== 卡片 ===== */
+.card{
+  background:var(--bg-secondary);
+  border:1px solid var(--border-light);
+  border-radius:14px;
+  padding:16px 18px;
+  margin-bottom:14px;
+  position:relative;
+  box-shadow:0 1px 4px rgba(0,0,0,0.04);
+  transition:border-color 0.3s, box-shadow 0.3s;
+}
+.card:hover{border-color:var(--border-medium);box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+.card-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:12px;flex-wrap:wrap;gap:8px;
+}
+.card-title{
+  font-size:15px;font-weight:700;color:var(--text-primary);
+  display:flex;align-items:center;gap:8px;
+}
+.card-title .icon{
+  width:28px;height:28px;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:15px;
+  background:var(--primary-soft);color:var(--primary);
+}
+.card-subtitle{font-size:13px;color:var(--text-muted)}
+
+/* ===== 按钮 — 更大更易点击 ===== */
+.btn-primary{
+  padding:10px 22px;border:none;border-radius:10px;
+  background:var(--primary);
+  color:#fff;font-size:14px;font-weight:700;
+  cursor:pointer;transition:all 0.3s;
+  display:inline-flex;align-items:center;gap:6px;
+  box-shadow:0 2px 12px var(--primary-glow);
+  min-height:44px;
+}
+.btn-primary:hover{
+  background:var(--primary-hover);
+  box-shadow:0 4px 20px var(--primary-glow);
+  transform:translateY(-1px);
+}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* ===== 我的作业 ===== */
+.homework-layout{display:grid;grid-template-columns:360px minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1100px){.homework-layout{grid-template-columns:1fr}}
+.list-card,.detail-card{padding:0;overflow:hidden}
+.list-card .card-header{padding:14px 16px 0;margin-bottom:8px}
+.homework-list{max-height:calc(100vh - 210px);overflow-y:auto}
+.homework-item{padding:12px 16px;border-bottom:1px solid var(--border-light);cursor:pointer;border-left:4px solid transparent}
+.homework-item:hover{background:var(--bg-hover)}
+.homework-item.active{background:var(--primary-soft);border-left-color:var(--primary)}
+.hw-title{font-weight:700;color:var(--text-primary);margin-bottom:2px}
+.hw-meta{font-size:13px;color:var(--text-muted)}
+.hw-row{display:flex;align-items:center;gap:6px;margin-top:6px}
+.hw-score{margin-left:auto;font-weight:700;color:var(--primary)}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;background:var(--bg-tertiary);color:var(--text-secondary)}
+.badge.warn{background:var(--warning-soft);color:var(--warning)}
+.badge.info{background:var(--primary-soft);color:var(--primary)}
+.badge.primary{background:var(--primary-soft);color:var(--primary)}
+.badge.success{background:var(--success-soft);color:var(--success)}
+.badge.danger{background:var(--danger-soft);color:var(--danger)}
+.detail-empty{padding:40px 20px;text-align:center;color:var(--text-muted)}
+#detailBody{padding:18px}
+.detail-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.detail-header h3{font-size:18px;margin-bottom:4px}
+.detail-action{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hint-danger{font-size:13px;color:var(--danger);font-weight:600}
+.detail-section{border-top:1px solid var(--border-light);margin-top:14px;padding-top:12px}
+.detail-section h4{font-size:14px;margin-bottom:8px;color:var(--text-primary)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:var(--primary-soft);color:var(--primary);border:1px solid var(--primary-border);border-radius:12px;padding:1px 10px;font-size:12px}
+.muted{color:var(--text-muted);font-size:13px}
+.submission-box{background:var(--bg-primary);border:1px solid var(--border-light);border-radius:10px;padding:12px}
+.submission-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;margin-bottom:10px}
+.comment{background:var(--bg-secondary);border-left:3px solid var(--success);padding:8px 10px;margin-bottom:10px;font-size:14px}
+.word-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px}
+.word-table th,.word-table td{padding:4px 6px;border-bottom:1px solid var(--border-light);text-align:left}
+.word-table .green{color:var(--success);font-weight:600}
+.word-table .yellow{color:var(--warning);font-weight:600}
+.word-table .red{color:var(--danger);font-weight:600}
+.cdm-tags{display:flex;gap:6px;flex-wrap:wrap}
+.cdm-tag{background:var(--bg-secondary);border:1px solid var(--border-medium);border-radius:10px;padding:2px 8px;font-size:12px}
+.cdm-tag.high{border-color:var(--danger);color:var(--danger)}
+.cdm-tag.medium{border-color:var(--warning);color:var(--warning)}
+.cdm-tag.low{border-color:var(--border-medium);color:var(--text-secondary)}
+.notice{background:var(--warning-soft);border:1px solid var(--warning);color:var(--text-primary);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:14px}
+
+/* ===== 滚动条 ===== */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg-primary);border-radius:3px}
+::-webkit-scrollbar-thumb{background:var(--border-medium);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--border-strong)}
+
+/* ===== 响应式 ===== */
+@media (max-width:1200px){.sidebar{display:none}.main-content{margin-left:0}}
+@media (max-width:768px){.nav-brand h1{font-size:14px}}
+
+        /* 按登录角色显示导航分组：角色就绪前不显示，避免教师菜单闪现 */
+        .nav-group[data-role] { display: none; }
+        body.role-teacher .nav-group[data-role="teacher"] { display: block; }
+        body.role-student .nav-group[data-role="student"] { display: block; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand">
+    <div class="logo">戏</div>
+    <h1>戏韵AI · 我的作业</h1>
+    <span class="badge">学生练习</span>
+  </div>
+  <div class="nav-user">
+    <div class="avatar">🎭</div>
+    <span>李小燕</span>
+    <span style="color:var(--text-muted);font-size:13px">|</span>
+    <span style="color:var(--text-secondary);font-size:13px">初级班</span>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="nav-group" data-role="teacher">
+      <div class="nav-group-title">核心功能</div>
+      <a href="dashboard.html" class="nav-item"><span class="icon">📊</span>班级看板</a>
+    </div>
+    <div class="nav-group" data-role="teacher">
+      <div class="nav-group-title">教学工作台</div>
+      <a href="demo_library.html" class="nav-item"><span class="icon">🎵</span>示范库管理</a>
+      <a href="annotation.html" class="nav-item"><span class="icon">🏷️</span>歌词级标注</a>
+      <a href="homework.html" class="nav-item"><span class="icon">📝</span>作业批改</a>
+    </div>
+    <div class="nav-group" data-role="student">
+      <div class="nav-group-title">学生练习</div>
+      <a href="my_homework.html" class="nav-item active"><span class="icon">📝</span>我的作业</a>
+      <a href="sing_along.html" class="nav-item"><span class="icon">🎙️</span>实时跟唱</a>
+      <a href="AI_teacher.html" class="nav-item"><span class="icon">🤖</span>AI教练对话</a>
+      <a href="cat_test.html" class="nav-item"><span class="icon">🎯</span>摸底测试</a>
+    </div>
+    <div class="nav-group" data-role="teacher">
+      <div class="nav-group-title">数据分析</div>
+      <a href="tracking.html" class="nav-item"><span class="icon">📈</span>能力追踪</a>
+      <a href="recommendation.html" class="nav-item"><span class="icon">🎯</span>渐进式推荐</a>
+      <a href="knowledge_graph.html" class="nav-item"><span class="icon">🧠</span>知识图谱</a>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h2>📝 我的作业</h2>
+      <p id="pageSubtitle">正在加载…</p>
+    </div>
+
+    <div class="notice" id="notice" style="display:none"></div>
+
+    <div class="homework-layout">
+      <section class="card list-card">
+        <div class="card-header">
+          <div class="card-title"><div class="icon">📋</div>作业列表</div>
+        </div>
+        <div id="homeworkList" class="homework-list">
+          <div class="empty" style="padding:20px;color:var(--text-muted)">正在加载…</div>
+        </div>
+      </section>
+
+      <section class="card detail-card">
+        <div class="detail-empty" id="detailEmpty">选择左侧一份作业查看详情</div>
+        <div id="detailBody" style="display:none"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script>
+// ============================================================
+// 我的作业：列表 + 详情 + 去完成
+// 全部走真接口，没有 mock 数据。所有库内文本经 escapeHtml 后进模板。
+// ============================================================
+const state = { items: [], selectedId: null, detailToken: 0 };
+const STATUS_TEXT = {
+  todo: "待完成",
+  submitted: "分析中",
+  ai_scored: "待批改",
+  reviewed: "已批改",
+};
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+async function apiGet(path) {
+  const r = await fetch(path, { credentials: "same-origin" });
+  let body = null;
+  try { body = await r.json(); } catch (e) { /* 非 JSON（如 nginx 的 502 页） */ }
+  if (!r.ok) {
+    const err = new Error((body && body.message) || ("HTTP " + r.status));
+    err.status = r.status;
+    throw err;
+  }
+  if (!body || body.code !== 0) {
+    throw new Error((body && body.message) || "响应格式错误");
+  }
+  return body.data;
+}
+
+function showNotice(msg) {
+  const el = document.getElementById("notice");
+  el.textContent = msg;
+  el.style.display = "block";
+}
+
+function fmtDateTime(s) {
+  return s ? String(s).replace("T", " ").slice(0, 16) : "—";
+}
+
+function fmtScore(v) {
+  return (typeof v === "number" && Number.isFinite(v)) ? String(v) : "—";
+}
+
+function fmtCents(v) {
+  return (typeof v === "number" && Number.isFinite(v)) ? v.toFixed(1) : "—";
+}
+
+function badgeClass(status) {
+  if (status === "todo") return "warn";
+  if (status === "submitted") return "info";
+  if (status === "ai_scored") return "primary";
+  return "success";
+}
+
+function wordClass(cents) {
+  // Number(null) 是 0，不先挡掉会把「没有偏差数据」染成绿色
+  if (cents == null) return "";
+  const v = Math.abs(Number(cents));
+  if (!Number.isFinite(v)) return "";
+  if (v < 20) return "green";
+  if (v <= 50) return "yellow";
+  return "red";
+}
+
+function renderList() {
+  const box = document.getElementById("homeworkList");
+  if (!state.items.length) {
+    box.innerHTML = `<div style="padding:20px;color:var(--text-muted)">还没有布置给你的作业。</div>`;
+    return;
+  }
+  box.innerHTML = state.items.map(it => {
+    const sub = it.submission;
+    const score = sub ? (sub.teacher_score ?? sub.ai_score) : null;
+    const overdue = it.overdue ? `<span class="badge danger">已逾期</span>` : "";
+    return `
+      <div class="homework-item ${it.homework_id === state.selectedId ? "active" : ""}"
+           onclick="selectHomework(${it.homework_id})">
+        <div class="hw-title">${escapeHtml(it.title)}</div>
+        <div class="hw-meta">${escapeHtml(it.demo_title || "未挂曲目")} · ${it.deadline ? "截止 " + escapeHtml(it.deadline) : "未设截止"}</div>
+        <div class="hw-row">
+          <span class="badge ${badgeClass(it.status)}">${STATUS_TEXT[it.status] || escapeHtml(it.status)}</span>
+          ${overdue}
+          <span class="hw-score">${fmtScore(score)}</span>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function renderDetail(d) {
+  document.getElementById("detailEmpty").style.display = "none";
+  const body = document.getElementById("detailBody");
+  body.style.display = "block";
+
+  const skills = (d.focus_skills && d.focus_skills.length)
+    ? d.focus_skills.map(s => `<span class="chip">${escapeHtml(s)}</span>`).join("")
+    : `<span class="muted">未指定</span>`;
+
+  let action;
+  if (d.can_submit) {
+    action = `<button class="btn-primary" onclick="goPractice(${d.homework_id})">去完成</button>`;
+    if (d.overdue) action += `<span class="hint-danger">已逾期，仍可提交</span>`;
+  } else if (d.submission) {
+    action = `<button class="btn-primary" disabled>已提交</button>`;
+  } else {
+    action = `<button class="btn-primary" disabled>暂无可提交唱段</button>`;
+  }
+
+  let submissionHtml = `<div class="muted">还没有提交。</div>`;
+  if (d.submission) {
+    const s = d.submission;
+    const words = (s.words || []).map(w => `
+      <tr>
+        <td>${w.index + 1}</td>
+        <td>${escapeHtml(w.word || "—")}</td>
+        <td class="${wordClass(w.deviation_cents)}">${fmtCents(w.deviation_cents)}</td>
+        <td>${w.warning ? "⚠" : ""}</td>
+      </tr>`).join("");
+    const tags = (s.cdm_tags || []).map(t => `
+      <span class="cdm-tag ${escapeHtml(t.severity || "unknown")}"
+            title="${escapeHtml(t.evidence || "")}">
+        ${escapeHtml(t.label)}${t.confidence == null ? "" : ` · ${Math.round(t.confidence * 100)}%`}
+      </span>`).join("");
+    submissionHtml = `
+      <div class="submission-box">
+        <div class="submission-head">
+          <span class="badge ${badgeClass(s.status)}">${STATUS_TEXT[s.status] || escapeHtml(s.status)}</span>
+          <span>提交于 ${fmtDateTime(s.submitted_at)}</span>
+          <span>AI 分 <b>${fmtScore(s.ai_score)}</b></span>
+          <span>教师分 <b>${fmtScore(s.teacher_score)}</b></span>
+        </div>
+        ${s.teacher_comment ? `<div class="comment">教师评语：${escapeHtml(s.teacher_comment)}</div>` : ""}
+        <h4>逐字偏差</h4>
+        ${words
+          ? `<table class="word-table"><thead><tr><th>#</th><th>字</th><th>偏差（音分）</th><th>提醒</th></tr></thead><tbody>${words}</tbody></table>`
+          : `<div class="muted">本次提交没有逐字数据（该唱段没有歌词时间轴）。</div>`}
+        <h4>CDM 归因标签</h4>
+        ${tags ? `<div class="cdm-tags">${tags}</div>` : `<div class="muted">本次没有归因标签。</div>`}
+      </div>`;
+  }
+
+  body.innerHTML = `
+    <div class="detail-header">
+      <div>
+        <h3>${escapeHtml(d.title)}</h3>
+        <div class="hw-meta">${escapeHtml(d.demo_title || "未挂曲目")} · ${d.deadline ? "截止 " + escapeHtml(d.deadline) : "未设截止"}
+          ${d.overdue ? `<span class="badge danger">已逾期</span>` : ""}</div>
+      </div>
+      <div class="detail-action">${action}</div>
+    </div>
+    <div class="detail-section">
+      <h4>重点技法</h4>
+      <div class="chips">${skills}</div>
+    </div>
+    <div class="detail-section">
+      <h4>唱段</h4>
+      <div>${d.segment_count ? `作业指定 ${d.segment_count} 段` : "按整曲布置"}，本次可选 ${(d.allowed_segment_ids || []).length} 段。</div>
+    </div>
+    <div class="detail-section">
+      <h4>提交结果</h4>
+      ${submissionHtml}
+    </div>`;
+}
+
+async function selectHomework(id) {
+  state.selectedId = id;
+  renderList();
+  const token = ++state.detailToken;
+  document.getElementById("detailEmpty").style.display = "none";
+  document.getElementById("detailBody").style.display = "none";
+  try {
+    const d = await apiGet(`/api/homeworks/mine/${id}`);
+    if (token !== state.detailToken) return;   // 切得太快，丢弃旧响应
+    renderDetail(d);
+  } catch (e) {
+    if (token !== state.detailToken) return;
+    if (e.status === 401) return location.replace("/login.html");
+    showNotice(`加载作业详情失败：${e.message}`);
+  }
+}
+
+function goPractice(id) {
+  location.href = `sing_along.html?homework_id=${id}`;
+}
+
+async function loadList() {
+  try {
+    const data = await apiGet("/api/homeworks/mine");
+    state.items = data.homeworks || [];
+    const todo = state.items.filter(it => it.status === "todo").length;
+    document.getElementById("pageSubtitle").textContent = `待完成 ${todo} 份`;
+    renderList();
+    if (state.items.length) selectHomework(state.items[0].homework_id);
+  } catch (e) {
+    if (e.status === 401) return location.replace("/login.html");
+    if (e.status === 403) {
+      document.getElementById("pageSubtitle").textContent = "";
+      document.getElementById("homeworkList").innerHTML =
+        `<div style="padding:20px;color:var(--text-muted)">该页面只对学生开放。</div>`;
+      showNotice("我的作业仅学生可见");
+      return;
+    }
+    showNotice(`加载作业列表失败：${e.message}`);
+  }
+}
+
+loadList();
+</script>
+<!-- ==== 登录用户条 + 登出（页面鉴权配套，见 docs/superpowers/specs/2026-09-15-page-auth-design.md）==== -->
+<!-- 页面已被服务端保护，能加载出来就说明会话有效。这段脚本不做守卫，
+     只负责两件事：把顶部栏写死的演示姓名换成真实登录用户；提供登出入口。
+     仅在「会话在页面打开后过期」与「后端不可达」两种边缘情况兜底跳转。 -->
+<style>
+  .logout-btn{background:none;border:1px solid var(--border-medium);color:var(--text-secondary);
+    font-size:12px;padding:3px 10px;border-radius:6px;cursor:pointer;font-family:inherit;margin-left:4px}
+  .logout-btn:hover{border-color:var(--danger);color:var(--danger)}
+  .logout-bar{position:fixed;top:16px;right:20px;z-index:60;display:flex;align-items:center;gap:10px;
+    background:var(--bg-secondary);border:1px solid var(--border-light);border-radius:10px;
+    padding:6px 12px;font-size:13px;color:var(--text-secondary);box-shadow:0 2px 10px rgba(0,0,0,.05)}
+</style>
+<script>
+(async () => {
+  async function logout() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch (e) { /* 网络失败也照样回登录页 */ }
+    location.replace('/login.html');
+  }
+
+  let user;
+  try {
+    const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
+    if (!r.ok) return location.replace('/login.html');   // 会话已失效
+    user = (await r.json()).data;
+  } catch (e) {
+    return location.replace('/login.html');              // 后端不可达
+  }
+  if (!user) return;
+
+  document.body.classList.add('role-' + user.role);
+  const isTeacher = user.role === 'teacher';
+  const roleText = isTeacher ? '教师' : '学生';
+
+  const btn = document.createElement('button');
+  btn.className = 'logout-btn';
+  btn.textContent = '登出';
+  btn.addEventListener('click', logout);
+
+  const navUser = document.querySelector('.nav-user');
+  if (navUser) {
+    // 有顶部栏的 10 个页面：复用这块区域，把写死的演示姓名换成真实登录用户。
+    // 全部用 textContent 填充，不用 innerHTML——display_name 来自数据库，
+    // 拼接进 HTML 会有注入风险。
+    const av = document.createElement('div');
+    av.className = 'avatar';
+    av.textContent = isTeacher ? '👩‍🏫' : '🎭';
+
+    const name = document.createElement('span');
+    name.textContent = user.display_name;
+
+    const sep = document.createElement('span');
+    sep.style.cssText = 'color:var(--text-muted);font-size:13px';
+    sep.textContent = '|';
+
+    const role = document.createElement('span');
+    role.style.cssText = 'color:var(--text-secondary);font-size:13px';
+    role.textContent = roleText;
+
+    navUser.replaceChildren(av, name, sep, role, btn);
+  } else {
+    // index.html / pitch_comparison.html 没有顶部栏，注入固定浮条
+    const bar = document.createElement('div');
+    bar.className = 'logout-bar';
+    const label = document.createElement('span');
+    label.textContent = user.display_name + ' · ' + roleText;
+    bar.append(label, btn);
+    document.body.appendChild(bar);
+  }
+})();
+</script>
+</body>
+</html>
