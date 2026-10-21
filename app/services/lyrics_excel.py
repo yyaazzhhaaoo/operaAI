@@ -62,7 +62,8 @@ def parse_segments(blob: bytes) -> list[dict]:
     """xlsx 字节流 → `[{seq, title, duration, lyrics, start?, end?}]`，按 seq 升序。
 
     带 `start`/`end` 的项给了该页在整曲里的**全局秒**，只用于切分段音频；
-    整页没标时间的段没有这两个键。
+    整页没标时间的段没有这两个键。切片前 `apply_contiguous_bounds` 会把这些
+    边界改成首尾相接（并同步平移字时间）。
 
     失败一律抛 `BusinessError(400, ...)`：这张表是教师自己做的，报错文案会
     原样给他看，「第3段 缺少列：起始时间」比「服务器内部错误」有用得多。
@@ -91,6 +92,53 @@ def parse_segments(blob: bytes) -> list[dict]:
             length = _length(char)
             char["note"] = None if length is None else _quantize(length, beat)
     return parsed
+
+
+def apply_contiguous_bounds(pages: list[dict], total_duration: float | None) -> None:
+    """把各页的切片边界改成首尾相接（就地修改，纯函数）。
+
+    规则：首个有时间段的页从 0 开始，末个到整曲结束；相邻两页在「前页最后
+    一个字的结束」与「后页第一个字的开始」的中点切。`lyrics_json` 里的字时间
+    是段内相对秒，边界一动就要整体平移，否则音频从更早处开始、字却还按旧起点
+    算，跟唱高亮会整体偏移。整页没时间的段没有 start/end，不参与计算，保持
+    原样（不切片、回退整曲）。
+
+    `total_duration` 为 None（读不出整曲时长）时，末段退回该页原 end，
+    此时无法保证覆盖整曲，只记日志。
+    """
+    timed = [p for p in pages if p.get("start") is not None and p.get("end") is not None]
+    if not timed:
+        return
+
+    starts = [p["start"] for p in timed]
+    ends = [p["end"] for p in timed]
+    total = total_duration if total_duration and total_duration > 0 else None
+    if total is None:
+        logger.warning("读不出整曲时长，末段切片无法延伸到音频结尾")
+
+    bounds = []
+    for index, page in enumerate(timed):
+        new_start = 0.0 if index == 0 else (ends[index - 1] + starts[index]) / 2
+        if index == len(timed) - 1:
+            new_end = total if total is not None and total > new_start else ends[index]
+        else:
+            new_end = (ends[index] + starts[index + 1]) / 2
+        bounds.append((new_start, new_end))
+
+    for page, (new_start, new_end) in zip(timed, bounds):
+        # 字时间是相对旧起点 base 的；切片左移后，同一个字在新音频里出现得更晚
+        shift = page["start"] - new_start
+        for char in page["lyrics"]:
+            char["start"] = _shift(char["start"], shift)
+            char["end"] = _shift(char["end"], shift)
+        page["start"] = round(new_start, 3)
+        page["end"] = round(new_end, 3)
+        page["duration"] = round(max(new_end - new_start, 0.0), 3)
+
+
+def _shift(value: float | None, offset: float) -> float | None:
+    """字时间随切片起点平移。精度与 _rel 一致，避免浮点尾巴进 JSONB。"""
+    return None if value is None else round(value + offset, 3)
 
 
 def _parse_page(seq: int, title: str, sheet) -> dict:

@@ -28,6 +28,8 @@ class PracticeRecord(Base):
     audio_id: Mapped[int | None] = mapped_column(ForeignKey("audio_files.id"))
     ai_score: Mapped[float | None] = mapped_column(Float)
     dimensions_json: Mapped[dict | None] = mapped_column(JSONB)   # {音准,节奏,气息,咬字,拖腔}
+    words_json: Mapped[list | None] = mapped_column(JSONB)        # 逐字偏差（B4 words）
+    cdm_json: Mapped[dict | None] = mapped_column(JSONB)          # CDM 归因（defects + overallConfidence）
     duration_sec: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, server_default=func.now())
 

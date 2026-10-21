@@ -109,6 +109,11 @@ def _split_segments(y: np.ndarray, sr: int) -> list[dict]:
     前端也就做不了「点击定位到该段」。最后那步回退是刻意的：任何输入都要有
     分段、都要能走到 `parsed` 终态。没有它，一段全静音的人声轨（分离失败、
     纯伴奏）会让 segments 一行不落，而前端还在轮询一个永远不会到来的 `parsed`。
+
+    切分边界首尾相接：首段从 0 开始、末段到已解析音频结尾，相邻段在停顿
+    （前段 end 与后段 start）的中点切。这样各段时长之和等于整曲（超过
+    MAX_AUDIO_SEC 时为已解析的那部分）。注意 y 是 Demucs 的输入，已被
+    separate_vocal 截到 MAX_AUDIO_SEC。
     """
     intervals = librosa.effects.split(
         y, top_db=TOP_DB, frame_length=FRAME_LENGTH, hop_length=HOP_LENGTH
@@ -118,16 +123,19 @@ def _split_segments(y: np.ndarray, sr: int) -> list[dict]:
     if not kept:
         kept = [(0, len(y))]
 
-    return [
-        {
-            "seq": i,
-            "title": f"第 {i} 段",
-            "duration": round((e - s) / sr, 3),
-            "start": round(s / sr, 3),
-            "end": round(e / sr, 3),
-        }
-        for i, (s, e) in enumerate(kept, start=1)
-    ]
+    total = len(y)
+    segments = []
+    for i, (s, e) in enumerate(kept):
+        start = 0 if i == 0 else (kept[i - 1][1] + s) // 2
+        end = total if i == len(kept) - 1 else (e + kept[i + 1][0]) // 2
+        segments.append({
+            "seq": i + 1,
+            "title": f"第 {i + 1} 段",
+            "duration": round((end - start) / sr, 3),
+            "start": round(start / sr, 3),
+            "end": round(end / sr, 3),
+        })
+    return segments
 
 
 def _merge_intervals(intervals, min_gap: int) -> list[tuple[int, int]]:

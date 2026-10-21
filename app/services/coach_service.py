@@ -14,6 +14,7 @@ from app.models import ChatMessage, Segment
 from app.repositories import (
     bkt_history_repo,
     chat_repo,
+    homeworks_repo,
     practice_records_repo,
     user_repo,
 )
@@ -105,11 +106,23 @@ def _last_practice(db: Session, student_id: int) -> dict | None:
     }
 
 
-def build_context(db: Session, student_id: int) -> dict:
+def build_context(
+    db: Session,
+    student_id: int,
+    *,
+    with_deviations: bool = False,
+    with_cdm: bool = False,
+) -> dict:
     """组装 E1 的客观上下文，同时是 E2 拼 prompt 的输入。
 
     只放**程序算出来的**数据，不含任何模型生成内容——这是页面「数据/生成分离」
     那条设计线的服务端一半（AI_teacher.html 的客观数据区）。
+
+    with_deviations=True 时才读最近一次练习的 words_json（E1 展示用）；
+    with_cdm=True 时才读最近一次练习的 cdm_json，练习侧没有时回退最近一次作业
+    提交的 ai_detail.defects（E1 展示用）。
+    E2 两者都默认不注入——逐字偏差条数多，塞进 prompt 会占历史轮次与首字节
+    延迟的预算。是否注入 E2 是另一个决策，不在本次范围内。
     """
     profile = user_repo.get_student_profile(db, student_id)
     if profile is None:
@@ -122,11 +135,93 @@ def build_context(db: Session, student_id: int) -> dict:
         "last_practice": _last_practice(db, sid),
         "bkt": bkt,
         "weak_skills": _weak_skills(bkt),
-        # ↓ 三项显式空位，理由见 schemas/coach.py 的 CoachContextOut
-        "deviations": None,
-        "cdm": None,
+        "deviations": _deviations(db, sid) if with_deviations else None,
+        "cdm": _cdm(db, sid) if with_cdm else None,
+        # ↓ RAG 仍是显式空位，理由见 schemas/coach.py 的 CoachContextOut
         "rag": None,
     }
+
+
+def _deviations(db: Session, student_id: int) -> list[dict] | None:
+    """最近一次练习的逐字偏差，映射成页面需要的字段。
+
+    None = 没有练习记录，或该记录 words_json 为 NULL（历史数据没有这一项）；
+    []   = 有记录但逐字结果为空（如 Demucs 曲目没有歌词）。与项目里
+    「None 表示没有数据源、[] 表示查了是空」的约定一致。
+    """
+    rec = practice_records_repo.get_latest_for_student(db, student_id)
+    if rec is None or not isinstance(rec.words_json, list):
+        return None
+    return [
+        {
+            "char": str(w.get("word") or ""),
+            "teacher": _format_hz(w.get("teacher_freq")),
+            "student": _format_hz(w.get("student_freq")),
+            "cents": w.get("deviation_cents"),
+        }
+        for w in rec.words_json
+        if isinstance(w, dict)
+    ]
+
+
+def _format_hz(value) -> str:
+    return f"{value:.1f}Hz" if isinstance(value, (int, float)) else "—"
+
+
+def _cdm(db: Session, student_id: int) -> list[dict] | None:
+    """CDM 缺陷标签（功能 4.6）。
+
+    数据源优先级：
+      1. 最近一次练习的 cdm_json（2026-10-20 起，分析管线用规则引擎写入）；
+      2. 练习侧没有时回退最近一次作业提交的 submissions.ai_detail —— 历史
+         练习记录没有 cdm_json，作业链路是当时唯一的数据源。
+
+    None = 两处都没有数据源；[] = 有数据源但 defects 为空（查了是空）。
+
+    防御式取值同 homework_service._cdm_tags：cdm_json 与 ai_detail 都是 JSONB，
+    一条坏数据不该让 E1 整页 500。按 confidence 降序，缺失的沉底。
+    """
+    rec = practice_records_repo.get_latest_for_student(db, student_id)
+    if rec is not None and isinstance(rec.cdm_json, dict):
+        tags = _cdm_tags(rec.cdm_json)
+        if tags is not None:
+            return tags
+
+    sub = homeworks_repo.get_latest_submission_for_student(db, student_id)
+    if sub is None or not isinstance(sub.ai_detail, dict):
+        return None
+    return _cdm_tags(sub.ai_detail)
+
+
+def _cdm_tags(detail: dict) -> list[dict] | None:
+    """把 cdm_json / ai_detail 里的 defects 映射成页面字段；结构不对返回 None。"""
+    defects = detail.get("defects")
+    if not isinstance(defects, list):
+        return None
+
+    tags: list[dict] = []
+    for item in defects:
+        if not isinstance(item, dict):
+            continue
+        label = item.get("label")
+        if not isinstance(label, str) or not label:
+            continue
+        severity = item.get("status")
+        confidence = item.get("confidence")
+        category = item.get("category")
+        tags.append({
+            "label": label,
+            "severity": severity if isinstance(severity, str) and severity else "unknown",
+            "confidence": (
+                confidence
+                if isinstance(confidence, (int, float)) and not isinstance(confidence, bool)
+                else None
+            ),
+            "category": category if isinstance(category, str) and category else None,
+        })
+
+    tags.sort(key=lambda t: -(t["confidence"] if t["confidence"] is not None else -1.0))
+    return tags
 
 
 SYSTEM_PROMPT = """你是「戏韵AI」的戏曲演唱教练，面向京剧等戏曲的初学者。

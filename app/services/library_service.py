@@ -15,7 +15,7 @@ from app.models import TeacherDemo
 from app.models.audio import AudioFile
 from app.models.demo import Segment
 from app.repositories import annotations_repo, library_repo
-from app.services import audio_service, parse_service, segment_audio_service
+from app.services import audio_service, lyrics_excel, parse_service, segment_audio_service
 
 logger = logging.getLogger(__name__)
 
@@ -144,10 +144,17 @@ def demo_library_add_with_segments(
 
     与 Demucs 那条路的区别：段边界由唱词句给出，不再需要停顿切分，所以不投
     解析任务；切片失败也不拦上传——该段没有音频时 B2 自动回退整曲。
+
+    切片边界在入库前统一改成首尾相接（见 lyrics_excel.apply_contiguous_bounds）：
+    首个有时间段的页从 0 开始、末段到整曲结尾、相邻页按字间空隙的中点切。
+    必须先探测整曲时长，再重算边界、写 segments——lyrics_json 里的字时间会
+    随新起点平移，晚于 replace_segments 再改就只改了内存里的 dict。
     """
     demo = demo_library_add(
         db, title=title, role=role, banshi=banshi, audio_id=audio.id, commit=False
     )
+    duration = audio_service.probe_duration(storage.resolve(audio.file_path))
+    lyrics_excel.apply_contiguous_bounds(segments, duration)
     rows = library_repo.replace_segments(db, demo.id, segments)
 
     bounds = [
@@ -170,7 +177,6 @@ def demo_library_add_with_segments(
         except Exception:
             logger.exception("示范「%s」的分段音频切片失败，分析将回退整曲", title)
 
-    duration = audio_service.probe_duration(storage.resolve(audio.file_path))
     if duration is not None:
         library_repo.update_audio_duration(db, demo.id, duration)
     if commit:

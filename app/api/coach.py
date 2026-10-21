@@ -31,11 +31,13 @@ def _payload() -> dict:
 @login_required
 @student_required
 def coach_context(student_id):
-    """E1 客观数据区：摘要 / BKT（逐字偏差、CDM、RAG 为显式空位）。"""
+    """E1 客观数据区：摘要 / BKT / 逐字偏差 / CDM（RAG 仍为显式空位）。"""
     db = get_db()
     sid = coach_service.resolve_student_id(db, student_id, current_user_id())
     return ok(CoachContextOut.model_validate(
-        coach_service.build_context(db, sid)).model_dump(mode="json"))
+        coach_service.build_context(
+            db, sid, with_deviations=True, with_cdm=True
+        )).model_dump(mode="json"))
 
 
 @api_bp.route("/coach/context/me", methods=["GET"])
@@ -56,7 +58,9 @@ def coach_context_me():
     if own is None:
         raise BusinessError(403, "AI 教练仅学生可用")
     return ok(CoachContextOut.model_validate(
-        coach_service.build_context(db, own)).model_dump(mode="json"))
+        coach_service.build_context(
+            db, own, with_deviations=True, with_cdm=True
+        )).model_dump(mode="json"))
 
 
 @api_bp.route("/coach/chat", methods=["POST"])

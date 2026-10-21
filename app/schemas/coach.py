@@ -34,10 +34,14 @@ class WeakSkill(BaseModel):
 class CoachContextOut(BaseModel):
     """E1 客观数据区。
 
-    `deviations` / `cdm` / `rag` 恒为 None —— 这三块在库里没有任何数据源
-    （逐字偏差：dimensions_json 全 NULL 且语义是五维分数；CDM 与知识库：
-    表都不存在）。用 None 而不是 [] 表达「没有数据源」，与 homework_service
-    的同名约定一致：[] 是「查了，结果是空」，两者语义不同。
+    `deviations` 来自最近一次练习的 words_json（2026-10-20 起），每项映射成
+    页面需要的 `{char, teacher, student, cents}`；没有练习记录或历史记录
+    words_json 为 NULL 时仍为 None。`cdm` 优先取最近一次练习的 `cdm_json`
+    （分析管线的规则引擎写入），没有时回退最近一次作业提交的
+    `ai_detail.defects`，每项给出 `{label, severity, confidence, category}`；
+    两处都无数据源时仍为 None。`rag` 恒为 None —— 知识库表不存在。
+    用 None 而不是 [] 表达「没有数据源」，与 homework_service 的同名约定一致：
+    [] 是「查了，结果是空」，两者语义不同。
 
     字段保留在响应里、不省略，前端据 None 渲染「待接入」占位；
     将来补上数据源时前端判断不用改。
