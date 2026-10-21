@@ -321,9 +321,9 @@ body{
 .lyric-cell .diff.fair{color:var(--warning)}
 .lyric-cell .diff.poor{color:var(--danger)}
 
-/* 加权融合 */
+/* 多维评分（2026-10-21 起五维，列数随 FUSION_DIMS） */
 .fusion-grid{
-  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;
+  display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px;
 }
 .fusion-item{
   text-align:center;padding:10px;background:var(--bg-primary);border-radius:8px;border:1px solid var(--border-light);
@@ -641,11 +641,11 @@ body{
             <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px">🎵 歌词级偏差对比</div>
             <div class="lyrics-compare" id="lyricsCompare"></div>
 
-            <!-- 加权融合 -->
-            <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px">⚖️ 多维加权融合（BKT输入）</div>
+            <!-- 多维评分 -->
+            <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px">⚖️ 多维评分（BKT输入）</div>
             <div class="fusion-grid" id="fusionGrid"></div>
             <div class="fusion-result">
-              <span class="label">加权总分:</span>
+              <span class="label">综合总分:</span>
               <span class="value" id="fusionTotal" style="color:var(--primary)">—</span>
               <span class="label">二元判定:</span>
               <span id="fusionPass">—</span>
@@ -1157,15 +1157,50 @@ function renderDetailLyrics(d) {
   }).join("");
 }
 
-// 功能 4.5：dimensions 恒为 null（接口显式空位）。
-// feature_matrix 与 overall_confidence 有值但**不上屏**：9 个驼峰键没有中文标签，
-// 而最接近的槽位 #fusionTotal 写的是「加权总分」，overall_confidence 是置信度不是
-// 分数，放进去就是错标（spec 3.11）。总分由 ai_score 承担，它在头部与终审区已有。
+// 功能 4.5：2026-10-21 起接口出 dimensions（B4 的五维分，F3 归档进 ai_detail）。
+// 总分直接用 ai_score（B4 的 overall，就是五维均值），**不另算 40/30/20/10 加权**：
+// 文档权重只覆盖四维、拖腔没有权重，另算会与头部「AI初评分」打架（DOC_ISSUES 第
+// 36.2 条）。二元判定阈值 60 分同样是临时口径，等文档方定。
+// feature_matrix 与 overall_confidence 仍不上屏：9 个驼峰键没有中文标签，
+// overall_confidence 是置信度不是分数，放进「综合总分」就是错标（spec 3.11）。
+const FUSION_DIMS = ["音准", "节奏", "气息", "咬字", "拖腔"];
+const FUSION_PASS_SCORE = 60;
+
 function renderDetailFusion(d) {
-  document.getElementById("fusionGrid").innerHTML =
-    emptyBlock("暂无维度分与加权结果（数据源待接入）");
-  document.getElementById("fusionTotal").textContent = "—";
-  document.getElementById("fusionPass").textContent = "—";
+  const dims = (d.dimensions && typeof d.dimensions === "object") ? d.dimensions : null;
+  const grid = document.getElementById("fusionGrid");
+  if (!dims) {
+    grid.innerHTML = emptyBlock("本次提交暂无维度分");
+  } else {
+    grid.innerHTML = FUSION_DIMS.map(name => {
+      const v = dims[name];
+      // JSONB 没有类型约束：值可能缺失、"80" 字符串或 null，直接 toFixed 会抛错
+      // 打断整块渲染（同 cdmItemHtml 的 confidence 处理）。
+      const ok = typeof v === "number" && isFinite(v);
+      return `
+        <div class="fusion-item">
+          <div class="dim">${esc(name)}</div>
+          <div class="score">${ok ? v.toFixed(1) : "—"}</div>
+        </div>`;
+    }).join("");
+  }
+
+  // ai_score 可能是合法的 0，用 typeof 判而不是 ||（同 fillDetail）。
+  const total = (typeof d.ai_score === "number" && isFinite(d.ai_score)) ? d.ai_score : null;
+  document.getElementById("fusionTotal").textContent =
+    total === null ? "—" : total.toFixed(1);
+
+  const pass = document.getElementById("fusionPass");
+  if (total === null) {
+    pass.textContent = "—";
+    pass.className = "";
+  } else if (total >= FUSION_PASS_SCORE) {
+    pass.textContent = "通过";
+    pass.className = "pass";
+  } else {
+    pass.textContent = "未通过";
+    pass.className = "fail";
+  }
 }
 
 // 功能 4.10（F7）：取值集合已定为三值整体模式，与 score_calibrations.bias_mode

@@ -400,19 +400,38 @@ with session_scope() as s:
             BktHistory.source_type == "practice",
             BktHistory.source_id == pr.id,
         ).all()
+
+    def prev_p_l(row):
+        """本次行之前同一 (student, skill) 最近一条的 p_l；没有则先验 0.5。"""
+        p = s.query(BktHistory).filter(
+            BktHistory.student_id == row.student_id,
+            BktHistory.skill == row.skill,
+            BktHistory.id < row.id,
+        ).order_by(BktHistory.recorded_at.desc(), BktHistory.id.desc()).first()
+        return p.p_l if p is not None else 0.5
+
     print(json.dumps({
         "submission_id": sub.id if sub else None,
         "found": sub is not None,
         "status": sub.status if sub else None,
         "ai_score": sub.ai_score if sub else None,
         "detail_keys": "|".join(sorted((sub.ai_detail or {}).keys())) if sub else "",
+        # 2026-10-21 功能 4.5：五维分随提交归档（D1 的 dimensions_json → ai_detail）
+        "dimensions_present": bool(sub and isinstance((sub.ai_detail or {}).get("dimensions"), dict)),
         "segment_id_ok": bool(sub and sub.segment_id == seg_id),
         "audio_id_ok": bool(sub and sub.audio_id == audio_id),
         "submitted_at_ok": bool(sub and sub.submitted_at is not None),
         "ai_score_eq_practice": bool(sub and pr and sub.ai_score == pr.ai_score),
-        # 复用练习成绩只归档：BKT 在 D1 练习时已更新过，提交行不该再带一份
-        "bkt_before_none": bool(sub and sub.bkt_before is None),
-        "bkt_after_none": bool(sub and sub.bkt_after is None),
+        # 复用练习成绩只归档：BKT 在 D1 练习时已更新过，提交行从 bkt_history
+        # 还原前后值供 F5 展示，但不新增 homework 来源的行（不重复计分）。
+        "bkt_before_count": len(sub.bkt_before or {}) if sub else 0,
+        "bkt_after_count": len(sub.bkt_after or {}) if sub else 0,
+        "bkt_after_eq_practice": bool(sub and practice_bkt and all(
+            abs((sub.bkt_after or {}).get(r.skill, -1) - r.p_l) < 1e-9
+            for r in practice_bkt)),
+        "bkt_before_eq_previous": bool(sub and practice_bkt and all(
+            abs((sub.bkt_before or {}).get(r.skill, -1) - prev_p_l(r)) < 1e-9
+            for r in practice_bkt)),
         "bkt_homework_rows": len(homework_bkt),
         "practice_found": pr is not None,
         "practice_segment_ok": bool(pr and pr.segment_id == seg_id),
@@ -430,12 +449,15 @@ SUB_ID_DB=$(jget submission_id)
 expect_eq "submission_id 与接口一致" "$SUB_ID_DB" "$SUB_ID"
 expect_eq "status=ai_scored" "$(jget status)" "ai_scored"
 expect_eq "ai_score 与练习成绩一致" "$(jget ai_score_eq_practice)" "True"
-expect_eq "ai_detail 三个键" "$(jget detail_keys)" "defects|overallConfidence|words"
+expect_eq "ai_detail 四个键" "$(jget detail_keys)" "defects|dimensions|overallConfidence|words"
+expect_eq "五维分已归档" "$(jget dimensions_present)" "True"
 expect_eq "segment_id 正确" "$(jget segment_id_ok)" "True"
 expect_eq "audio_id 正确" "$(jget audio_id_ok)" "True"
 expect_eq "submitted_at 非空" "$(jget submitted_at_ok)" "True"
-expect_eq "bkt_before 为空（不重复计分）" "$(jget bkt_before_none)" "True"
-expect_eq "bkt_after 为空（不重复计分）" "$(jget bkt_after_none)" "True"
+expect_eq "BKT 前值 5 项" "$(jget bkt_before_count)" "5"
+expect_eq "BKT 后值 5 项" "$(jget bkt_after_count)" "5"
+expect_eq "BKT 后值与练习行一致" "$(jget bkt_after_eq_practice)" "True"
+expect_eq "BKT 前值按历史还原" "$(jget bkt_before_eq_previous)" "True"
 expect_eq "没有 homework 来源的 BKT 行" "$(jget bkt_homework_rows)" "0"
 expect_eq "练习记录已落库" "$(jget practice_found)" "True"
 expect_eq "练习记录 segment_id 正确" "$(jget practice_segment_ok)" "True"
@@ -466,6 +488,21 @@ print("match" if expected == (f5.get("lyrics") or []) else "mismatch")
 PY
 )
 expect_eq "F5 的 lyrics 与 B4 words 同形" "$LYRICS_MATCH" "match"
+DIMS_MATCH=$("$PY" - "$TD/b4.json" "$TD/f5.json" <<'PY'
+import json, sys
+b4 = json.load(open(sys.argv[1], encoding="utf-8"))["data"]
+f5 = json.load(open(sys.argv[2], encoding="utf-8"))["data"]
+print("match" if b4.get("dimensions") == f5.get("dimensions") else "mismatch")
+PY
+)
+expect_eq "F5 的 dimensions 与 B4 同形" "$DIMS_MATCH" "match"
+BKT_COUNT=$("$PY" - "$TD/f5.json" <<'PY'
+import json, sys
+f5 = json.load(open(sys.argv[1], encoding="utf-8"))["data"]
+print(len(f5.get("bkt") or []))
+PY
+)
+expect_eq "F5 的 bkt 5 项" "$BKT_COUNT" "5"
 
 echo
 if [ "$FAIL" -eq 0 ]; then

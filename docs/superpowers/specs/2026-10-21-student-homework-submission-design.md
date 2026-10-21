@@ -87,6 +87,7 @@ F2 的既有口径是「不选唱段 = 按整曲布置」。跟唱页是以分�
 - 录音（含作业模式）走 D1 `POST /api/practice/submit`，B3/B4 出五维、逐字与 CDM，落 `practice_records`，同时按 D1 既有规则更新 BKT（`source_type='practice'`）。
 - 学生点「提交本段为作业」才调 F3。F3 用 `(student_id, audio_id)` 查 `practice_records`，并要求 `segment_id` 一致、`ai_score` 非空；命中则复制 `ai_score` / `words_json` / `cdm_json` 到 `submissions`，`status='ai_scored'`，返回 `{"submission_id"}`。
 - **不重复计分**：这一次的 BKT 已在练习落库时更新过，归档不再写 `bkt_history`，`submissions.bkt_before/bkt_after` 留 NULL。
+  **2026-10-21 修订**：`bkt_before/bkt_after` 改为从这次练习的 `bkt_history` 行还原前后值归档，供 F5 功能 4.7 展示；**仍不新写 BKT 行**。同期 `ai_detail` 另归档 `dimensions` 五维分（功能 4.5）。见 `DOC_ISSUES.md` 第 46 条与第 36.2 条。
 - 找不到练习记录时（非页面客户端直接调 F3、或练习分析失败后重试）回退到 B2 分析管线，保持原契约；此时才写 `source_type='homework'` 的 BKT 并回填 `bkt_before/bkt_after`。
 - 同一份作业仍只收一次提交（唯一索引），但**提交后允许继续练习**：练习不改变已归档的作业成绩，页面只是不再显示提交入口。
 

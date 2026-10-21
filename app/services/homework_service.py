@@ -350,7 +350,8 @@ def submit_homework(
     2026-10-21 起页面的动作是「先练习、再提交」：跟唱页录音走 D1，结果出来后
     学生点「提交本段为作业」才调本接口。此时 practice_records 里已有这次录音的
     五维与逐字结果，直接复制进 submissions（status=ai_scored），不重跑 librosa、
-    也不重复更新 BKT（练习时已更新过），返回 {"submission_id": ...}，前端不用轮询。
+    也不重复更新 BKT（练习时已更新过；只从 bkt_history 还原前后值归档给 F5），
+    返回 {"submission_id": ...}，前端不用轮询。
 
     找不到对应练习记录（例如非页面客户端直接调 F3）时保持原契约：建占位提交、
     投 B2 管线，返回 {"task_id": ...}，由 worker 回填分数与 BKT。
@@ -383,6 +384,9 @@ def submit_homework(
         and record.ai_score is not None
     ):
         cdm = record.cdm_json or {}
+        # BKT 已在 D1 练习时更新过：这里只从 bkt_history 还原当时的「更新前/后」
+        # 归档给 F5 展示，不重复调用 apply_bkt、不重复计分。
+        bkt_before, bkt_after = practice_service.bkt_snapshot_for_record(db, record)
         sub = Submission(
             homework_id=homework_id,
             student_id=student_id,
@@ -390,12 +394,16 @@ def submit_homework(
             audio_id=audio_id,
             status="ai_scored",
             ai_score=record.ai_score,
-            # 形状与 worker 的 save_result 一致；bkt_before/after 留空——这一次的
-            # BKT 已在 D1 落 practice_records 时更新过，提交只是归档，不重复计分。
+            # 形状与 worker 的 save_result 一致。
+            bkt_before=bkt_before or None,
+            bkt_after=bkt_after or None,
             ai_detail={
                 "words": record.words_json,
                 "defects": cdm.get("defects"),
                 "overallConfidence": cdm.get("overallConfidence"),
+                # 五维分随练习记录一起归档（2026-10-21 起 B4 产出、D1 已落库）。
+                # 老练习记录没有这一列时写 null，F5 会按「没有数据源」出 None。
+                "dimensions": record.dimensions_json,
             },
         )
         try:
@@ -650,6 +658,22 @@ def _feature_matrix(ai_detail: dict | None) -> dict | None:
     return fm if isinstance(fm, dict) else None
 
 
+def _dimensions(ai_detail: dict | None) -> dict | None:
+    """F5 的功能 4.5：`ai_detail.dimensions`（五维分，键为中文）。
+
+    2026-10-21 起接通：B4 分析管线产出 `{音准, 节奏, 气息, 咬字, 拖腔}`，F3 的
+    两条路径都把它归档进 `submissions.ai_detail`——复用练习成绩时复制
+    `practice_records.dimensions_json`，回退管线时由 worker 写 `result["dimensions"]`。
+    此前落库的提交没有该键，仍出 None（表示「没有数据源」，不是空对象）。
+
+    不做逐项数值校验：键集合固定为五维，前端按固定顺序取值，非数值显示「—」。
+    """
+    if not isinstance(ai_detail, dict):
+        return None
+    dims = ai_detail.get("dimensions")
+    return dims if isinstance(dims, dict) and dims else None
+
+
 def _lyrics(ai_detail: dict | None) -> list[LyricWord]:
     """F5 的功能 4.4：`ai_detail.words`（B4 同形的子集）→ 逐字偏差。
 
@@ -714,9 +738,9 @@ def submission_detail(db: Session, submission_id: int) -> SubmissionDetailRespon
     与装配。
 
     `lyrics` 读 `ai_detail.words`（2026-10-20 起，F3 提交分析写入；现有数据没有
-    该键，仍出 []）。`dimensions` 仍是显式空位——功能 4.5 在库里没有数据源，理由
-    见 spec 2.5 与 `SubmissionDetailResponse` 的文档字符串。它们不是本次没做，是
-    数据不存在，所以出 `[]` 与 `None` 而不是省略键。
+    该键，仍出 []）。`dimensions` 读 `ai_detail.dimensions`（2026-10-21 起，F3
+    两条路径写入）；2026-10-21 之前落库的提交没有该键，仍出 None。它们不是本次
+    没做，是数据不存在，所以出 `[]` 与 `None` 而不是省略键。
     """
     row = homeworks_repo.get_submission_detail(db, submission_id)
     if row is None:
@@ -740,7 +764,7 @@ def submission_detail(db: Session, submission_id: int) -> SubmissionDetailRespon
         ai_score=sub.ai_score,
         overall_confidence=_overall_confidence(sub.ai_detail),
         feature_matrix=_feature_matrix(sub.ai_detail),
-        dimensions=None,          # 功能 4.5 四维分数无数据源，显式空位
+        dimensions=_dimensions(sub.ai_detail),   # 功能 4.5：五维分（F3 写入）
         lyrics=_lyrics(sub.ai_detail),   # 功能 4.4：ai_detail.words（F3 写入）
         cdm_tags=_cdm_tags(sub.ai_detail),
         bkt=_bkt_changes(sub.bkt_before, sub.bkt_after),
@@ -904,12 +928,14 @@ def save_result(metadata: dict, result: dict) -> None:
         cdm = result.get("cdm") or {}
         sub.ai_score = result.get("overall")
         # 与既有 5 条种子提交同形（defects / overallConfidence），并补上 F5
-        # 已经在读的 words。不写 featureMatrix（B4 没有这个数据源），
-        # 不写 dimensions（五维只在当次 B4/redis 里，TTL 1 小时）。
+        # 已经在读的 words。不写 featureMatrix（B4 没有这个数据源）。
+        # dimensions 是五维分（2026-10-21 起随提交落库，供 F5 功能 4.5 展示）；
+        # 它只是当次 B4 结果的归档，BKT 已在上面用同一份数据更新过，不重复计分。
         sub.ai_detail = {
             "words": result.get("words"),
             "defects": cdm.get("defects") if cdm else None,
             "overallConfidence": cdm.get("overallConfidence") if cdm else None,
+            "dimensions": result.get("dimensions"),
         }
         sub.bkt_before = before
         sub.bkt_after = after

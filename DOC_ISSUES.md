@@ -1189,6 +1189,8 @@ B 组分析确实算得出逐字偏差（`app/services/analyze_service.py::_word
 
 **待文档方确认**：① 四个维度各自的计算口径，尤其是**咬字维度的输入是什么特征**。② **`feature_matrix` 该不该进对外契约**——本次选了透传，好处是 9 个声学量足以让后续自行推维度分、不阻塞；代价是它是 AI 内部特征包，**固化进对外契约后，AI 侧任何改动都成为破坏性变更**。若文档方认为内部特征包不该对外，需现在改为不出。
 
+**2026-10-21 更新：数据源已具备，页面已接通。** B4 分析管线现在产出五维分 `{音准, 节奏, 气息, 咬字, 拖腔}`（`app/services/analyze_service.py` 的 `_dimensions`），D1 练习记录落 `practice_records.dimensions_json`；F3 的两条路径（复用练习成绩 / 回退分析管线）把它归档进 `submissions.ai_detail.dimensions`，F5 的 `dimensions` 不再恒为 `null`。前端 `homework.html` 按五维卡片 + 总分渲染。本次定的临时口径：**总分直接用 `ai_score`（B4 的五维均值），不另算 40/30/20/10**——文档权重只覆盖四维、拖腔没有权重；**二元判定 ≥60 分算通过**（阈值文档从未定义）。`fusion` 键与权重集合仍不进接口。这两个口径待文档方确认。
+
 ### 36.3 `ai_detail` 是手搓种子数据，不是分析产物
 
 5 行的 `ai_detail` 来源是 `/tmp/seed_cdm_report.sql`（第 24 条那批 CDM 假数据），**不是**分析管线写出来的。因此 `defects` 之外的 `featureMatrix` / `overallConfidence` 的语义同样**未经算法验证**——它们的数值看起来合理，但没有任何代码产出过它们，也没法核对。
@@ -1651,6 +1653,7 @@ if path.parent != root:
 7. **`submissions.segment_id` 为普通 INT，不加外键**：`replace_segments` 会整批删除旧分段，外键会让「重新解析已有提交的曲目」失败；分段重解析后该 id 可能悬空，与 `homeworks.segment_ids` 的 JSONB 一样按历史引用处理。
 8. **`ai_detail` 写入形状**：`{"words": [...], "defects": [...], "overallConfidence": number}`。两条路径同形；复用练习成绩时 `words` / `defects` / `overallConfidence` 取自 `practice_records.words_json` 与 `cdm_json`。不写 `featureMatrix`（B4 没有该数据源），不写 `dimensions`（五维只在当次 B4/redis 里，TTL 1 小时）。
 9. **BKT**：练习（D1）与作业回退路径都沿用 D1 的临时规则；**复用练习成绩的提交不写任何 BKT 行**，`bkt_before` / `bkt_after` 留 NULL——这一次的掌握度已在练习落库时更新过，提交只是归档。回退路径仍写 `source_type='homework'`、`source_id=submissions.id`，`bkt_before` / `bkt_after` 为「技法名 → P(L)」扁平字典。
+   **2026-10-21 更新**：复用路径不再留 NULL。F3 从 `bkt_history`（`source_type='practice'`、`source_id=practice_record.id`）还原这次练习的更新前/后值，写进 `submissions.bkt_before/bkt_after` 供 F5 功能 4.7 展示；**仍不新增任何 `source_type='homework'` 的 BKT 行**，掌握度只算一次。更早的复用提交（如 54）当时已落 NULL，不回填。
 10. **学生看全部作业**：`homeworks` 没有班级/名单维度，与 F1 一致，不按教师过滤。`homeworks.status` 目前没有「关闭」入口，F3 不检查它；截止日只影响 `overdue`，不阻止提交。
 
 **已知限制**：各条见 spec 第 11 节（多段作业只评一段、整曲降级、无重交/退回/关闭、回看无五维、`submitted_at` 的 UTC 口径、唯一索引上线前需确认无重复行）；另有「练习成绩只能归档学生点提交时对应的那一次录音」（按 `audio_id` 定位，换段重练后再提交的是最新那次）。

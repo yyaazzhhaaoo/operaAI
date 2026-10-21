@@ -59,6 +59,43 @@ def get_latest_for_student_skill(
     )
 
 
+def get_by_source(
+    db: Session, source_type: str, source_id: int
+) -> list[BktHistory]:
+    """某一次分析写入的全部 BKT 行。
+
+    `apply_bkt` 每次写「实际参与更新的维度」各一行（通常 5 行），source_id
+    指向 practice_records.id 或 submissions.id。F3 归档练习成绩时用它还原
+    这次练习的 BKT 前后值。
+    """
+    return list(db.scalars(
+        select(BktHistory)
+        .where(BktHistory.source_type == source_type)
+        .where(BktHistory.source_id == source_id)
+        .order_by(BktHistory.id)
+    ).all())
+
+
+def get_previous_for_skill(
+    db: Session, student_id: int, skill: str, before_id: int
+) -> BktHistory | None:
+    """同一学生同一技法在 `before_id` 之前最近的一条。
+
+    用来还原 `apply_bkt` 写入时读到的「上一次掌握度」——它只落更新后的 p_l，
+    before 没有落库。排序与 `get_latest_for_student_skill` 一致
+    （recorded_at DESC, id DESC）。限定 `id < before_id`：同一次分析插入的
+    多行 recorded_at 相同（同一事务的 NOW()），只能靠自增 id 区分先后。
+    """
+    return db.scalar(
+        select(BktHistory)
+        .where(BktHistory.student_id == student_id)
+        .where(BktHistory.skill == skill)
+        .where(BktHistory.id < before_id)
+        .order_by(desc(BktHistory.recorded_at), desc(BktHistory.id))
+        .limit(1)
+    )
+
+
 def get_latest_per_skill_for_student(db: Session, student_id: int) -> list[BktHistory]:
     """某个学生每个技法只留 recorded_at 最新的那一条，即「当前掌握度」。
 

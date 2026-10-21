@@ -178,6 +178,27 @@ def save_result(metadata: dict, result: dict) -> None:
         )
 
 
+def bkt_snapshot_for_record(
+    db: Session, record: PracticeRecord
+) -> tuple[dict[str, float], dict[str, float]]:
+    """还原一次练习写入的 BKT 前后值，供 F3 归档到 `submissions.bkt_*`。
+
+    `apply_bkt` 只把更新后的 p_l 落进 bkt_history，`before` 没存。这里按它
+    当时的口径回查：同一 (student, skill) 在本次行之前最近一条的 p_l，没有
+    则取先验 0.5。返回两个「技法 → P(L)」扁平字典；本次练习没有 BKT 行
+    （老记录或维度全非数值）时两个都是空字典。
+    """
+    before: dict[str, float] = {}
+    after: dict[str, float] = {}
+    for row in bkt_history_repo.get_by_source(db, "practice", record.id):
+        previous = bkt_history_repo.get_previous_for_skill(
+            db, record.student_id, row.skill, row.id
+        )
+        before[row.skill] = previous.p_l if previous is not None else _BKT_PRIOR
+        after[row.skill] = row.p_l
+    return before, after
+
+
 def apply_bkt(
     db: Session,
     *,

@@ -1211,6 +1211,9 @@ async function selectSegment(idx) {
   // 播放的是选中段的切片，切段后旧段的声音必须停下；录音同样要丢弃。
   if (isRecording) { discardRecording = true; stopAll(); }
   else if (isPlaying) stopAll();
+  // 空闲切段时上面不会走 stopAll，三张实时卡的旧读数会留在面板上被误读成本段
+  // 结果，所以无条件清空（stopAll 里已清过，这里是幂等的）。
+  resetLiveMetrics();
   currentSegmentIdx = idx;
   renderSegments();
   const seg = segments[idx];
@@ -2076,6 +2079,29 @@ async function playDemo() {
 // ============================================================
 // 停止
 // ============================================================
+// 三张实时卡拨回等待态。停录/停播与切段共用：切段时上一次练习的读数属于
+// 上一段，留在面板上会被误读。
+function resetLiveMetrics() {
+  document.getElementById("valPitch").textContent = "--";
+  document.getElementById("valPitch").style.color = "#0066B3";
+  document.getElementById("trendPitch").textContent = "等待开始…";
+  document.getElementById("trendPitch").style.color = "#8A7A6A";
+  document.getElementById("cardPitch").className = "metric-card";
+  document.getElementById("valRhythm").textContent = "--";
+  document.getElementById("valRhythm").style.color = "#C9A84C";
+  document.getElementById("trendRhythm").textContent = "等待开始…";
+  document.getElementById("trendRhythm").style.color = "#8A7A6A";
+  document.getElementById("cardRhythm").className = "metric-card";
+  document.getElementById("valBreath").textContent = "--";
+  document.getElementById("valBreath").style.color = "#4A8F6B";
+  document.getElementById("trendBreath").textContent = "等待开始…";
+  document.getElementById("trendBreath").style.color = "#8A7A6A";
+  document.getElementById("cardBreath").className = "metric-card";
+  lastLiveCalcAt = -Infinity;
+  lastRhythmKey = null;
+  lastBreathKey = null;
+}
+
 function stopAll() {
   isPlaying = false;
   isRecording = false;
@@ -2103,24 +2129,7 @@ function stopAll() {
   document.getElementById("recIndicator").style.display = "none";
   progressFill.style.width = "0%";
   timeCurrent.textContent = "0.00s";
-  document.getElementById("valPitch").textContent = "--";
-  document.getElementById("valPitch").style.color = "#0066B3";
-  document.getElementById("trendPitch").textContent = "等待开始…";
-  document.getElementById("trendPitch").style.color = "#8A7A6A";
-  document.getElementById("cardPitch").className = "metric-card";
-  document.getElementById("valRhythm").textContent = "--";
-  document.getElementById("valRhythm").style.color = "#C9A84C";
-  document.getElementById("trendRhythm").textContent = "等待开始…";
-  document.getElementById("trendRhythm").style.color = "#8A7A6A";
-  document.getElementById("cardRhythm").className = "metric-card";
-  document.getElementById("valBreath").textContent = "--";
-  document.getElementById("valBreath").style.color = "#4A8F6B";
-  document.getElementById("trendBreath").textContent = "等待开始…";
-  document.getElementById("trendBreath").style.color = "#8A7A6A";
-  document.getElementById("cardBreath").className = "metric-card";
-  lastLiveCalcAt = -Infinity;
-  lastRhythmKey = null;
-  lastBreathKey = null;
+  resetLiveMetrics();
   drawTimeline();
   addLog("⏹️ 已停止", "info");
 }

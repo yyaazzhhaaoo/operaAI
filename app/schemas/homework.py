@@ -309,19 +309,21 @@ class SubmissionDetailResponse(BaseModel):
 
     学生字段平铺不嵌套，同 F4 spec 3.9（不为一个四字段对象破例）。
 
-    **两处显式空位 + 一个刻意不出的键：**
+    **两个按数据有无的字段 + 一个刻意不出的键：**
 
     - `lyrics` 读 `ai_detail.words`（2026-10-20 起，功能 4.4）。F3 提交分析写入
       该键后自动有值；现有 5 条提交没有，仍出 `[]`
-    - `dimensions` 恒为 `None`（功能 4.5 四维分数无数据源，spec 2.5 / 3.6）
+    - `dimensions` 读 `ai_detail.dimensions`（2026-10-21 起，功能 4.5）：B4 产出的
+      五维分 `{音准, 节奏, 气息, 咬字, 拖腔}`，F3 两条路径归档；更早的提交出 `None`
     - **不出 `fusion` 键**：前端 mock 的 fusion.total（0.72）按 40/30/20/10 加权它
       自己的 dimensions（84/84/86/80）算出来是 0.84，两数不符，真实语义文档从未
-      定义。凭空造一个只会把 mock 的错误固化进契约。总分由 `ai_score` 承担。
-      40/30/20/10 这套权重也**不进接口**——没有任何数据能与它相乘。
+      定义。总分由 `ai_score` 承担——它是 B4 的五维均值，页面不再另算一个加权总分。
+      40/30/20/10 这套权重也**不进接口**：文档只覆盖四维，管线实际是五维（拖腔无
+      权重），另算会与 `ai_score` 打架（`DOC_ISSUES.md` 第 36.2 条）。
 
-    功能 4.5 的四块里唯一有数据的是 `feature_matrix` 与 `overall_confidence`，原样
-    透传；键名保留 AI 侧的驼峰（pitchStd 等），不做 snake_case 转换——改名会让它和
-    写入方对不上，查问题时两边对不上号。
+    功能 4.5 的字段里 `feature_matrix` 与 `overall_confidence` 原样透传；键名保留
+    AI 侧的驼峰（pitchStd 等），不做 snake_case 转换——改名会让它和写入方对不上，
+    查问题时两边对不上号。`dimensions` 的键是中文五维，同样原样透传。
 
     批改现状那六个字段（status / teacher_score / teacher_comment / voice_comment_text
     / voice_comment_audio_id / reviewed_at）是 F6 写入的列，严格说不属功能 4.4-4.7。
