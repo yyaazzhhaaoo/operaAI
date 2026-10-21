@@ -7,9 +7,14 @@ from app.common.decorators import (
     student_required,
     teacher_required,
 )
+from app.common.errors import BusinessError
 from app.db import get_db
 from app.response import ok
-from app.schemas.homework import SubmissionCalibrationIn, SubmissionReviewIn
+from app.schemas.homework import (
+    HomeworkCreateIn,
+    SubmissionCalibrationIn,
+    SubmissionReviewIn,
+)
 from app.services import homework_service
 
 
@@ -25,17 +30,66 @@ def get_homeworks():
     # 同 dashboard_students：mode="json" 才有 ISO-8601（deadline 是 date）
     return ok(homework_service.list_homeworks(get_db()).model_dump(mode="json"))
 
-@api_bp.route("/coach/annotations",methods=["POST"])
+@api_bp.route("/homeworks", methods=["POST"])
 @login_required
 @teacher_required
 def post_homeworks():
-    return ok()
+    # F2 布置新作业（功能 4.2）。本桩原先错挂成 /coach/annotations（DOC_ISSUES 第
+    # 34.3 条），2026-10-21 移回《5-接口清单》的地址。
+    # teacher_id 在路由层从 session 取，service 不碰 flask.session（同 F7）。
+    data = HomeworkCreateIn.model_validate(_payload())
+    item = homework_service.create_homework(
+        get_db(), data, teacher_id=current_user_id())
+    # 同 dashboard_students：mode="json" 才有 ISO-8601（deadline 是 date）
+    return ok(item.model_dump(mode="json"))
 
-@api_bp.route("/homeworks/<id>/submit",methods=["POST"])
+
+def _form_int(name: str) -> int:
+    """取 multipart 整数表单字段，缺字段/非整数回 400（同 D1 的 _form_int）。"""
+    raw = request.form.get(name)
+    if raw is None or raw == "":
+        raise BusinessError(400, f"缺少 {name}")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise BusinessError(400, f"{name} 必须是整数") from None
+
+
+@api_bp.route("/homeworks/mine", methods=["GET"])
 @login_required
 @student_required
-def homeworks_submit(id):
-    return ok(id)
+def homeworks_mine():
+    # 同 dashboard_students：mode="json" 才有 ISO-8601（deadline/submitted_at）
+    return ok(homework_service.list_my_homeworks(
+        get_db(), user_id=current_user_id()).model_dump(mode="json"))
+
+
+@api_bp.route("/homeworks/mine/<int:homework_id>", methods=["GET"])
+@login_required
+@student_required
+def homeworks_mine_detail(homework_id):
+    return ok(homework_service.my_homework_detail(
+        get_db(),
+        user_id=current_user_id(),
+        homework_id=homework_id,
+    ).model_dump(mode="json"))
+
+
+@api_bp.route("/homeworks/<int:homework_id>/submit", methods=["POST"])
+@login_required
+@student_required
+def homeworks_submit(homework_id):
+    # 路径参数用 <int:...> 而不是 <id>：<id> 是字符串转换器，会把
+    # /homeworks/abc/submit 也匹配进来再进视图；<int:...> 让 Werkzeug 在路由层
+    # 挡掉，走 errors.py 的统一 404「接口不存在」。同 F4/F5/F6。
+    task_id = homework_service.submit_homework(
+        get_db(),
+        user_id=current_user_id(),
+        homework_id=homework_id,
+        segment_id=_form_int("segment_id"),
+        audio_id=_form_int("audio_id"),
+    )
+    return ok({"task_id": task_id})
 
 @api_bp.route("/homeworks/<int:homework_id>/submissions",methods=["GET"])
 @login_required
