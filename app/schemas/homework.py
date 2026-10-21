@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class HomeworkListItem(BaseModel):
@@ -51,6 +51,68 @@ class HomeworkListResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
     homeworks: list[HomeworkListItem]
+
+
+# 《3-功能清单》4.2 只写「曲目/示范版本/截止/重点技法」，没有列技法的取值。
+# 这里与前端 homework.html 的 ASSIGN_SKILLS 逐字同源（七个）：多一个或少一个，
+# 教师都会在页面上勾得出来、提交却被 422。技法维度变更时两处一起改。
+FOCUS_SKILLS: tuple[str, ...] = (
+    "音准控制",
+    "气息支撑",
+    "滑音",
+    "拖腔",
+    "归韵咬字",
+    "节奏感知",
+    "颤音",
+)
+
+
+class HomeworkCreateIn(BaseModel):
+    """F2 布置新作业入参（`POST /api/homeworks`，功能 4.2）。
+
+    《5-接口清单》F2 只有「教师 / 布置作业（功能 4.2）」两行，没有请求体契约；
+    《1-PRD》4.2 的验收也只有「填写表单提交后作业出现在列表」。字段按
+    `homeworks` 表的列与前端弹窗的现有字段定，校验口径**与前端严格对齐**：
+
+      - `title` 去首尾空格后非空、≤100（`VARCHAR(100)`）；
+      - `demo_id` 必填，存在性由 service 查库判（404）；
+      - `segment_ids` 可为空数组——空 = 按整曲布置（前端弹窗的既有语义）；
+        归属（必须全部属于 `demo_id`）由 service 查库判（422）；
+      - `focus_skills` 只允许 `FOCUS_SKILLS` 里的值，可为空数组；
+      - `deadline` 必填；「不早于今天」由 service 按北京时间判（需要请求时钟，
+        不在 schema 里做）。
+    """
+
+    title: str = Field(max_length=100)
+    demo_id: int
+    segment_ids: list[int] = []
+    focus_skills: list[str] = []
+    deadline: date
+
+    @field_validator("title")
+    @classmethod
+    def _title_non_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("作业标题不能为空")
+        return v
+
+    @field_validator("segment_ids")
+    @classmethod
+    def _segments_unique(cls, v: list[int]) -> list[int]:
+        if len(set(v)) != len(v):
+            raise ValueError("唱段不能重复")
+        return v
+
+    @field_validator("focus_skills")
+    @classmethod
+    def _skills_known(cls, v: list[str]) -> list[str]:
+        unknown = [s for s in v if s not in FOCUS_SKILLS]
+        if unknown:
+            raise ValueError(f"不支持的重点技法：{'、'.join(unknown)}")
+        if len(set(v)) != len(v):
+            raise ValueError("重点技法不能重复")
+        return v
 
 
 class SubmissionTag(BaseModel):
@@ -182,9 +244,9 @@ class BktChange(BaseModel):
 class LyricWord(BaseModel):
     """F5 的歌词级偏差对比里的一个字（功能 4.4）。
 
-    **当前恒为空数组**：`submissions` 没有逐字列，`ai_detail` 也没有 lyrics/words
-    键——库里无数据源（spec 2.5）。契约现在就定死，等 F3 把 B 组结果落进 ai_detail
-    时直接读。
+    **来源是 `submissions.ai_detail.words`（2026-10-20 起）**，由 F3 作业提交分析
+    把 B 组结果原样写入。现有 5 条提交的 ai_detail 没有该键，因此当前仍出 `[]`；
+    那不是接口占位，是「本次提交确实没有逐字数据」。
 
     元素对齐 B 组 `words[]` 的**子集**（`app/services/analyze_service.py::_words`），
     字段名用 B 组的 `word` 而不是前端 mock 的 `char`：同一份逐字偏差在 B4 与 F5 两条
@@ -247,9 +309,10 @@ class SubmissionDetailResponse(BaseModel):
 
     学生字段平铺不嵌套，同 F4 spec 3.9（不为一个四字段对象破例）。
 
-    **三处显式空位，都是「库里没有数据源」而不是「本次没做」：**
+    **两处显式空位 + 一个刻意不出的键：**
 
-    - `lyrics` 恒为 `[]`（功能 4.4 逐字偏差无数据源，spec 2.5 / 3.5）
+    - `lyrics` 读 `ai_detail.words`（2026-10-20 起，功能 4.4）。F3 提交分析写入
+      该键后自动有值；现有 5 条提交没有，仍出 `[]`
     - `dimensions` 恒为 `None`（功能 4.5 四维分数无数据源，spec 2.5 / 3.6）
     - **不出 `fusion` 键**：前端 mock 的 fusion.total（0.72）按 40/30/20/10 加权它
       自己的 dimensions（84/84/86/80）算出来是 0.84，两数不符，真实语义文档从未
@@ -370,3 +433,85 @@ class SubmissionReviewResponse(BaseModel):
     teacher_comment: str | None
     voice_comment_text: str | None
     voice_comment_audio_id: int | None
+
+
+class StudentSubmissionBrief(BaseModel):
+    """「我的作业」列表里的提交摘要（4.1）。
+
+    只出列表卡片要用的五个字段：逐字与 CDM 归因只在详情接口返回，
+    列表里带上会让一次请求多出最多上千个时间轴点。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+    submission_id: int
+    status: str                         # submitted / ai_scored / reviewed；NULL 已归一
+    ai_score: float | None
+    teacher_score: float | None
+    submitted_at: datetime | None
+
+
+class StudentHomeworkItem(BaseModel):
+    """学生端作业列表的一行（4.1）。
+
+    `status` 只有四档：无提交是 `todo`，有提交时取 `submission.status`
+    （列值 NULL 按 `submitted` 处理）。教师端的 grading/ongoing/closed
+    三档不适用于学生——学生只关心「我要不要做」。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+    homework_id: int
+    title: str
+    demo_id: int | None
+    demo_title: str | None
+    segment_count: int                  # len(segment_ids)；0 = 按整曲布置
+    focus_skills: list[str]
+    deadline: date | None
+    status: str                         # todo / submitted / ai_scored / reviewed
+    overdue: bool
+    submission: StudentSubmissionBrief | None
+
+
+class StudentHomeworkListResponse(BaseModel):
+    """学生作业列表（4.1）。没有作业时 `homeworks` 是 `[]`，不是 404。"""
+
+    model_config = ConfigDict(from_attributes=True)
+    homeworks: list[StudentHomeworkItem]
+
+
+class StudentSubmissionDetail(BaseModel):
+    """学生端作业详情里的提交详情（4.2）。
+
+    与 F5 的 `SubmissionDetailResponse` **刻意不共用**：F5 出教师批改所需的
+    校准、BKT 前后对比、语音点评等字段，学生端只需要分数、评语、逐字与 CDM。
+    共用一个模型会让两端字段面互相绑架。
+
+    `words` / `cdm_tags` 复用 F5 的 `LyricWord` / `CdmTag`，保证同一个字、
+    同一条归因在教师页与学生页形状一致。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+    submission_id: int
+    status: str
+    ai_score: float | None
+    teacher_score: float | None
+    teacher_comment: str | None
+    submitted_at: datetime | None
+    reviewed_at: datetime | None
+    segment_id: int | None
+    words: list[LyricWord]
+    cdm_tags: list[CdmTag]
+
+
+class StudentHomeworkDetail(StudentHomeworkItem):
+    """学生作业详情（4.2）：在列表行上追加可选唱段与提交详情。
+
+    `can_submit` 由服务端算死（`submission is None and allowed_segment_ids 非空`），
+    前端不要自己从 `submission` 与 `segment_ids` 推——两者组合的边界条件
+    （曲目没分段、分段被重解析、已有提交）都在服务端判过了。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+    segment_ids: list[int]
+    allowed_segment_ids: list[int]
+    can_submit: bool
+    submission: StudentSubmissionDetail | None
