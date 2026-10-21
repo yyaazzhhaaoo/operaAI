@@ -1058,6 +1058,8 @@ def post_homeworks():
 
 函数名表明它本意是 **F2 `POST /api/homeworks`（布置作业，功能 4.2）**，路由却挂成了 `POST /api/coach/annotations`。本次实现 F1 时**未改动它**（F2 单独立项），登记在此以免下次实现 F2 时照着这个错地址抄。同一文件里 F3–F7 的另外 5 个桩**并非都正确**：F5 的桩原本挂在 `/homeworks/<id>/detail`，而《5-接口清单》里 F5 是 `/submissions/<id>/detail`（详见第 36.5 条）。**「挂在 `/homeworks` 或 `/submissions` 前缀下」不等于「地址对」**——本条的原始判断只核了前缀、没逐条核路径。F3（`/homeworks/<id>/submit`）与 F6/F7（`/submissions/<id>/review`、`/submissions/<id>/calibration`）已逐条核对，地址是对的。
 
+**2026-10-21 更新**：F2 已实现，桩已从 `/api/coach/annotations` 移回 `POST /api/homeworks`（`app/api/homeworks.py` 的 `post_homeworks`）。《5-接口清单》F2 没有请求体/响应体契约，入参字段与校验口径按 `app/schemas/homework.py` 的 `HomeworkCreateIn` 与前端布置弹窗严格对齐；三条自拟规则（`demo_id` 不存在 → 404、唱段不属于该曲目 → 422、截止日早于北京时间今天 → 422）写在 `homework_service.create_homework` 的文档字符串里。出参复用 F1 的 `HomeworkListItem` 行形状。冒烟脚本：`scripts/smoke_homework_create.sh`（会真实写库，退出时直连数据库清理）。同日完成前端联调：`homework.html` 的布置弹窗改为真调 F2（`submitAssign` 为 async，401 跳登录页、非 2xx 显示信封 `message`、成功后重拉 F1 且保持当前选中）；原「负数临时 id 的演示条目」相关代码已删除。
+
 ### 34.4 前端落地时自拟的显示口径
 
 前端与接口同批落地，`homework.html` 的作业列表已换成真数据（细节见 spec 2.3.1）。以下三项文档均未规定，是本次自拟的：
@@ -1168,6 +1170,8 @@ F5 于 2026-10-08 实现（设计 `docs/superpowers/specs/2026-10-08-submission-
 B 组分析确实算得出逐字偏差（`app/services/analyze_service.py::_words`，产出 `{index, word, start, end, deviation_cents, teacher_freq, student_freq, octave_fixed, warning}`），但它**只活在 redis 任务结果里**（TTL 1 小时后消失），且要求 `segments.lyrics_json` 当输入——而解析链路产出的段落该列**恒为 NULL**（第 20 条：没有 ASR 组件，音频给不出汉字）。本次 5 条提交的 `audio_id` **全是 NULL**，等于连分析链路都没挂上。
 
 **当前处理**：F5 的 `lyrics` 出 `[]`（**不编数据**）。元素契约已定死并对齐 B 组 `words[]` 的子集（`{index, word, start, end, deviation_cents, warning}`，字段名用 B 组的 `word` 不用前端 mock 的 `char`），等 F3 把 B 组结果落进 `ai_detail` 时直接读。
+
+**2026-10-20 更新：读链路已接通。** F5 改读 `submissions.ai_detail.words`，`homework.html` 已补非空渲染（绿 <20c / 黄 20–50c / 红 >50c，与 B4 的 regions 阈值一致）。现有 5 条提交的 `ai_detail` 仍没有 `words` 键，所以页面仍是空态——**数据源问题本身未解决**，要等 F3 作业提交分析把 B4 结果写进 `ai_detail.words`。
 
 **待文档方确认**：① 逐字数据何时能有源。前提是两件事——(1) 上传时能录入戏词（第 20 条已提，PRD 里本来就是一期做法），(2) B 组分析结果要有地方落库（今天只进 redis）。② 本次把 `lyrics` 元素契约定死为 **B 组 `words[]` 的子集**，依据是「同一份逐字偏差在 B4 与 F5 上形状必须一致」。**若文档方希望批改页的逐字数据与 B4 不同形，现在提出**——等 F3 把数据落了库再改就是破坏性变更。
 
@@ -1533,9 +1537,13 @@ if path.parent != root:
 
 **没有第三张表承载逐字数据。** 本实现返回 `deviations: null`，页面对应区块显示「逐字偏差待接入」。
 
+**2026-10-20 更新：已补。** B4 算出的 `words` 现落 `practice_records.words_json`，E1 改读该列；`words_json` 是新增列，《4-数据库设计-V1.1》里没有，已同步进 `schema.sql`。
+
 **2. RAG 检索无数据源。** PRD 3.9、《2-系统设计说明》5.3、《3-功能清单》3.9 三处都要求向 prompt 注入「RAG 检索结果」，但《4-数据库设计-V1.1》的 15 张表里**没有任何知识库表或向量表**，也没说明检索什么语料。本实现返回 `rag: null`，prompt 中不注入该段。
 
 **3. CDM 归因无数据源。** 页面左侧有「CDM 归因诊断」区，但库中无对应表；`score_calibrations` 只有 1 行且语义不同。本实现返回 `cdm: null`。
+
+**2026-10-20 更新：已补。** 分析管线用规则引擎（`app/services/cdm_service.py`）从五维分数与逐字偏差算 CDM，落 `practice_records.cdm_json`；E1 优先读最近一次练习，没有时回退作业链路 `submissions.ai_detail.defects`。`cdm_json` 同为文档未定义的新增列。规则阈值是初始口径，**尚未用真实素材标定**。
 
 **4. 超时口径与实测三者互不相符。** PRD 3.2 写「发送消息 **2 秒**内生成回复」，《2-系统设计说明》5.3 写「LLM 调用（**超时 3 秒**）」，而 2026-10-13 在本机实测该部署的实际延迟是 **2.06–3.15 秒**（模型端到端，同一台机器直连与经 Flask 各测十余次）。
 
@@ -1613,6 +1621,39 @@ if path.parent != root:
 - 切的是**原始整曲**（含伴奏），16k 单声道 WAV，不是 Demucs 分离出的人声；
 - B2 模式二优先用段音频，`audio_id` 为空（历史数据、Excel 页无时间）时回退整曲；
 - C2 `GET /api/demos/<id>/segments` 每段返回 `url`（无段音频时为 `null`），跟唱页「播放示范」选中段后播该段切片、否则回退整首。
+
+---
+
+## 46. 学生提交作业：F3 只有一句话，学生作业列表/详情接口文档不存在
+
+《5-接口清单》对 F3 的全部描述是：
+
+> F3 `POST /api/homeworks/<id>/submit`：提交音频，走分析管线，落 submissions。
+
+**请求体/响应体、权限、校验、错误码、`submissions.status` 的流转全部未定义。** 更基础的是，学生端没有任何作业接口：《5-接口清单》的 A–G 组里没有「我的作业列表」「学生看作业详情」，`my_homework.html` 这个页面也不在《3-功能清单》的页面清单里。本轮新增的两条 GET 属于文档外新增接口。
+
+《4-数据库设计》的 `submissions` 还有两处与产品规则对不上：
+
+- 没有 `segment_id`，无法知道学生提交的是哪个唱段；
+- `(homework_id, student_id)` 上没有唯一约束，而本轮确认的产品规则是「每份作业每个学生只允许提交一次」。
+
+**2026-10-21 实现时定的口径**（设计见 `docs/superpowers/specs/2026-10-21-student-homework-submission-design.md`）：
+
+1. **接口**：
+   - `GET /api/homeworks/mine`：学生本人的作业列表，含 `status`（`todo` / `submitted` / `ai_scored` / `reviewed`）、`overdue` 与轻量 `submission`；
+   - `GET /api/homeworks/mine/<homework_id>`：追加 `segment_ids`、`allowed_segment_ids`、`can_submit`、`submission.words` 与 `submission.cdm_tags`；
+   - `POST /api/homeworks/<homework_id>/submit`：`multipart`，字段 `segment_id` + `audio_id`，返回 `{"task_id"}`，后续复用 B3/B4。
+2. **提交行在 F3 当场创建**（`status='submitted'`、`submitted_at=DEFAULT NOW()`），worker 成功后原位回填 `ai_score / ai_detail / bkt_before / bkt_after` 并改为 `ai_scored`。这使 `submitted` 这一档**首次有人写**，第 38 条「全项目没有任何代码写它」的记录自本次起不再成立。
+3. **每份作业只收一次提交**：新增唯一索引 `uq_submissions_homework_student (homework_id, student_id)`；已有提交再提交回 422。
+4. **多段作业的口径**：`homeworks.segment_ids` 是候选集合，学生任选一段录制并提交，提交一次后作业完成，其余唱段不再评。现有种子数据（12 号作业挂 10 段、5 名学生各 1 条提交）与这个口径一致。
+5. **整曲作业降级**：`segment_ids=[]` 时可选集合 = 该曲目当前全部分段；曲目没有分段时 `can_submit=false`，F3 回 422。本轮不做整曲录音。
+6. **逾期可交**：`overdue` 对未提交作业看 `deadline < 北京时间今天`；对已提交作业看 `submitted_at` 日期是否晚于 `deadline`，与教师端「逾期提交组合数」(`get_submission_stats`) 同口径。
+7. **`submissions.segment_id` 为普通 INT，不加外键**：`replace_segments` 会整批删除旧分段，外键会让「重新解析已有提交的曲目」失败；分段重解析后该 id 可能悬空，与 `homeworks.segment_ids` 的 JSONB 一样按历史引用处理。
+8. **`ai_detail` 写入形状**：`{"words": [...], "defects": [...], "overallConfidence": number}`。不写 `featureMatrix`（B4 没有该数据源），不写 `dimensions`（五维只在当次 B4/redis 里，TTL 1 小时）。
+9. **BKT**：沿用 D1 的临时规则，写 `source_type='homework'`、`source_id=submissions.id`，`bkt_before` / `bkt_after` 为「技法名 → P(L)」扁平字典。
+10. **学生看全部作业**：`homeworks` 没有班级/名单维度，与 F1 一致，不按教师过滤。`homeworks.status` 目前没有「关闭」入口，F3 不检查它；截止日只影响 `overdue`，不阻止提交。
+
+**已知限制**：各条见 spec 第 11 节（多段作业只评一段、整曲降级、无重交/退回/关闭、回看无五维、`submitted_at` 的 UTC 口径、唯一索引上线前需确认无重复行）。
 
 ---
 

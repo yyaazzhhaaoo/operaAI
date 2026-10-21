@@ -417,6 +417,92 @@ body{
 .action-btns{display:flex;gap:10px;margin-top:12px}
 .action-btns button{flex:1}
 
+/* ===== 布置新作业弹窗 ===== */
+.modal-overlay{
+  position:fixed;inset:0;z-index:100;
+  display:none;align-items:center;justify-content:center;
+  padding:16px;background:rgba(45,31,20,0.45);
+}
+.modal-overlay.open{display:flex}
+.assign-modal{
+  width:min(640px,100%);max-height:90vh;overflow-y:auto;
+  background:var(--bg-secondary);border:1px solid var(--border-medium);
+  border-radius:16px;box-shadow:0 20px 60px rgba(45,31,20,0.25);
+}
+.assign-modal .modal-header{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+  padding:18px 20px 14px;border-bottom:1px solid var(--border-light);
+  position:sticky;top:0;background:var(--bg-secondary);z-index:1;
+}
+.assign-modal .modal-header h3{font-size:17px;font-weight:700;color:var(--text-primary)}
+.assign-modal .modal-header p{font-size:12px;color:var(--text-muted);margin-top:2px}
+.modal-close{
+  width:32px;height:32px;border:none;border-radius:8px;background:transparent;
+  color:var(--text-muted);font-size:22px;line-height:1;cursor:pointer;flex-shrink:0;
+  font-family:inherit;
+}
+.modal-close:hover{background:var(--bg-hover);color:var(--text-primary)}
+.assign-form{display:flex;flex-direction:column;gap:14px;padding:16px 20px 0}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-field{display:flex;flex-direction:column;gap:6px}
+.form-field label{font-size:12px;font-weight:600;color:var(--text-secondary)}
+.form-field .req{color:var(--danger)}
+.form-field .opt{color:var(--text-muted);font-weight:400}
+.form-field input[type="text"],
+.form-field input[type="date"],
+.form-field select{
+  width:100%;min-height:44px;padding:9px 12px;
+  background:var(--bg-primary);border:1px solid var(--border-light);border-radius:10px;
+  color:var(--text-primary);font-size:14px;font-family:inherit;transition:border-color 0.2s;
+}
+.form-field input:focus,.form-field select:focus{outline:none;border-color:var(--primary)}
+.form-field input:disabled,.form-field select:disabled{opacity:0.6;cursor:not-allowed}
+.field-error{display:none;font-size:11px;color:var(--danger)}
+.field-error.show{display:block}
+.field-label-row{display:flex;align-items:center;justify-content:space-between}
+.link-btn{
+  border:none;background:none;color:var(--primary);font-size:12px;font-weight:600;
+  cursor:pointer;padding:2px 4px;font-family:inherit;
+}
+.link-btn:hover{text-decoration:underline}
+.seg-box{
+  max-height:140px;overflow-y:auto;padding:6px;
+  background:var(--bg-primary);border:1px solid var(--border-light);border-radius:10px;
+}
+.seg-item{
+  display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:7px;
+  font-size:13px;color:var(--text-secondary);cursor:pointer;
+}
+.seg-item:hover{background:var(--bg-hover)}
+.seg-item input[type="checkbox"]{width:16px;height:16px;accent-color:var(--primary);flex-shrink:0}
+.seg-item .seg-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seg-item .seg-dur{font-size:11px;color:var(--text-muted);flex-shrink:0}
+.assign-hint{font-size:11px;color:var(--text-muted);padding:6px 8px}
+.skill-chips{display:flex;flex-wrap:wrap;gap:6px}
+.skill-chip{
+  display:inline-flex;align-items:center;gap:5px;padding:6px 10px;
+  background:var(--bg-primary);border:1px solid var(--border-light);border-radius:999px;
+  font-size:12px;font-weight:400;color:var(--text-secondary);cursor:pointer;transition:all 0.2s;
+}
+.skill-chip:hover{border-color:var(--border-medium)}
+.skill-chip.checked{border-color:var(--primary);background:var(--primary-soft);color:var(--primary);font-weight:600}
+.skill-chip input{width:14px;height:14px;accent-color:var(--primary)}
+.assign-modal .modal-footer{
+  display:flex;justify-content:flex-end;gap:10px;
+  padding:14px 20px;margin-top:2px;
+  border-top:1px solid var(--border-light);
+  position:sticky;bottom:0;background:var(--bg-secondary);
+}
+.toast{
+  position:fixed;left:50%;bottom:28px;z-index:200;
+  transform:translate(-50%,8px);opacity:0;pointer-events:none;
+  background:var(--text-primary);color:#fff;font-size:13px;
+  padding:10px 18px;border-radius:10px;box-shadow:0 8px 24px rgba(45,31,20,0.25);
+  transition:opacity 0.25s,transform 0.25s;max-width:calc(100vw - 40px);
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+@media (max-width:560px){.form-row{grid-template-columns:1fr}}
+
 /* ===== 滚动条 ===== */
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:var(--bg-primary)}
@@ -462,6 +548,7 @@ body{
     </div>
     <div class="nav-group" data-role="student">
       <div class="nav-group-title">🎤 学生练习</div>
+      <a href="my_homework.html" class="nav-item"><span class="icon">📝</span>我的作业</a>
       <a href="sing_along.html" class="nav-item"><span class="icon">🎙️</span>实时跟唱</a>
       <a href="AI_teacher.html" class="nav-item"><span class="icon">🤖</span>AI教练对话</a>
       <a href="cat_test.html" class="nav-item"><span class="icon">🎯</span>摸底测试</a>
@@ -483,7 +570,7 @@ body{
         <p>AI初评 + CDM归因 + 老师终审 + BKT状态更新</p>
       </div>
       <div class="actions">
-        <button class="btn-primary" onclick="showAssignModal()">➕ 布置新作业</button>
+        <button class="btn-primary" id="assignBtn" style="display:none" onclick="showAssignModal()">➕ 布置新作业</button>
       </div>
     </div>
 
@@ -606,6 +693,63 @@ body{
   </main>
 </div>
 
+<!-- ===== 布置新作业弹窗 ===== -->
+<div class="modal-overlay" id="assignOverlay" aria-hidden="true">
+  <div class="assign-modal" role="dialog" aria-modal="true" aria-labelledby="assignModalTitle">
+    <div class="modal-header">
+      <div>
+        <h3 id="assignModalTitle">布置新作业</h3>
+        <p>选择曲目与唱段，设定截止时间和重点技法</p>
+      </div>
+      <button class="modal-close" type="button" aria-label="关闭" onclick="closeAssignModal()">×</button>
+    </div>
+    <form class="assign-form" id="assignForm" novalidate onsubmit="submitAssign(event)">
+      <div class="form-field">
+        <label for="assignTitleInput">作业标题 <span class="req">*</span></label>
+        <input type="text" id="assignTitleInput" maxlength="100" placeholder="选择曲目后自动生成，可修改"
+               oninput="setAssignError('assignTitleError','')">
+        <div class="field-error" id="assignTitleError"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label for="assignDemo">曲目 <span class="req">*</span></label>
+          <select id="assignDemo" onchange="onAssignDemoChange()">
+            <option value="">加载中…</option>
+          </select>
+          <div class="field-error" id="assignDemoError"></div>
+        </div>
+        <div class="form-field">
+          <label for="assignDeadline">截止日期 <span class="req">*</span></label>
+          <input type="date" id="assignDeadline"
+                 oninput="setAssignError('assignDeadlineError','')">
+          <div class="field-error" id="assignDeadlineError"></div>
+        </div>
+      </div>
+      <div class="form-field">
+        <div class="field-label-row">
+          <label>唱段</label>
+          <button type="button" class="link-btn" id="assignSegAll"
+                  style="visibility:hidden" onclick="toggleAllAssignSegments()">全选</button>
+        </div>
+        <div class="seg-box" id="assignSegBox">
+          <div class="assign-hint">选曲后加载唱段…</div>
+        </div>
+        <div class="assign-hint" id="assignSegHint">不选唱段 = 按整曲布置</div>
+      </div>
+      <div class="form-field">
+        <label>重点技法 <span class="opt">（选填，可多选）</span></label>
+        <div class="skill-chips" id="assignSkills"></div>
+      </div>
+      <div class="field-error" id="assignFormError"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="closeAssignModal()">取消</button>
+        <button type="submit" class="btn-primary" id="assignSubmitBtn">布置作业</button>
+      </div>
+    </form>
+  </div>
+</div>
+<div class="toast" id="assignToast" role="status"></div>
+
 <script>
 // ============================================
 // 本页数据全部来自真接口，没有 mock
@@ -613,8 +757,9 @@ body{
 //   GET /api/homeworks                    作业列表（F1）→ fetchHomeworks
 //   GET /api/homeworks/<id>/submissions   待批改提交（F4）→ fetchSubmissions
 //   GET /api/submissions/<id>/detail      批改详情（F5）→ fetchDetail
-// 逐字偏差（4.4）与四维分（4.5）在库里没有数据源、校准（4.10）属 F7，右侧那三块
-// 因此出显式空态，见 renderDetailLyrics / renderDetailFusion / renderDetailCalib。
+// 逐字偏差（4.4）读 submissions.ai_detail.words（F3 作业提交分析写入）；四维分
+// （4.5）仍无数据源、校准（4.10）属 F7，后两块因此出显式空态，见
+// renderDetailLyrics / renderDetailFusion / renderDetailCalib。
 
 // 同源空串 = 经 nginx 的 /api 代理。**不要改成 location.host + ':8877'**：
 // 那是跨源请求，而跨源 fetch 默认不带 Cookie，后端 login_required 只会看到空
@@ -970,13 +1115,46 @@ function renderDetailBkt(d) {
     rows.length ? rows.map(bktItemHtml).join("") : emptyBlock("本次无 BKT 状态变化");
 }
 
-// 功能 4.4 逐字偏差：本接口当前**恒出 []**（后端显式空位）。
-// **非空分支故意不写**——从当前接口拿到非空数组是不可能的（service 里写死 []），
-// 为看不见的形状写渲染代码只会写错。等把 B 组结果落进 ai_detail 之后，在这里补
-// 真渲染，并把下面这句降级成 if (!d.lyrics.length) 的分支。
+// 功能 4.4 逐字偏差：F5 读 submissions.ai_detail.words，元素形状是 B 组 words 的
+// 子集 {index, word, start, end, deviation_cents, warning}。现有 5 条提交没有这个
+// 键 → []，是「本次确实没有」，不是加载失败。
+//
+// 着色阈值与 B4 的 regions 同一套：绿 <20c / 黄 20–50c / 红 >50c
+// （app/services/analyze_service.py 的 GREEN_MAX / YELLOW_MAX）。CSS 里还有一个
+// .diff.good（蓝），没有任何文档给它划区间，这里不用。
+const LYRIC_PUNCT_RE = /^[，。！？、；：,.!?;:—…·（）()《》「」“”"'‘’\s]+$/;
+
+function deviationLevel(cents) {
+  const v = Math.abs(cents);
+  if (v < 20) return "excellent";
+  if (v <= 50) return "fair";
+  return "poor";
+}
+
 function renderDetailLyrics(d) {
-  document.getElementById("lyricsCompare").innerHTML =
-    emptyBlock("暂无逐字偏差数据（数据源待接入）");
+  const rows = (d.lyrics || []).filter(w => w && w.word);
+  const el = document.getElementById("lyricsCompare");
+  if (!rows.length) {
+    el.innerHTML = emptyBlock("本次提交暂无逐字偏差数据");
+    return;
+  }
+
+  el.innerHTML = rows.map(w => {
+    const char = String(w.word);
+    if (LYRIC_PUNCT_RE.test(char)) {
+      return `<div class="lyric-cell punct"><span class="char">${esc(char)}</span></div>`;
+    }
+    const cents = Number.isFinite(w.deviation_cents) ? w.deviation_cents : null;
+    // 没有音分值的实字：保留正常格子但只显示 —，不按标点弱化，否则看起来像
+    // 戏词里多了一个标点。
+    const diff = cents === null
+      ? `<span class="diff">—</span>`
+      : `<span class="diff ${deviationLevel(cents)}">${cents > 0 ? "+" : ""}${Math.round(cents)}c</span>`;
+    const title = cents === null
+      ? char
+      : `${char} ${cents > 0 ? "+" : ""}${cents.toFixed(1)}c${w.warning ? " · 超阈值" : ""}`;
+    return `<div class="lyric-cell" title="${esc(title)}"><span class="char">${esc(char)}</span>${diff}</div>`;
+  }).join("");
 }
 
 // 功能 4.5：dimensions 恒为 null（接口显式空位）。
@@ -1255,8 +1433,351 @@ function playVoiceComment() {
   alert("🎙️ 语音点评录制中...（需接入音频录制 API）");
 }
 
+// ============================================
+// 布置新作业（真接口：F2 `POST /api/homeworks`）
+// ============================================
+// 曲目与唱段读 C1 `GET /api/demos`、C2 `GET /api/demos/<id>/segments`（同旧演示）；
+// 提交自 2026-10-21 起走真接口 F2，成功后重拉 F1，列表排序与计数以服务端为准。
+const ASSIGN_SKILLS = ["音准控制", "气息支撑", "滑音", "拖腔", "归韵咬字", "节奏感知", "颤音"];
+
+let assignDemos = null;        // null = 还没成功加载过；[] = 加载成功但库是空的
+let assignSegments = [];       // 当前曲目的分段（C2）
+let assignSegSeq = 0;          // 作废在飞的 C2 请求（快速切换曲目时）
+let assignTitleTouched = false;// 教师手改过标题后，换曲目不再覆盖
+let assignLastAutoTitle = "";  // 上一次自动填充的标题，用来判断“手改过”
+let assignToastTimer = null;
+
+function localDatePlus(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function setAssignError(id, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg || "";
+  el.classList.toggle("show", !!msg);
+}
+
+function clearAssignErrors() {
+  ["assignTitleError", "assignDemoError", "assignDeadlineError", "assignFormError"]
+    .forEach(id => setAssignError(id, ""));
+}
+
 function showAssignModal() {
-  alert("📚 布置新作业功能（需对接后端 API）");
+  if (!currentUser || currentUser.role !== "teacher") return;
+  resetAssignForm();
+  const overlay = document.getElementById("assignOverlay");
+  if (!overlay) return;
+  overlay.classList.add("open");
+  overlay.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+  if (assignDemos === null) loadAssignDemos();
+  document.getElementById("assignTitleInput").focus();
+}
+
+function closeAssignModal() {
+  const overlay = document.getElementById("assignOverlay");
+  if (!overlay || !overlay.classList.contains("open")) return;
+  overlay.classList.remove("open");
+  overlay.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
+}
+
+function resetAssignForm() {
+  const form = document.getElementById("assignForm");
+  if (form) form.reset();
+  assignTitleTouched = false;
+  assignLastAutoTitle = "";
+  assignSegments = [];
+  assignSegSeq++;                         // 作废还在飞的 C2
+  const title = document.getElementById("assignTitleInput");
+  if (title) title.value = "";
+  clearAssignErrors();
+
+  const deadline = document.getElementById("assignDeadline");
+  if (deadline) {
+    deadline.min = localDatePlus(0);
+    deadline.value = localDatePlus(7);
+  }
+
+  // 曲目下拉：已加载过就复用缓存，没加载过等 loadAssignDemos 填。
+  if (assignDemos !== null) populateAssignDemos();
+
+  // 唱段回到“未选曲”态
+  const box = document.getElementById("assignSegBox");
+  if (box) box.innerHTML = '<div class="assign-hint">选曲后加载唱段…</div>';
+  const segAll = document.getElementById("assignSegAll");
+  if (segAll) segAll.style.visibility = "hidden";
+  const segHint = document.getElementById("assignSegHint");
+  if (segHint) segHint.textContent = "不选唱段 = 按整曲布置";
+
+  // 技法 chips 全部取消
+  document.querySelectorAll("#assignSkills input").forEach(cb => {
+    cb.checked = false;
+    cb.parentElement.classList.remove("checked");
+  });
+}
+
+async function loadAssignDemos() {
+  const sel = document.getElementById("assignDemo");
+  if (!sel) return;
+  sel.disabled = true;
+  sel.innerHTML = '<option value="">加载中…</option>';
+  try {
+    const res = await fetch(`${API_BASE}/api/demos`, { credentials: "same-origin" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    assignDemos = Array.isArray(body.data) ? body.data : [];
+    populateAssignDemos();
+  } catch (e) {
+    assignDemos = null;
+    sel.innerHTML = '<option value="">曲目加载失败</option>';
+    sel.disabled = true;
+    setAssignError("assignDemoError", "曲目加载失败，关闭弹窗后重试");
+  }
+}
+
+function populateAssignDemos() {
+  const sel = document.getElementById("assignDemo");
+  if (!sel) return;
+  const list = assignDemos || [];
+  if (!list.length) {
+    sel.innerHTML = '<option value="">示范库里还没有曲目</option>';
+    sel.disabled = true;
+    setAssignError("assignDemoError", "示范库为空，请先上传并解析示范音频");
+    return;
+  }
+  const opts = ['<option value="">请选择曲目</option>'];
+  list.forEach(d => {
+    const name = [d.title, d.role, d.banshi].filter(Boolean).join(" · ");
+    const suffix = d.segment_count ? "" : "（暂无唱段）";
+    opts.push(`<option value="${d.id}">${esc(name)}${suffix}</option>`);
+  });
+  sel.innerHTML = opts.join("");
+  sel.disabled = false;
+  setAssignError("assignDemoError", "");
+}
+
+function autoFillAssignTitle() {
+  if (assignTitleTouched) return;
+  const sel = document.getElementById("assignDemo");
+  const demo = (assignDemos || []).find(d => String(d.id) === sel.value);
+  const next = demo ? `${demo.title} 跟唱作业` : "";
+  const input = document.getElementById("assignTitleInput");
+  if (input) input.value = next;
+  assignLastAutoTitle = next;
+}
+
+async function onAssignDemoChange() {
+  const sel = document.getElementById("assignDemo");
+  const demoId = Number(sel.value);
+  autoFillAssignTitle();
+  setAssignError("assignDemoError", "");
+
+  const seq = ++assignSegSeq;
+  assignSegments = [];
+  if (!demoId) {
+    renderAssignSegments("idle");
+    return;
+  }
+  renderAssignSegments("loading");
+  try {
+    const res = await fetch(`${API_BASE}/api/demos/${demoId}/segments`,
+      { credentials: "same-origin" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    if (seq !== assignSegSeq) return;     // 已切到别的曲目
+    assignSegments = Array.isArray(body.data) ? body.data : [];
+    renderAssignSegments("ready");
+  } catch (e) {
+    if (seq !== assignSegSeq) return;
+    assignSegments = [];
+    renderAssignSegments("error");
+  }
+}
+
+// state: idle / loading / error / ready
+function renderAssignSegments(state) {
+  const box = document.getElementById("assignSegBox");
+  const hint = document.getElementById("assignSegHint");
+  const allBtn = document.getElementById("assignSegAll");
+  if (!box) return;
+
+  if (state === "loading") {
+    box.innerHTML = '<div class="assign-hint">加载唱段…</div>';
+    if (allBtn) allBtn.style.visibility = "hidden";
+    if (hint) hint.textContent = "不选唱段 = 按整曲布置";
+    return;
+  }
+  if (state === "error") {
+    box.innerHTML = '<div class="assign-hint">唱段加载失败，可不选唱段按整曲布置</div>';
+    if (allBtn) allBtn.style.visibility = "hidden";
+    if (hint) hint.textContent = "不选唱段 = 按整曲布置";
+    return;
+  }
+  if (state === "idle" || !assignSegments.length) {
+    box.innerHTML = `<div class="assign-hint">${state === "idle"
+      ? "选曲后加载唱段…" : "该曲目暂无唱段"}</div>`;
+    if (allBtn) allBtn.style.visibility = "hidden";
+    if (hint) hint.textContent = "不选唱段 = 按整曲布置";
+    return;
+  }
+
+  box.innerHTML = assignSegments.map(s => {
+    const name = [s.seq != null ? s.seq : "", s.title || "未命名唱段"]
+      .filter(Boolean).join(". ");
+    const dur = Number.isFinite(s.duration) ? `${s.duration.toFixed(1)}s` : "";
+    return `<label class="seg-item">
+      <input type="checkbox" value="${s.id}" checked onchange="onAssignSegChange()">
+      <span class="seg-name">${esc(name)}</span>
+      <span class="seg-dur">${esc(dur)}</span>
+    </label>`;
+  }).join("");
+  if (allBtn) allBtn.style.visibility = "visible";
+  onAssignSegChange();
+}
+
+function onAssignSegChange() {
+  const boxes = [...document.querySelectorAll("#assignSegBox input[type=checkbox]")];
+  const checked = boxes.filter(b => b.checked).length;
+  const allBtn = document.getElementById("assignSegAll");
+  if (allBtn) {
+    allBtn.textContent = boxes.length && checked === boxes.length ? "取消全选" : "全选";
+  }
+  const hint = document.getElementById("assignSegHint");
+  if (hint && boxes.length) {
+    hint.textContent = checked
+      ? `已选 ${checked}/${boxes.length} 段`
+      : "不选唱段 = 按整曲布置";
+  }
+}
+
+function toggleAllAssignSegments() {
+  const boxes = [...document.querySelectorAll("#assignSegBox input[type=checkbox]")];
+  if (!boxes.length) return;
+  const allChecked = boxes.every(b => b.checked);
+  boxes.forEach(b => { b.checked = !allChecked; });
+  onAssignSegChange();
+}
+
+// F2 `POST /api/homeworks` 的请求体（字段与后端 `HomeworkCreateIn` 逐字对齐）。
+function buildAssignPayload({ title, demoId, segmentIds, focusSkills, deadline }) {
+  return {
+    title,
+    demo_id: demoId,
+    segment_ids: segmentIds,
+    focus_skills: focusSkills,
+    deadline,
+  };
+}
+
+async function submitAssign(e) {
+  e.preventDefault();
+  clearAssignErrors();
+
+  const title = document.getElementById("assignTitleInput").value.trim();
+  const demoId = Number(document.getElementById("assignDemo").value);
+  const deadline = document.getElementById("assignDeadline").value;
+  const segmentIds = [...document.querySelectorAll("#assignSegBox input[type=checkbox]")]
+    .filter(b => b.checked).map(b => Number(b.value));
+  const focusSkills = [...document.querySelectorAll("#assignSkills input:checked")]
+    .map(b => b.value);
+
+  // 客户端校验与后端 HomeworkCreateIn 严格对齐：这里拦一道只是为了不出无效请求，
+  // 后端仍会再判（它是唯一可信的闸门，比如曲目在弹窗打开后被删）。
+  let valid = true;
+  if (!title) {
+    setAssignError("assignTitleError", "请填写作业标题");
+    valid = false;
+  }
+  if (!demoId) {
+    setAssignError("assignDemoError", "请选择曲目");
+    valid = false;
+  }
+  if (!deadline) {
+    setAssignError("assignDeadlineError", "请选择截止日期");
+    valid = false;
+  } else if (deadline < localDatePlus(0)) {
+    setAssignError("assignDeadlineError", "截止日期不能早于今天");
+    valid = false;
+  }
+  if (!valid) return;
+
+  const payload = buildAssignPayload({
+    title,
+    demoId,
+    segmentIds,
+    focusSkills,
+    deadline,
+  });
+
+  // 提交期间禁用按钮：F2 不是幂等语义，双击会布置出两份作业。
+  const btn = document.getElementById("assignSubmitBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 布置中…"; }
+  try {
+    const res = await fetch(`${API_BASE}/api/homeworks`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    // 会话失效与 submitReview 同口径：跳登录页，不弹「布置失败」误导教师。
+    if (res.status === 401) {
+      location.replace("/login.html");
+      return;
+    }
+    if (!res.ok) {
+      // 422 的 message 是后端写好的中文（如「唱段不属于该曲目：5」），原样显示；
+      // 弹窗不关，教师改完可直接重试——同 submitReview 的错误口径。
+      const b = await res.json().catch(() => null);
+      throw new Error((b && b.message) || `HTTP ${res.status}`);
+    }
+
+    // 响应体只取新 id，不用它拼列表条目（理由见下方 fetchHomeworks）。
+    const created = await res.json().catch(() => null);
+    const newId = created && created.data ? created.data.homework_id : null;
+
+    closeAssignModal();
+    showAssignToast(`已布置：${title}`);
+
+    // 用 F1 重拉而不是拿响应体往前端拼条目：排序（grading → ongoing → closed、
+    // 截止日降序）与 total 分母都在服务端算，前端复制一份必然漂移。
+    // true = 保持当前选中，不把教师从正在批的作业上弹走（原演示行为）。
+    await fetchHomeworks(true);
+    // 例外：原来一份都没选中（首次布置作业）时，选上新作业——否则教师新建完
+    // 右侧仍停在「请选择作业」，看起来像没成功。
+    if (currentHwId == null && newId != null) selectHomework(newId);
+  } catch (err) {
+    // 表单级错误行（不是某个字段的错），弹窗保留供修改
+    setAssignError("assignFormError", "布置失败：" + (err.message || "请检查网络后重试"));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "布置作业"; }
+  }
+}
+
+function showAssignToast(msg) {
+  const el = document.getElementById("assignToast");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(assignToastTimer);
+  assignToastTimer = setTimeout(() => el.classList.remove("show"), 3200);
+}
+
+function renderAssignSkills() {
+  const box = document.getElementById("assignSkills");
+  if (!box) return;
+  box.innerHTML = ASSIGN_SKILLS.map(s => `
+    <label class="skill-chip">
+      <input type="checkbox" value="${esc(s)}"
+             onchange="this.parentElement.classList.toggle('checked', this.checked)">
+      <span>${esc(s)}</span>
+    </label>
+  `).join("");
 }
 
 // ============================================
@@ -1269,6 +1790,25 @@ function showAssignModal() {
 // 真数据由 fetchHomeworks → selectHomework → fetchSubmissions 那条链接上。
 renderSubmitList();
 renderDetail();
+renderAssignSkills();
+
+// 布置新作业弹窗：ESC 与点遮罩关闭。表单本身是 onsubmit，不另绑。
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeAssignModal();
+});
+const assignOverlay = document.getElementById("assignOverlay");
+if (assignOverlay) {
+  assignOverlay.addEventListener("click", (e) => {
+    if (e.target === assignOverlay) closeAssignModal();
+  });
+}
+// 标题被手改过之后，换曲目不再覆盖（“手改过”= 当前值与上次自动填充值不同）。
+const assignTitleInput = document.getElementById("assignTitleInput");
+if (assignTitleInput) {
+  assignTitleInput.addEventListener("input", () => {
+    assignTitleTouched = assignTitleInput.value !== assignLastAutoTitle;
+  });
+}
 </script>
 <!-- ==== 登录用户条 + 登出（页面鉴权配套，见 docs/superpowers/specs/2026-09-15-page-auth-design.md）==== -->
 <!-- 页面已被服务端保护，能加载出来就说明会话有效。这段脚本不做守卫，
@@ -1310,6 +1850,11 @@ renderDetail();
   document.body.classList.add('role-' + user.role);
   const isTeacher = user.role === 'teacher';
   const roleText = isTeacher ? '教师' : '学生';
+
+  // 「布置新作业」只对教师显示。按钮默认 display:none，等角色确定后再放出来，
+  // 避免学生打开页面时先看到一下再消失。
+  const assignBtn = document.getElementById('assignBtn');
+  if (assignBtn) assignBtn.style.display = isTeacher ? 'inline-flex' : 'none';
 
   const btn = document.createElement('button');
   btn.className = 'logout-btn';

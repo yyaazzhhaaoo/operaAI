@@ -1,6 +1,6 @@
 from datetime import date,datetime
 from typing import TYPE_CHECKING
-from sqlalchemy import Date,DateTime,Float,ForeignKey,String,Text,func,text
+from sqlalchemy import Date,DateTime,Float,ForeignKey,Index,Integer,String,Text,func,text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped,mapped_column,relationship
 from app.db import Base
@@ -38,6 +38,7 @@ class Submission(Base):
     homework_id: Mapped[int | None] = mapped_column(ForeignKey("homeworks.id"))
     student_id: Mapped[int | None] = mapped_column(ForeignKey("students.id"))
     audio_id: Mapped[int | None] = mapped_column(ForeignKey("audio_files.id"))
+    segment_id: Mapped[int | None] = mapped_column(Integer)
     ai_score: Mapped[float | None] = mapped_column(Float)
     ai_detail: Mapped[dict | None] = mapped_column(JSONB)      # 逐字偏差 + CDM 归因标签
     bkt_before: Mapped[dict | None] = mapped_column(JSONB)
@@ -49,6 +50,15 @@ class Submission(Base):
     status: Mapped[str | None] = mapped_column(String(10), server_default=text("'ai_scored'"))
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime, server_default=func.now())
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (
+        Index(
+            "uq_submissions_homework_student",
+            "homework_id",
+            "student_id",
+            unique=True,
+        ),
+    )
 
     homework: Mapped["Homework | None"] = relationship()
     student: Mapped["Student | None"] = relationship()

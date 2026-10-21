@@ -1,20 +1,27 @@
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.common.errors import BusinessError
 from app.models import Homework, ScoreCalibration, Submission
-from app.repositories import audio_repo, homeworks_repo, user_repo
+from app.repositories import audio_repo, homeworks_repo, library_repo, user_repo
+from app.schemas.audio import AnalyzeSubmitIn
 from app.schemas.homework import (
     BktChange,
     CdmTag,
+    HomeworkCreateIn,
     HomeworkListItem,
     HomeworkListResponse,
-    LyricWord,  # noqa: F401  # 本次无使用点（lyrics 恒为 []），
-    #                        # 但它是 SubmissionDetailResponse.lyrics 的元素类型
+    LyricWord,
     PendingSubmissionItem,
     PendingSubmissionListResponse,
+    StudentHomeworkDetail,
+    StudentHomeworkItem,
+    StudentHomeworkListResponse,
+    StudentSubmissionBrief,
+    StudentSubmissionDetail,
     SubmissionCalibration,
     SubmissionCalibrationIn,
     SubmissionDetailResponse,
@@ -22,6 +29,7 @@ from app.schemas.homework import (
     SubmissionReviewResponse,
     SubmissionTag,
 )
+from app.services import analyze_service, practice_service
 
 # 判档与排序的口径**与看板 G7 逐字同源**（app/services/dashboard_service.py:536 的
 # homework_progress）。同一份作业在两条接口上必须是同一个档位与同一个顺序，否则
@@ -102,6 +110,295 @@ def list_homeworks(db: Session) -> HomeworkListResponse:
 
     items.sort(key=_sort_key)
     return HomeworkListResponse(homeworks=items)
+
+
+def create_homework(
+    db: Session, data: HomeworkCreateIn, teacher_id: int
+) -> HomeworkListItem:
+    """F2 布置新作业（功能 4.2）：校验引用、写 homeworks、按 F1 的行形状回参。
+
+    《5-接口清单》F2 没有请求体/响应体契约，字段与格式校验见 `HomeworkCreateIn`。
+    权限在路由层（`login_required` + `teacher_required`），`teacher_id` 由路由从
+    session 取出后传入——本函数不碰 flask.session（同 calibrate_submission）。
+
+    以下三条是本次自拟的：
+      1. `demo_id` 必须存在，否则 404，与 C2 的「曲目不存在」同码同文案；
+      2. `segment_ids` 必须全部属于该曲目，否则 422——跨曲目的唱段会让 F3 拿错
+         参考音轨；请求体引用不存在的从属资源属请求体不合法（同 F6 对语音音频
+         的 422 判据），不是 URL 里那个具名资源不存在；
+      3. `deadline` 不早于北京时间今天，否则 422：前端弹窗的 min 就是今天，后端
+         不校验等于允许绕过页面写一份出生即逾期的作业。
+
+    空 `segment_ids` 合法，语义是「按整曲布置」（前端弹窗的既有口径）。
+    """
+    demo = library_repo.get_demo(db, data.demo_id)
+    if demo is None:
+        raise BusinessError(404, "曲目不存在")
+
+    if data.segment_ids:
+        owned = {s.id for s in library_repo.list_segments(db, data.demo_id)}
+        alien = [sid for sid in data.segment_ids if sid not in owned]
+        if alien:
+            raise BusinessError(
+                422, f"唱段不属于该曲目：{'、'.join(str(x) for x in alien)}"
+            )
+
+    today = _beijing_now().date()
+    if data.deadline < today:
+        raise BusinessError(422, "截止日期不能早于今天")
+
+    hw = homeworks_repo.add_homework(db, Homework(
+        teacher_id=teacher_id,
+        title=data.title,
+        demo_id=data.demo_id,
+        segment_ids=data.segment_ids,
+        focus_skills=data.focus_skills,
+        deadline=data.deadline,
+        status="open",
+    ))
+
+    # 出参在 commit **之前**组装：commit 会让 ORM 实例的属性过期，之后再读会多发
+    # 一条 SELECT 把整行重新拉一遍（同 review_submission）。新作业没有任何提交，
+    # 所以三个统计量恒为 0——**不查库**，也就不存在与 F1 口径不一致的风险。
+    n = len(user_repo.get_student_roster(db))
+    out = HomeworkListItem(
+        homework_id=hw.id,
+        title=hw.title,
+        deadline=hw.deadline,
+        demo_title=demo.title,
+        demo_role=demo.role,
+        demo_banshi=demo.banshi,
+        submitted_count=0,
+        total=n,
+        progress=0.0,
+        pending_review_count=0,
+        status=_status_of(hw, 0, today),
+    )
+    db.commit()
+    return out
+
+
+def _student_id_or_403(db: Session, user_id: int) -> int:
+    """登录用户 → students.id；没有学生档案回 403。
+
+    与 practice_service._own_student_id 同口径，但不跨模块 import 私有函数：
+    两个 service 各自守住自己接口的权限边界，改一个不会意外影响另一个。
+    """
+    student_id = user_repo.get_student_id_by_user_id(db, user_id)
+    if student_id is None:
+        raise BusinessError(403, "当前账号没有学生档案")
+    return student_id
+
+
+def _submission_status(sub: Submission | None) -> str:
+    """学生端四档：无提交 todo，有提交取列值，NULL 脏数据按 submitted。"""
+    if sub is None:
+        return "todo"
+    return sub.status or "submitted"
+
+
+def _is_overdue(hw: Homework, sub: Submission | None, today: date) -> bool:
+    """与教师端 `get_submission_stats` 的逾期口径逐字同源。
+
+    未提交：deadline 非空且早于北京时间今天；
+    已提交：`submitted_at` 的日期晚于 deadline（`submitted_at` 是 UTC，
+    与 SQL 侧 `cast(submitted_at, Date) > deadline` 一致）。
+    deadline 为空一律 false——判不了就当没逾期，不猜。
+    """
+    if hw.deadline is None:
+        return False
+    if sub is None:
+        return hw.deadline < today
+    return sub.submitted_at is not None and sub.submitted_at.date() > hw.deadline
+
+
+def _allowed_segment_ids(db: Session, hw: Homework) -> list[int]:
+    """作业当前实际可选的唱段，按 segments.seq 升序。
+
+    - `homeworks.segment_ids` 非空：只保留仍存在的那些；
+    - 为空（按整曲布置）：该曲目当前全部分段；
+    - `demo_id` 为空：空数组。
+
+    分段被重新解析后旧的 id 可能已不存在，所以必须与当前 segments 表求交，
+    不能直接把 JSONB 原样给前端。
+    """
+    if hw.demo_id is None:
+        return []
+    segments = library_repo.list_segments(db, hw.demo_id)
+    if not hw.segment_ids:
+        return [s.id for s in segments]
+    wanted = set(hw.segment_ids)
+    return [s.id for s in segments if s.id in wanted]
+
+
+def _to_brief(sub: Submission) -> StudentSubmissionBrief:
+    return StudentSubmissionBrief(
+        submission_id=sub.id,
+        status=sub.status or "submitted",
+        ai_score=sub.ai_score,
+        teacher_score=sub.teacher_score,
+        submitted_at=sub.submitted_at,
+    )
+
+
+def _to_detail_submission(sub: Submission) -> StudentSubmissionDetail:
+    """详情里的提交块。words / cdm_tags 复用 F5 的解析函数。"""
+    return StudentSubmissionDetail(
+        submission_id=sub.id,
+        status=sub.status or "submitted",
+        ai_score=sub.ai_score,
+        teacher_score=sub.teacher_score,
+        teacher_comment=sub.teacher_comment,
+        submitted_at=sub.submitted_at,
+        reviewed_at=sub.reviewed_at,
+        segment_id=sub.segment_id,
+        words=_lyrics(sub.ai_detail),
+        cdm_tags=_cdm_tags(sub.ai_detail),
+    )
+
+
+def _build_student_item(
+    hw: Homework, demo, sub: Submission | None, today: date
+) -> StudentHomeworkItem:
+    return StudentHomeworkItem(
+        homework_id=hw.id,
+        title=hw.title,
+        demo_id=hw.demo_id,
+        demo_title=demo.title if demo else None,
+        segment_count=len(hw.segment_ids or []),
+        focus_skills=list(hw.focus_skills or []),
+        deadline=hw.deadline,
+        status=_submission_status(sub),
+        overdue=_is_overdue(hw, sub, today),
+        submission=_to_brief(sub) if sub else None,
+    )
+
+
+def _student_sort_key(item: StudentHomeworkItem) -> tuple:
+    """4.1 的排序：无提交在前（deadline 升序、NULL 沉底、id 降序），
+    有提交在后（submitted_at 降序、NULL 沉底、id 降序）。
+    """
+    sub = item.submission
+    if sub is None:
+        return (
+            0,
+            item.deadline is None,
+            item.deadline.toordinal() if item.deadline else 0,
+            -item.homework_id,
+        )
+    ts = sub.submitted_at.timestamp() if sub.submitted_at else 0.0
+    return (1, sub.submitted_at is None, -ts, -item.homework_id)
+
+
+def list_my_homeworks(
+    db: Session, *, user_id: int
+) -> StudentHomeworkListResponse:
+    """学生端作业列表（4.1）。权限在路由层，这里只按 user_id 做身份映射。"""
+    student_id = _student_id_or_403(db, user_id)
+    today = _beijing_now().date()
+    items = [
+        _build_student_item(hw, demo, sub, today)
+        for hw, demo, sub in homeworks_repo.get_homeworks_with_submission(db, student_id)
+    ]
+    items.sort(key=_student_sort_key)
+    return StudentHomeworkListResponse(homeworks=items)
+
+
+def my_homework_detail(
+    db: Session, *, user_id: int, homework_id: int
+) -> StudentHomeworkDetail:
+    """学生端作业详情（4.2）。作业不存在回 404；不校验归属（同 F1）。"""
+    student_id = _student_id_or_403(db, user_id)
+    row = homeworks_repo.get_homework_with_submission(db, homework_id, student_id)
+    if row is None:
+        raise BusinessError(404, "作业不存在")
+
+    hw, demo, sub = row
+    today = _beijing_now().date()
+    base = _build_student_item(hw, demo, sub, today)
+    allowed = _allowed_segment_ids(db, hw)
+    # 不能把 base 里的轻量 submission 直接透传：它的类型是
+    # StudentSubmissionBrief，而详情字段要求 StudentSubmissionDetail；
+    # 且 StudentHomeworkDetail(**base.model_dump(), submission=...) 会因
+    # 关键字重复直接 TypeError。先转 dict 再覆盖。
+    payload = base.model_dump()
+    payload["submission"] = _to_detail_submission(sub) if sub else None
+    return StudentHomeworkDetail(
+        **payload,
+        segment_ids=list(hw.segment_ids or []),
+        allowed_segment_ids=allowed,
+        can_submit=sub is None and bool(allowed),
+    )
+
+
+def submit_homework(
+    db: Session,
+    *,
+    user_id: int,
+    homework_id: int,
+    segment_id: int,
+    audio_id: int,
+) -> str:
+    """F3：校验后建占位提交，投 B2 管线，返回 task_id。
+
+    顺序是「先 flush 拿 id、再派发、最后 commit」：派发失败时占位行还没提交，
+    可以干净删除；派发成功但 commit 失败时，worker 末尾找不到提交行会把任务
+    置为 failed，不会写出错误数据。
+    """
+    student_id = _student_id_or_403(db, user_id)
+
+    hw = homeworks_repo.get_homework(db, homework_id)
+    if hw is None:
+        raise BusinessError(404, "作业不存在")
+
+    audio = audio_repo.get_by_id(db, audio_id)
+    if audio is None:
+        raise BusinessError(404, "音频不存在")
+    if audio.uploader_id != user_id:
+        raise BusinessError(403, "只能提交本人录音")
+
+    allowed = _allowed_segment_ids(db, hw)
+    if not allowed:
+        raise BusinessError(422, "该作业没有可提交的唱段")
+    if segment_id not in allowed:
+        raise BusinessError(422, "唱段不在本次作业范围内")
+
+    if homeworks_repo.get_submission_for_student(db, homework_id, student_id) is not None:
+        raise BusinessError(422, "该作业已提交，不能重复提交")
+
+    sub = Submission(
+        homework_id=homework_id,
+        student_id=student_id,
+        segment_id=segment_id,
+        audio_id=audio_id,
+        status="submitted",
+    )
+    try:
+        homeworks_repo.add_submission(db, sub)
+    except IntegrityError:
+        # 并发两个请求同时通过了上面的查询，唯一索引在这里挡住第二个。
+        # 必须先 rollback，否则会话处于失败状态，后续任何查询都会报错。
+        db.rollback()
+        raise BusinessError(422, "该作业已提交，不能重复提交") from None
+
+    try:
+        task_id = analyze_service.submit(
+            db,
+            AnalyzeSubmitIn(segment_id=segment_id, student_audio_id=audio_id),
+            persist={"kind": "homework", "submission_id": sub.id},
+        )
+    except Exception:
+        # 分段没绑教师轨、broker 不可达等：占位行还没提交，删掉再原样抛出。
+        # 清理本身失败也不能掩盖原始异常。
+        try:
+            db.delete(sub)
+            db.commit()
+        except Exception:
+            db.rollback()
+        raise
+
+    db.commit()
+    return task_id
 
 
 # 标签的置信度下限（spec 3.5）。0.7 这个数是**页面自己声明的**（待批改卡片区写着
@@ -307,6 +604,46 @@ def _feature_matrix(ai_detail: dict | None) -> dict | None:
     return fm if isinstance(fm, dict) else None
 
 
+def _lyrics(ai_detail: dict | None) -> list[LyricWord]:
+    """F5 的功能 4.4：`ai_detail.words`（B4 同形的子集）→ 逐字偏差。
+
+    2026-10-20 起接通读链路：写入方是作业提交分析（F3）——它把 B4 的 `words`
+    原样放进 `ai_detail.words`，这里直接读，不再翻译字段名。现有 5 条提交的
+    `ai_detail` 只有 CDM 三个键，因此仍出 []（**这是真实的「本次没有」，不是
+    接口占位**）；F3 落库后同一个接口自动有值。
+
+    防御式取值同 `_cdm_tags`：`words` 不是 list、元素不是 dict、`index` 不是
+    整数，一律跳过——一条坏数据不该让教师打不开批改面板。`word` 允许 None
+    （B4 对 `lyrics_json` 里缺字的条目就是给 None），其余数值字段用 `_num`
+    挡掉字符串与 bool。
+    """
+    if not isinstance(ai_detail, dict):
+        return []
+    words = ai_detail.get("words")
+    if not isinstance(words, list):
+        return []
+
+    out: list[LyricWord] = []
+    for item in words:
+        if not isinstance(item, dict):
+            continue
+        index = item.get("index")
+        # bool 是 int 的子类；index 缺失或非整数时无法稳定定位这个字，跳过。
+        if isinstance(index, bool) or not isinstance(index, int):
+            continue
+        word = item.get("word")
+        warning = item.get("warning")
+        out.append(LyricWord(
+            index=index,
+            word=word if isinstance(word, str) else None,
+            start=_num(item.get("start")),
+            end=_num(item.get("end")),
+            deviation_cents=_num(item.get("deviation_cents")),
+            warning=warning if isinstance(warning, bool) else None,
+        ))
+    return out
+
+
 def _overall_confidence(ai_detail: dict | None) -> float | None:
     if not isinstance(ai_detail, dict):
         return None
@@ -330,9 +667,10 @@ def submission_detail(db: Session, submission_id: int) -> SubmissionDetailRespon
     （内含三层 LEFT 与「姓名必须拐 students.user_id」的说明），这里只做 JSONB 解析
     与装配。
 
-    `lyrics` 与 `dimensions` 是**显式空位**——功能 4.4 与 4.5 在库里没有数据源，理由
-    见 spec 2.5 与 `SubmissionDetailResponse` 的文档字符串。它们不是本次没做，是数据
-    不存在，所以出 `[]` 与 `None` 而不是省略键。
+    `lyrics` 读 `ai_detail.words`（2026-10-20 起，F3 提交分析写入；现有数据没有
+    该键，仍出 []）。`dimensions` 仍是显式空位——功能 4.5 在库里没有数据源，理由
+    见 spec 2.5 与 `SubmissionDetailResponse` 的文档字符串。它们不是本次没做，是
+    数据不存在，所以出 `[]` 与 `None` 而不是省略键。
     """
     row = homeworks_repo.get_submission_detail(db, submission_id)
     if row is None:
@@ -357,7 +695,7 @@ def submission_detail(db: Session, submission_id: int) -> SubmissionDetailRespon
         overall_confidence=_overall_confidence(sub.ai_detail),
         feature_matrix=_feature_matrix(sub.ai_detail),
         dimensions=None,          # 功能 4.5 四维分数无数据源，显式空位
-        lyrics=[],                # 功能 4.4 逐字偏差无数据源，显式空位
+        lyrics=_lyrics(sub.ai_detail),   # 功能 4.4：ai_detail.words（F3 写入）
         cdm_tags=_cdm_tags(sub.ai_detail),
         bkt=_bkt_changes(sub.bkt_before, sub.bkt_after),
         status=sub.status,
@@ -486,3 +824,66 @@ def calibrate_submission(
     out = SubmissionCalibration.model_validate(row)
     db.commit()
     return out
+
+
+def save_result(metadata: dict, result: dict) -> None:
+    """F3 worker：把占位提交回填成 ai_scored，并更新 BKT。
+
+    在请求之外执行，所以用 `session_scope()` 而不是 `get_db()`。提交行与
+    BKT 必须在同一个事务里：只写分数不写 BKT 会让掌握度停在旧值，只写 BKT
+    不写提交则 source_id 指向一个不存在的行。任何一步失败都抛出去，由
+    run_analysis 把任务置为 failed 并调用 discard_pending 删掉占位行。
+    """
+    from app.db import session_scope
+
+    with session_scope() as db:
+        submission_id = metadata.get("submission_id")
+        sub = db.get(Submission, submission_id) if submission_id is not None else None
+        if sub is None:
+            raise BusinessError(500, "作业提交记录不存在")
+        if sub.status != "submitted":
+            # 重复任务或行已被处理；discard_pending 的 status 守卫保证不会删已评分行。
+            raise BusinessError(
+                500, f"作业提交状态不是 submitted（当前 {sub.status!r}）"
+            )
+
+        before, after = practice_service.apply_bkt(
+            db,
+            student_id=sub.student_id,
+            dimensions=result.get("dimensions"),
+            source_type="homework",
+            source_id=sub.id,
+        )
+
+        cdm = result.get("cdm") or {}
+        sub.ai_score = result.get("overall")
+        # 与既有 5 条种子提交同形（defects / overallConfidence），并补上 F5
+        # 已经在读的 words。不写 featureMatrix（B4 没有这个数据源），
+        # 不写 dimensions（五维只在当次 B4/redis 里，TTL 1 小时）。
+        sub.ai_detail = {
+            "words": result.get("words"),
+            "defects": cdm.get("defects") if cdm else None,
+            "overallConfidence": cdm.get("overallConfidence") if cdm else None,
+        }
+        sub.bkt_before = before
+        sub.bkt_after = after
+        sub.status = "ai_scored"
+
+
+def discard_pending(metadata: dict) -> None:
+    """F3 分析失败时删除仍处于 submitted 且未评分的占位行，让学生能重交。
+
+    守卫两个条件缺一不可：`status == 'submitted'` 与 `ai_score is None`。
+    若 save_result 已经成功、只是 redis 的 done 写失败，行已是 ai_scored，
+    这里不会删——代价是学生看到「分析失败」但作业已算分，重交会 422。
+    这是极窄的窗口，按「不丢已算出的成绩」处理。
+    """
+    from app.db import session_scope
+
+    submission_id = metadata.get("submission_id")
+    if submission_id is None:
+        return
+    with session_scope() as db:
+        sub = db.get(Submission, submission_id)
+        if sub is not None and sub.status == "submitted" and sub.ai_score is None:
+            db.delete(sub)

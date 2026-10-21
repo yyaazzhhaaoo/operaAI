@@ -85,7 +85,8 @@ def submit(
     task_id = analyze_service.submit(
         db,
         AnalyzeSubmitIn(segment_id=segment_id, student_audio_id=audio_id),
-        practice={
+        persist={
+            "kind": "practice",
             "student_id": student_id,
             "segment_id": segment_id,
             "audio_id": audio_id,
@@ -158,23 +159,54 @@ def save_result(metadata: dict, result: dict) -> None:
             audio_id=metadata["audio_id"],
             ai_score=result.get("overall"),
             dimensions_json=result.get("dimensions"),
+            # 逐字偏差原样落库（B4 已算好）。没有歌词的曲目这里是 []，
+            # 与「没有数据源」的 None 区分开；历史结果缺该键时落 NULL。
+            words_json=result.get("words"),
+            # CDM 归因由分析管线按规则引擎算好；历史结果缺该键时落 NULL
+            # （None = 没有数据源，与 defects=[] 的「查了是空」区分）。
+            cdm_json=result.get("cdm"),
             duration_sec=metadata.get("duration_sec"),
         )
         db.add(record)
         db.flush()
-        _update_bkt(db, record)
+        apply_bkt(
+            db,
+            student_id=record.student_id,
+            dimensions=record.dimensions_json,
+            source_type="practice",
+            source_id=record.id,
+        )
 
 
-def _update_bkt(db: Session, record: PracticeRecord) -> None:
-    """按维度分数移动掌握度。规则是临时口径，第 4 周标定时替换。"""
-    dimensions = record.dimensions_json or {}
+def apply_bkt(
+    db: Session,
+    *,
+    student_id: int,
+    dimensions: dict | None,
+    source_type: str,
+    source_id: int,
+) -> tuple[dict, dict]:
+    """按维度分数移动掌握度，返回 (本次更新前, 本次更新后) 的 P(L) 字典。
+
+    规则是临时口径（DOC_ISSUES 第 44 条），第 4 周标定时替换。D1 练习与
+    F3 作业提交共用这一份，只有 `source_type` / `source_id` 不同：两处各写
+    一套的话，同一份 B4 结果会在两条链路里推出不同的掌握度。
+
+    `before` / `after` 只包含本次真正更新了的技法（维度分非数值的跳过），
+    形状是「技法名 → P(L)」的扁平字典，正好是 F5 `_bkt_changes` 读取的形状。
+    """
+    before: dict = {}
+    after: dict = {}
+    dims = dimensions if isinstance(dimensions, dict) else {}
+
     for dimension, skill in _SKILL_BY_DIMENSION.items():
-        score = dimensions.get(dimension)
-        if not isinstance(score, (int, float)):
+        score = dims.get(dimension)
+        # bool 是 int 的子类；JSONB 里的字符串/"80" 也不能当分数用。
+        if isinstance(score, bool) or not isinstance(score, (int, float)):
             continue
 
         previous = bkt_history_repo.get_latest_for_student_skill(
-            db, record.student_id, skill
+            db, student_id, skill
         )
         old_p_l = previous.p_l if previous else _BKT_PRIOR
         new_p_l = old_p_l + _BKT_LEARNING_RATE * (score / 100.0 - old_p_l)
@@ -184,11 +216,14 @@ def _update_bkt(db: Session, record: PracticeRecord) -> None:
             else _BKT_PRIOR
         )
 
+        before[skill] = old_p_l
+        after[skill] = min(1.0, max(0.0, new_p_l))
         db.add(BktHistory(
-            student_id=record.student_id,
+            student_id=student_id,
             skill=skill,
-            p_l=min(1.0, max(0.0, new_p_l)),
+            p_l=after[skill],
             confidence=min(1.0, old_confidence + _BKT_CONFIDENCE_STEP),
-            source_type="practice",
-            source_id=record.id,
+            source_type=source_type,
+            source_id=source_id,
         ))
+    return before, after
