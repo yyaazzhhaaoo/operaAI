@@ -94,6 +94,8 @@ CREATE TABLE practice_records (
   audio_id INT REFERENCES audio_files(id),
   ai_score FLOAT,
   dimensions_json JSONB,                   -- {音准,节奏,气息,咬字,拖腔}
+  words_json JSONB,                        -- 逐字偏差（B4 words），无歌词时为 []
+  cdm_json JSONB,                          -- CDM 归因 {defects:[...], overallConfidence}
   duration_sec FLOAT,
   created_at TIMESTAMP DEFAULT NOW()
 );
@@ -131,6 +133,7 @@ CREATE TABLE submissions (
   homework_id INT REFERENCES homeworks(id),
   student_id INT REFERENCES students(id),
   audio_id INT REFERENCES audio_files(id),
+  segment_id INT,                          -- 学生提交的唱段（无外键，见下方索引注释）
   ai_score FLOAT,
   ai_detail JSONB,                         -- 逐字偏差 + CDM 归因标签
   bkt_before JSONB,
@@ -143,6 +146,16 @@ CREATE TABLE submissions (
   submitted_at TIMESTAMP DEFAULT NOW(),
   reviewed_at TIMESTAMP
 );
+
+-- 一份作业每个学生只能提交一次（2026-10-21，F3）。教师端「提交人数」本来就按
+-- (homework_id, student_id) 去重，这个索引把页面口径变成库级事实。
+--
+-- submissions.segment_id 刻意不设外键：library_repo.replace_segments 会按 demo_id
+-- 整批删除旧分段再插入，外键会让「重新解析一个已经有作业提交的曲目」直接失败。
+-- 分段被重解析后这个 id 可能悬空；它与 homeworks.segment_ids 的 JSONB 一样，
+-- 是历史引用而不是强引用。
+CREATE UNIQUE INDEX uq_submissions_homework_student
+  ON submissions(homework_id, student_id);
 
 -- 11. AI 教练对话记录（模块3）
 CREATE TABLE chat_messages (
