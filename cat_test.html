@@ -704,6 +704,9 @@ body{
             <span>多维特征融合与 BKT 状态更新</span>
           </div>
         </div>
+        <div class="progress-track" style="margin-top:16px">
+          <div class="progress-fill" id="analyzingProgress" style="width:0%"></div>
+        </div>
       </div>
     </div>
 
@@ -844,6 +847,15 @@ let sessionStartTime = null;
 let radarChart = null;
 let currentUser = null;
 let demoAudio = null;
+let mediaStream = null;
+let mediaRecorder = null;
+let recordChunks = [];
+let recordTimer = null;
+let autoStopTimer = null;
+let recordStartedAt = 0;
+let lastMimeType = "audio/webm";
+let isRecording = false;
+let isAnalyzing = false;
 
 function resetProfile() {
   abilityProfile = {};
@@ -1020,102 +1032,292 @@ function skipTest() {
   showToast("warn", "跳过功能接入中", "请稍后重试。");
 }
 
-function submitPhrase() {
-  // 任务 9 替换成真实录音
-  showToast("info", "录音功能接入中", "请稍后重试。");
+async function submitPhrase() {
+  if (isAnalyzing) return;
+  if (isRecording) { stopRecording(); return; }
+  await startRecording();
 }
 
-function finishRecording() {
-  clearInterval(recordTimer);
+async function startRecording() {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    showToast("warn", "无法访问麦克风", "请允许浏览器使用麦克风后重试。");
+    return;
+  }
+  const q = questions[currentIndex];
+  if (!q) return;
+  recordChunks = [];
+  recordStartedAt = Date.now();
+  mediaRecorder = new MediaRecorder(mediaStream);
+  mediaRecorder.ondataavailable = e => {
+    if (e.data && e.data.size) recordChunks.push(e.data);
+  };
+  mediaRecorder.onstop = () => { submitRecording(); };
+  mediaRecorder.start();
+  isRecording = true;
+
+  const btn = document.getElementById("recordBtn");
+  const area = document.getElementById("recordArea");
+  const hint = document.getElementById("recordHint");
+  const timer = document.getElementById("recordTimer");
+  const wave = document.getElementById("waveform");
+  btn.classList.add("recording");
+  area.classList.add("recording");
+  btn.disabled = false;
+  hint.textContent = "正在录音…再次点击停止";
+  timer.classList.remove("hidden");
+  wave.classList.remove("hidden");
+  recordTimer = setInterval(() => {
+    timer.textContent = formatTime((Date.now() - recordStartedAt) / 1000);
+  }, 250);
+
+  const maxMs = (Number(q.duration) || 30) * 1000 + 3000;
+  autoStopTimer = setTimeout(() => { if (isRecording) stopRecording(); }, maxMs);
+}
+
+function stopRecording() {
+  if (!isRecording || !mediaRecorder) return;
   isRecording = false;
-  document.getElementById('phraseCard').classList.add('hidden');
-  document.getElementById('analyzingCard').classList.remove('hidden');
-  document.getElementById('analyzingCard').classList.add('fade-in');
-  simulateAnalysis();
+  clearInterval(recordTimer);
+  clearTimeout(autoStopTimer);
+  recordTimer = null;
+  autoStopTimer = null;
+  lastMimeType = mediaRecorder.mimeType || "audio/webm";
+  document.getElementById("recordTimer").classList.add("hidden");
+  document.getElementById("waveform").classList.add("hidden");
+  document.getElementById("recordBtn").classList.remove("recording");
+  document.getElementById("recordArea").classList.remove("recording");
+  document.getElementById("recordHint").textContent = "正在处理录音…";
+  document.getElementById("recordBtn").disabled = true;
+  mediaRecorder.stop();
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(t => t.stop());
+    mediaStream = null;
+  }
 }
 
-function simulateAnalysis() {
-  const steps = document.querySelectorAll('.analyzing-step');
-  let stepIdx = 0;
-  const interval = setInterval(() => {
-    if (stepIdx > 0) {
-      steps[stepIdx - 1].classList.remove('active');
-      steps[stepIdx - 1].classList.add('done');
-    }
-    if (stepIdx < steps.length) {
-      steps[stepIdx].classList.add('active');
-      stepIdx++;
-    } else {
-      clearInterval(interval);
-      setTimeout(() => showResult(), 400);
-    }
-  }, 500);
+async function recordedWav(chunks, mimeType) {
+  const raw = new Blob(chunks, { type: mimeType || "audio/webm" });
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  let decoded;
+  try {
+    decoded = await audioCtx.decodeAudioData(await raw.arrayBuffer());
+  } finally {
+    audioCtx.close().catch(() => {});
+  }
+
+  const frames = Math.max(1, Math.ceil(decoded.duration * WAV_SAMPLE_RATE));
+  const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  const offline = new OfflineCtx(1, frames, WAV_SAMPLE_RATE);
+  const src = offline.createBufferSource();
+  src.buffer = decoded;
+  src.connect(offline.destination);
+  src.start();
+  const samples = (await offline.startRendering()).getChannelData(0);
+
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const writeStr = (offset, s) => {
+    for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
+  };
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, WAV_SAMPLE_RATE, true);
+  view.setUint32(28, WAV_SAMPLE_RATE * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+  for (let i = 0, o = 44; i < samples.length; i++, o += 2) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return {
+    blob: new Blob([buffer], { type: "audio/wav" }),
+    duration: samples.length / WAV_SAMPLE_RATE
+  };
 }
 
-function showResult() {
-  const phrase = PHRASE_POOL[currentIndex];
-  const baseScore = Math.max(45, Math.min(95, 75 + randomBetween(-20, 15)));
-  const score = Math.round(baseScore);
-  const dims = {};
-  phrase.testSkills.forEach(sk => {
-    dims[sk] = Math.round(Math.max(40, Math.min(98, score + randomBetween(-15, 10))));
+async function submitRecording() {
+  if (isAnalyzing) return;
+  const q = questions[currentIndex];
+  if (!q) return;
+  isAnalyzing = true;
+  document.getElementById("phraseCard").classList.add("hidden");
+  document.getElementById("resultCard").classList.add("hidden");
+  document.getElementById("analyzingCard").classList.remove("hidden");
+  const analyzingBar = document.getElementById("analyzingProgress");
+  if (analyzingBar) analyzingBar.style.width = "0%";
+  document.querySelectorAll(".analyzing-step").forEach((el, i) => {
+    el.classList.toggle("active", i === 0);
+    el.classList.remove("done");
   });
-  TECHNIQUES.forEach(t => {
-    if (!dims[t.key]) dims[t.key] = Math.round(50 + randomBetween(-10, 10));
-  });
-  const bktUpdates = {};
-  phrase.testSkills.forEach(sk => {
-    const before = abilityProfile[sk].p_l;
-    const dimScore = dims[sk] / 100;
-    const learnRate = dimScore > 0.7 ? 0.12 : (dimScore > 0.5 ? 0.06 : 0.02);
-    const after = Math.min(0.95, before + learnRate + randomBetween(-0.02, 0.02));
-    abilityProfile[sk].p_l = parseFloat(after.toFixed(3));
-    abilityProfile[sk].confidence = Math.min(0.95, abilityProfile[sk].confidence + 0.06);
-    abilityProfile[sk].history.push(abilityProfile[sk].p_l);
-    bktUpdates[sk] = { before: before, after: abilityProfile[sk].p_l };
-  });
-  const mainSkill = phrase.testSkills[0];
-  const mainScore = dims[mainSkill];
-  let level = 'mid';
-  if (mainScore >= 80) level = 'high';
-  else if (mainScore < 60) level = 'low';
-  const templates = ENCOURAGE_MESSAGES[level];
-  const encourageText = templates[Math.floor(Math.random() * templates.length)].replace('{skill}', mainSkill);
-  answers.push({ phraseId: phrase.id, score: score, dimensions: dims, bktUpdates: bktUpdates, timestamp: new Date().toISOString() });
 
-  document.getElementById('analyzingCard').classList.add('hidden');
-  document.getElementById('resultCard').classList.remove('hidden');
-  document.getElementById('resultCard').classList.add('fade-in');
-  document.getElementById('resultScore').textContent = score;
-  const scoreColor = score >= 80 ? 'linear-gradient(135deg,#4A8F6B,#3D6B5A)' : (score >= 60 ? 'linear-gradient(135deg,#C9A84C,#B89076)' : 'linear-gradient(135deg,#B83A2F,#9E3126)');
-  document.getElementById('resultScore').style.background = scoreColor;
-  document.getElementById('resultScore').style.webkitBackgroundClip = 'text';
-  document.getElementById('resultScore').style.webkitTextFillColor = 'transparent';
+  try {
+    const wav = await recordedWav(recordChunks, lastMimeType);
+    recordChunks = [];
+    if (wav.duration < 0.5) {
+      showToast("warn", "录音太短", "录音不足 0.5 秒，本次不提交。");
+      showPhraseCard();
+      return;
+    }
 
-  const dimContainer = document.getElementById('resultDims');
-  const dimEntries = Object.entries(dims).slice(0, 4);
-  dimContainer.innerHTML = dimEntries.map(([name, val]) => {
-    const color = val >= 80 ? '#4A8F6B' : (val >= 60 ? '#0066B3' : '#B83A2F');
-    return '<div class="result-dim"><div class="result-dim-header"><span class="result-dim-name">' + name + '</span><span class="result-dim-score" style="color:' + color + '">' + val + '分</span></div><div class="result-dim-bar"><div class="result-dim-fill" style="width:0%;background:' + color + '" data-width="' + val + '%"></div></div></div>';
-  }).join('');
+    const upForm = new FormData();
+    upForm.append("audio", wav.blob, "cat_" + q.id + "_" + Date.now() + ".wav");
+    const up = await apiPostForm("/api/audio/upload", upForm);
+
+    const subForm = new FormData();
+    subForm.append("segment_id", String(q.segment_id));
+    subForm.append("audio_id", String(up.file_id));
+    subForm.append("duration_sec", wav.duration.toFixed(2));
+    const sub = await apiPostForm("/api/cat/submit", subForm);
+
+    const result = await pollAnalysis(sub.task_id, updateAnalyzingSteps);
+    markAnalyzingDone();
+    applyBktResult(result);
+    renderResult(result);
+  } catch (e) {
+    showToast("warn", "分析失败", e.message);
+    showPhraseCard();
+  } finally {
+    isAnalyzing = false;
+    document.getElementById("recordBtn").disabled = false;
+  }
+}
+
+async function pollAnalysis(taskId, onProgress) {
+  const startedAt = Date.now();
+  while (true) {
+    if (Date.now() - startedAt > ANALYZE_TIMEOUT_MS) {
+      throw new Error("分析超时，请稍后重试");
+    }
+    const s = await apiGet("/api/analyze/status/" + taskId);
+    if (s.status === "failed") throw new Error(s.message || "分析失败");
+    if (s.status === "done") return apiGet("/api/analyze/result/" + taskId);
+    if (onProgress) onProgress(s);
+    await new Promise(r => setTimeout(r, ANALYZE_POLL_MS));
+  }
+}
+
+function updateAnalyzingSteps(s) {
+  const bar = document.getElementById("analyzingProgress");
+  if (bar && Number.isFinite(s.progress)) bar.style.width = s.progress + "%";
+  const idx = STEP_BY_STAGE[s.stage];
+  if (idx == null) return;
+  document.querySelectorAll(".analyzing-step").forEach((el, i) => {
+    el.classList.toggle("done", i < idx);
+    el.classList.toggle("active", i === idx);
+  });
+}
+
+function markAnalyzingDone() {
+  const bar = document.getElementById("analyzingProgress");
+  if (bar) bar.style.width = "100%";
+  document.querySelectorAll(".analyzing-step").forEach(el => {
+    el.classList.add("done");
+    el.classList.remove("active");
+  });
+}
+
+function applyBktResult(result) {
+  const after = result.bkt && result.bkt.after;
+  if (!after) return;
+  Object.entries(after).forEach(([skill, p]) => {
+    if (abilityProfile[skill] && Number.isFinite(p)) abilityProfile[skill].p_l = p;
+  });
+}
+
+function renderResult(result) {
+  const q = questions[currentIndex];
+  const score = Number.isFinite(result.overall) ? Math.round(result.overall) : null;
+  const dims = result.dimensions || {};
+  const bkt = result.bkt || { before: {}, after: {} };
+
+  const scoreEl = document.getElementById("resultScore");
+  scoreEl.textContent = score == null ? "—" : score;
+  const gradient = score == null
+    ? "linear-gradient(135deg,#B89076,#8A6E4B)"
+    : score >= 80
+      ? "linear-gradient(135deg,#4A8F6B,#3D6B5A)"
+      : score >= 60
+        ? "linear-gradient(135deg,#C9A84C,#B89076)"
+        : "linear-gradient(135deg,#B83A2F,#9E3126)";
+  scoreEl.style.background = gradient;
+  scoreEl.style.webkitBackgroundClip = "text";
+  scoreEl.style.webkitTextFillColor = "transparent";
+
+  const dimNames = ["音准", "节奏", "气息", "咬字", "拖腔"];
+  document.getElementById("resultDims").innerHTML = dimNames.map(name => {
+    const val = dims[name];
+    if (!Number.isFinite(val)) {
+      return '<div class="result-dim"><div class="result-dim-header"><span class="result-dim-name">' +
+        name + '</span><span class="result-dim-score" style="color:var(--text-muted)">待分析</span></div>' +
+        '<div class="result-dim-bar"><div class="result-dim-fill" style="width:0%"></div></div></div>';
+    }
+    const rounded = Math.round(val);
+    const color = rounded >= 80 ? "#4A8F6B" : (rounded >= 60 ? "#0066B3" : "#B83A2F");
+    return '<div class="result-dim"><div class="result-dim-header"><span class="result-dim-name">' +
+      name + '</span><span class="result-dim-score" style="color:' + color + '">' + rounded +
+      '分</span></div><div class="result-dim-bar"><div class="result-dim-fill" style="width:0%;background:' +
+      color + '" data-width="' + rounded + '%"></div></div></div>';
+  }).join("");
   setTimeout(() => {
-    document.querySelectorAll('.result-dim-fill').forEach(el => {
-      el.style.width = el.getAttribute('data-width');
+    document.querySelectorAll(".result-dim-fill").forEach(el => {
+      const w = el.getAttribute("data-width");
+      if (w) el.style.width = w;
     });
   }, 100);
 
-  document.getElementById('encourageText').innerHTML = encourageText;
-  const bktList = document.getElementById('bktUpdateList');
-  bktList.innerHTML = Object.entries(bktUpdates).map(([sk, upd]) => {
-    const color = getPLColor(upd.after);
-    const arrow = upd.after > upd.before ? '↗' : '→';
-    return '<div style="display:flex;align-items:center;gap:10px;font-size:12px"><span style="color:var(--text-secondary);min-width:70px">' + sk + '</span><div style="flex:1;height:4px;background:var(--border-light);border-radius:2px;overflow:hidden;max-width:120px"><div style="width:' + (upd.after*100) + '%;height:100%;background:' + color.bar + ';border-radius:2px;transition:width 0.6s"></div></div><span style="color:var(--text-muted);font-family:monospace">' + (upd.before*100).toFixed(0) + '% ' + arrow + '</span><span style="color:' + color.text + ';font-weight:700;min-width:40px;text-align:right">' + (upd.after*100).toFixed(0) + '%</span><span class="skill-status" style="background:' + color.bar + '20;color:' + color.text + '">' + color.label + '</span></div>';
-  }).join('');
+  const mainDim = (q.focus_dims || [])[0] || "音准";
+  const mainSkill = DIM_TO_SKILL[mainDim] || "音准控制";
+  const mainScore = Number.isFinite(dims[mainDim]) ? dims[mainDim] : (score == null ? 0 : score);
+  const level = mainScore >= 80 ? "high" : (mainScore >= 60 ? "mid" : "low");
+  const templates = ENCOURAGE_MESSAGES[level];
+  document.getElementById("encourageText").innerHTML =
+    templates[Math.floor(Math.random() * templates.length)].replace("{skill}", mainSkill);
 
+  const skills = Object.keys(bkt.after || {});
+  document.getElementById("bktUpdateList").innerHTML = skills.map(skill => {
+    const before = bkt.before && Number.isFinite(bkt.before[skill]) ? bkt.before[skill] : null;
+    const after = bkt.after[skill];
+    if (!Number.isFinite(after)) return "";
+    const color = getPLColor(after);
+    const arrow = before != null && after > before ? "↗" : "→";
+    const beforeText = before == null ? "—" : (before * 100).toFixed(0) + "%";
+    return '<div style="display:flex;align-items:center;gap:10px;font-size:12px">' +
+      '<span style="color:var(--text-secondary);min-width:70px">' + escapeHtml(skill) + '</span>' +
+      '<div style="flex:1;height:4px;background:var(--border-light);border-radius:2px;overflow:hidden;max-width:120px">' +
+      '<div style="width:' + (after * 100) + "%;height:100%;background:" + color.bar +
+      ';border-radius:2px;transition:width 0.6s"></div></div>' +
+      '<span style="color:var(--text-muted);font-family:monospace">' + beforeText + " " + arrow + '</span>' +
+      '<span style="color:' + color.text + ';font-weight:700;min-width:40px;text-align:right">' +
+      (after * 100).toFixed(0) + '%</span>' +
+      '<span class="skill-status" style="background:' + color.bar + '20;color:' + color.text + '">' +
+      color.label + '</span></div>';
+  }).join("");
+
+  answers[currentIndex] = {
+    questionId: q.id,
+    segmentId: q.segment_id,
+    recordId: result.record_id,
+    score: result.overall,
+    dimensions: dims,
+    bkt: bkt,
+    timestamp: new Date().toISOString()
+  };
+
+  const nextBtn = document.getElementById("nextBtn");
+  nextBtn.textContent = currentIndex >= questions.length - 1 ? "查看完整画像 →" : "下一句 →";
+  document.getElementById("analyzingCard").classList.add("hidden");
+  document.getElementById("resultCard").classList.remove("hidden");
+  document.getElementById("resultCard").classList.add("fade-in");
   updateAbilityPreview();
-  const nextBtn = document.getElementById('nextBtn');
-  if (currentIndex >= PHRASE_POOL.length - 1) nextBtn.textContent = '查看完整画像 →';
-  else nextBtn.textContent = '下一句 →';
 }
 
 function nextPhrase() {
