@@ -607,7 +607,7 @@ body{
           <div class="intro-feature-icon">⏱️</div>
           <div>
             <div class="intro-feature-title">仅需 3-5 分钟</div>
-            <div class="intro-feature-desc">8句代表性唱句，覆盖音准、气息、节奏、装饰音等核心维度</div>
+            <div class="intro-feature-desc">5–8 句代表性唱句，覆盖音准、气息、节奏、装饰音等核心维度</div>
           </div>
         </div>
         <div class="intro-feature">
@@ -626,8 +626,8 @@ body{
         </div>
       </div>
       <div class="btn-group">
-        <button class="btn-primary" onclick="startTest()">🚀 开始摸底测试</button>
-        <button class="btn-secondary" onclick="skipTest()">⏭️ 跳过（使用默认画像）</button>
+        <button class="btn-primary" id="startBtn" onclick="startTest()" disabled>🚀 开始摸底测试</button>
+        <button class="btn-secondary" id="skipBtn" onclick="skipTest()" disabled>⏭️ 跳过（使用默认画像）</button>
       </div>
       <div style="margin-top:14px;font-size:12px;color:var(--text-muted)">
         💡 提示：建议佩戴耳机，在安静环境中进行，以获得最准确的分析结果
@@ -658,16 +658,19 @@ body{
       <div class="phrase-title" id="phraseTitle">单音模唱 · 中音区</div>
       <div class="phrase-meta">
         <span class="phrase-tag">曲目: <span class="val" id="phrasePiece">基础音准测试</span></span>
-        <span class="phrase-tag">难度: <span class="val" id="phraseDiff">入门</span></span>
         <span class="phrase-tag">时长: <span class="val" id="phraseDuration">8s</span></span>
-        <span class="phrase-tag">考察: <span class="val" id="phraseSkill">音准控制</span></span>
+        <span class="phrase-tag">考察维度: <span class="val" id="phraseSkill">音准控制</span></span>
       </div>
       <div class="phrase-lyrics" id="phraseLyrics">啦 ——</div>
       <div class="phrase-desc" id="phraseDesc">请跟唱"啦"字，保持音高稳定，尽量与示范音高一致</div>
 
+      <div style="margin-bottom:12px;text-align:center">
+        <button class="btn-secondary" id="playDemoBtn" onclick="playDemo()">▶ 播放示范</button>
+      </div>
+
       <div class="record-area" id="recordArea">
         <button class="record-btn" id="recordBtn" onclick="submitPhrase()">🎤</button>
-        <div class="record-hint" id="recordHint">点击麦克风图标，模拟完成跟唱并提交分析</div>
+        <div class="record-hint" id="recordHint">点击麦克风开始录音，再次点击停止并提交</div>
         <div class="record-timer hidden" id="recordTimer">00:00</div>
         <div class="waveform hidden" id="waveform">
           <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
@@ -797,23 +800,9 @@ body{
 const TECHNIQUES = [
   { key: "音准控制", color: "#0066B3", category: "基础" },
   { key: "气息支撑", color: "#4A8F6B", category: "基础" },
-  { key: "滑音", color: "#C0392B", category: "装饰" },
   { key: "拖腔", color: "#C9A84C", category: "装饰" },
   { key: "归韵咬字", color: "#8A6E4B", category: "基础" },
-  { key: "节奏感知", color: "#B89076", category: "基础" },
-  { key: "颤音", color: "#D97706", category: "装饰" },
-  { key: "装饰音技巧", color: "#7C3AED", category: "装饰" }
-];
-
-const PHRASE_POOL = [
-  { id: "cat01", title: "单音模唱 · 中音区", lyrics: "啦 ——", piece: "基础音准测试", difficulty: 0.25, testSkills: ["音准控制"], duration: "8s", description: "请跟唱'啦'字，保持音高稳定，尽量与示范音高一致" },
-  { id: "cat02", title: "长音保持 · 气息测试", lyrics: "啊 ——————", piece: "基础气息测试", difficulty: 0.30, testSkills: ["气息支撑"], duration: "10s", description: "请深吸一口气，跟唱'啊'字，尽量保持音高和音量稳定" },
-  { id: "cat03", title: "简单节奏型", lyrics: "哒 哒 哒 哒", piece: "基础节奏测试", difficulty: 0.28, testSkills: ["节奏感知"], duration: "6s", description: "请跟随节拍，均匀唱出四个'哒'字，注意时值一致" },
-  { id: "cat04", title: "上滑音练习", lyrics: "咦 ~ 呀", piece: "装饰音基础", difficulty: 0.45, testSkills: ["滑音","音准控制"], duration: "8s", description: "请跟唱'咦~呀'，注意从低音滑向高音的流畅度" },
-  { id: "cat05", title: "短拖腔练习", lyrics: "哎 ~ ~", piece: "装饰音基础", difficulty: 0.48, testSkills: ["拖腔","气息支撑"], duration: "9s", description: "请跟唱'哎~~'，将尾音自然拖长，注意气息均匀输出" },
-  { id: "cat06", title: "归韵咬字", lyrics: "天 ~ 边 ~", piece: "咬字基础", difficulty: 0.42, testSkills: ["归韵咬字"], duration: "8s", description: "请跟唱'天边'，注意'天'字收韵完整，口型保持到位" },
-  { id: "cat07", title: "颤音感知", lyrics: "咿 ~~", piece: "装饰音基础", difficulty: 0.50, testSkills: ["颤音","音准控制"], duration: "8s", description: "请跟唱'咿~~'，尝试让声音产生自然的波动感" },
-  { id: "cat08", title: "综合短句 · 辕门外", lyrics: "辕门外三声炮", piece: "《穆桂英挂帅》", difficulty: 0.65, testSkills: ["音准控制","节奏感知","归韵咬字"], duration: "12s", description: "请跟唱这句经典唱段，综合展示你的音准、节奏和咬字能力" }
+  { key: "节奏感知", color: "#B89076", category: "基础" }
 ];
 
 const ENCOURAGE_MESSAGES = {
@@ -834,23 +823,33 @@ const ENCOURAGE_MESSAGES = {
   ]
 };
 
+const WAV_SAMPLE_RATE = 16000;
+const ANALYZE_POLL_MS = 1000;
+const ANALYZE_TIMEOUT_MS = 180000;
+const STEP_BY_STAGE = {
+  "上传完成": 0, "人声分离": 0,
+  "音高提取": 1, "八度修正": 1,
+  "时间对齐": 2, "评分计算": 2
+};
+const DIM_TO_SKILL = {
+  "音准": "音准控制", "节奏": "节奏感知", "气息": "气息支撑",
+  "咬字": "归韵咬字", "拖腔": "拖腔"
+};
+
+let questions = [];
 let currentIndex = 0;
 let answers = [];
 let abilityProfile = {};
 let sessionStartTime = null;
 let radarChart = null;
-let isRecording = false;
-let recordTimer = null;
-let recordSeconds = 0;
+let currentUser = null;
+let demoAudio = null;
 
-TECHNIQUES.forEach(t => {
-  abilityProfile[t.key] = { p_l: 0.35, confidence: 0.40, history: [0.35] };
-});
-
-function getDiffLabel(d) {
-  if (d >= 0.70) return { text: "高难度", color: "#B83A2F" };
-  if (d >= 0.50) return { text: "中等", color: "#C9A84C" };
-  return { text: "入门", color: "#4A8F6B" };
+function resetProfile() {
+  abilityProfile = {};
+  TECHNIQUES.forEach(t => {
+    abilityProfile[t.key] = { p_l: 0.35, confidence: 0.4 };
+  });
 }
 
 function getPLColor(p) {
@@ -862,102 +861,168 @@ function getPLColor(p) {
 
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return m + ":" + s.toString().padStart(2, '0');
+  const s = Math.floor(seconds % 60);
+  return m + ":" + s.toString().padStart(2, "0");
 }
 
-function randomBetween(min, max) {
-  return Math.random() * (max - min) + min;
+function formatDuration(seconds) {
+  return Number.isFinite(seconds) ? Math.round(seconds) + "s" : "—";
 }
 
-function startTest() {
-  document.getElementById('introPage').classList.add('hidden');
-  document.getElementById('testPage').classList.remove('hidden');
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+async function apiGet(path) {
+  const r = await fetch(path, { credentials: "same-origin" });
+  let body = null;
+  try { body = await r.json(); } catch (e) { /* 非 JSON */ }
+  if (!r.ok) throw new Error((body && body.message) || ("HTTP " + r.status));
+  if (!body || body.code !== 0) throw new Error((body && body.message) || "响应格式错误");
+  return body.data;
+}
+
+async function apiPostForm(path, formData) {
+  const r = await fetch(path, {
+    method: "POST", body: formData, credentials: "same-origin"
+  });
+  let body = null;
+  try { body = await r.json(); } catch (e) { /* 非 JSON */ }
+  if (!r.ok) throw new Error((body && body.message) || ("HTTP " + r.status));
+  if (!body || body.code !== 0) throw new Error((body && body.message) || "响应格式错误");
+  return body.data;
+}
+
+async function loadQuestions() {
+  const startBtn = document.getElementById("startBtn");
+  try {
+    const data = await apiGet("/api/cat/questions");
+    questions = data.questions || [];
+    document.getElementById("totalStepNum").textContent = questions.length || "—";
+    startBtn.textContent = "🚀 开始摸底测试";
+    if (!questions.length) {
+      showToast("warn", "题库为空", "请联系教师配置摸底题目。");
+    }
+  } catch (e) {
+    questions = [];
+    startBtn.textContent = "↻ 重新加载题库";
+    showToast("warn", "题库加载失败", e.message);
+  }
+}
+
+async function startTest() {
+  if (currentUser && currentUser.role !== "student") {
+    showToast("warn", "仅学生可用", "教师账号不能参加摸底测试。");
+    return;
+  }
+  if (!questions.length) {
+    // J1 失败时开始按钮已被改成「重新加载题库」，点它即重试，不回落 mock
+    await loadQuestions();
+    if (!questions.length) return;
+  }
+  document.getElementById("introPage").classList.add("hidden");
+  document.getElementById("testPage").classList.remove("hidden");
   sessionStartTime = Date.now();
   currentIndex = 0;
   answers = [];
-  TECHNIQUES.forEach(t => {
-    abilityProfile[t.key] = { p_l: 0.35, confidence: 0.40, history: [0.35] };
-  });
+  resetProfile();
   renderStepDots();
   loadPhrase(0);
-  showToast('info', '🎯 测试开始', '请跟随系统提示逐句跟唱，每句唱完后会自动分析。');
-}
-
-function skipTest() {
-  if (!confirm('跳过摸底测试将使用默认能力画像（各技法 0.35），推荐精度会降低。确定跳过吗？')) return;
-  showToast('warn', '⏭️ 已跳过测试', '使用默认能力画像，后续可在设置中重新进行摸底。');
-  document.getElementById('introPage').classList.add('hidden');
-  showCompletePage();
+  showToast("info", "🎯 测试开始", "请跟随系统提示逐句跟唱，每句唱完后会自动分析。");
 }
 
 function renderStepDots() {
-  const container = document.getElementById('stepDots');
-  container.innerHTML = PHRASE_POOL.map((p, i) => {
-    let cls = '';
-    if (i < currentIndex) cls = 'done';
-    else if (i === currentIndex) cls = 'active';
-    return '<div class="step-dot ' + cls + '">' + (i < currentIndex ? '✓' : i + 1) + '</div>';
-  }).join('');
+  const container = document.getElementById("stepDots");
+  container.innerHTML = questions.map((q, i) => {
+    let cls = "";
+    if (i < currentIndex) cls = "done";
+    else if (i === currentIndex) cls = "active";
+    return '<div class="step-dot ' + cls + '">' + (i < currentIndex ? "✓" : i + 1) + "</div>";
+  }).join("");
 }
 
 function updateProgress() {
-  const pct = (currentIndex / PHRASE_POOL.length) * 100;
-  document.getElementById('progressFill').style.width = pct + '%';
-  document.getElementById('currentStepNum').textContent = currentIndex + 1;
-  document.getElementById('totalStepNum').textContent = PHRASE_POOL.length;
-  const remain = Math.max(1, Math.ceil((PHRASE_POOL.length - currentIndex) * 0.5));
-  document.getElementById('remainTime').textContent = remain;
+  const total = questions.length || 1;
+  document.getElementById("progressFill").style.width = (currentIndex / total) * 100 + "%";
+  document.getElementById("currentStepNum").textContent = currentIndex + 1;
+  document.getElementById("totalStepNum").textContent = total;
+  document.getElementById("remainTime").textContent =
+    Math.max(1, Math.ceil((total - currentIndex) * 0.7));
+}
+
+function showPhraseCard() {
+  document.getElementById("phraseCard").classList.remove("hidden");
+  document.getElementById("analyzingCard").classList.add("hidden");
+  document.getElementById("resultCard").classList.add("hidden");
+  document.getElementById("recordArea").classList.remove("recording");
+  document.getElementById("recordBtn").classList.remove("recording");
+  document.getElementById("recordBtn").disabled = false;
+  document.getElementById("recordHint").textContent = "点击麦克风开始录音，再次点击停止并提交";
+  document.getElementById("recordTimer").classList.add("hidden");
+  document.getElementById("waveform").classList.add("hidden");
 }
 
 function loadPhrase(index) {
   currentIndex = index;
   updateProgress();
   renderStepDots();
-  const phrase = PHRASE_POOL[index];
-  const diffInfo = getDiffLabel(phrase.difficulty);
-  document.getElementById('phraseNum').textContent = index + 1;
-  document.getElementById('phraseTitle').textContent = phrase.title;
-  document.getElementById('phrasePiece').textContent = phrase.piece;
-  document.getElementById('phraseDiff').textContent = diffInfo.text;
-  document.getElementById('phraseDiff').style.color = diffInfo.color;
-  document.getElementById('phraseDuration').textContent = phrase.duration;
-  document.getElementById('phraseSkill').textContent = phrase.testSkills.join('、');
-  document.getElementById('phraseLyrics').textContent = phrase.lyrics;
-  document.getElementById('phraseDesc').textContent = phrase.description;
-  document.getElementById('recordArea').classList.remove('recording');
-  document.getElementById('recordBtn').classList.remove('recording');
-  document.getElementById('recordBtn').disabled = false;
-  document.getElementById('recordHint').textContent = '点击麦克风图标，模拟完成跟唱并提交分析';
-  document.getElementById('recordTimer').classList.add('hidden');
-  document.getElementById('waveform').classList.add('hidden');
-  document.getElementById('phraseCard').classList.remove('hidden');
-  document.getElementById('analyzingCard').classList.add('hidden');
-  document.getElementById('resultCard').classList.add('hidden');
+  const q = questions[index];
+  if (!q) {
+    showToast("warn", "题目不存在", "请刷新页面重试。");
+    return;
+  }
+  if (demoAudio) { demoAudio.pause(); demoAudio = null; }
+  document.getElementById("phraseNum").textContent = index + 1;
+  document.getElementById("phraseTitle").textContent = q.title;
+  document.getElementById("phrasePiece").textContent = q.demo_title || "—";
+  document.getElementById("phraseDuration").textContent = formatDuration(q.duration);
+  document.getElementById("phraseSkill").textContent = (q.focus_dims || []).join("、") || "—";
+  document.getElementById("phraseLyrics").textContent = q.lyrics || "—";
+  document.getElementById("phraseDesc").textContent = (q.focus_dims || []).length
+    ? "本句重点考察：" + q.focus_dims.join("、") + "。请先播放示范，再跟唱。"
+    : "请先播放示范，再跟唱。";
+  document.getElementById("playDemoBtn").disabled = !q.audio_url;
+  showPhraseCard();
+  document.querySelectorAll(".analyzing-step").forEach((el, i) => {
+    el.classList.toggle("active", i === 0);
+    el.classList.remove("done");
+  });
   updateAbilityPreview();
-  document.getElementById('abilityPreview').classList.add('show');
+  document.getElementById("abilityPreview").classList.add("show");
+}
+
+function playDemo() {
+  const q = questions[currentIndex];
+  if (!q || !q.audio_url) return;
+  if (demoAudio) { demoAudio.pause(); demoAudio = null; }
+  demoAudio = new Audio(q.audio_url);
+  demoAudio.play().catch(() => {
+    showToast("warn", "播放失败", "请检查登录状态或音频是否存在。");
+  });
+}
+
+function updateAbilityPreview() {
+  const container = document.getElementById("abilityPreviewList");
+  container.innerHTML = TECHNIQUES.map(t => {
+    const p = abilityProfile[t.key].p_l;
+    const color = getPLColor(p);
+    return '<div class="ability-preview-item"><span class="ability-preview-name">' + t.key +
+      '</span><div class="ability-preview-bar"><div class="ability-preview-fill" style="width:' +
+      (p * 100) + "%;background:" + color.bar + '"></div></div><span class="ability-preview-val" style="color:' +
+      color.text + '">' + (p * 100).toFixed(0) + "%</span></div>";
+  }).join("");
+}
+
+function skipTest() {
+  // 任务 10 替换成真实实现；这里先占位，避免介绍页按钮在中间态报错
+  showToast("warn", "跳过功能接入中", "请稍后重试。");
 }
 
 function submitPhrase() {
-  if (isRecording) return;
-  isRecording = true;
-  recordSeconds = 0;
-  const btn = document.getElementById('recordBtn');
-  const area = document.getElementById('recordArea');
-  const hint = document.getElementById('recordHint');
-  const timer = document.getElementById('recordTimer');
-  const wave = document.getElementById('waveform');
-  btn.classList.add('recording');
-  area.classList.add('recording');
-  hint.textContent = '正在录制...';
-  timer.classList.remove('hidden');
-  wave.classList.remove('hidden');
-  btn.disabled = true;
-  recordTimer = setInterval(() => {
-    recordSeconds++;
-    timer.textContent = '00:' + recordSeconds.toString().padStart(2, '0');
-    if (recordSeconds >= 3) finishRecording();
-  }, 1000);
+  // 任务 9 替换成真实录音
+  showToast("info", "录音功能接入中", "请稍后重试。");
 }
 
 function finishRecording() {
@@ -1051,15 +1116,6 @@ function showResult() {
   const nextBtn = document.getElementById('nextBtn');
   if (currentIndex >= PHRASE_POOL.length - 1) nextBtn.textContent = '查看完整画像 →';
   else nextBtn.textContent = '下一句 →';
-}
-
-function updateAbilityPreview() {
-  const container = document.getElementById('abilityPreviewList');
-  container.innerHTML = TECHNIQUES.map(t => {
-    const p = abilityProfile[t.key].p_l;
-    const color = getPLColor(p);
-    return '<div class="ability-preview-item"><span class="ability-preview-name">' + t.key + '</span><div class="ability-preview-bar"><div class="ability-preview-fill" style="width:' + (p*100) + '%;background:' + color.bar + '"></div></div><span class="ability-preview-val" style="color:' + color.text + '">' + (p*100).toFixed(0) + '%</span></div>';
-  }).join('');
 }
 
 function nextPhrase() {
@@ -1179,14 +1235,23 @@ renderStepDots();
 </script>
 
 <script>
-(async () => {
+(async function boot() {
   try {
-    const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
-    if (!r.ok) return location.replace('/login.html');
-    const user = (await r.json()).data;
-    if (user) document.body.classList.add('role-' + user.role);
+    const r = await fetch("/api/auth/me", { credentials: "same-origin" });
+    if (!r.ok) return location.replace("/login.html");
+    currentUser = (await r.json()).data;
+    document.body.classList.add("role-" + currentUser.role);
+    const isStudent = currentUser.role === "student";
+    document.getElementById("startBtn").disabled = !isStudent;
+    document.getElementById("skipBtn").disabled = !isStudent;
+    if (!isStudent) {
+      showToast("warn", "仅学生可用", "教师账号可以查看题库，但不能参加摸底测试。");
+    }
+    await loadQuestions();
+    resetProfile();
+    updateAbilityPreview();
   } catch (e) {
-    location.replace('/login.html');
+    location.replace("/login.html");
   }
 })();
 </script>
