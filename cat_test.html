@@ -1029,6 +1029,9 @@ function updateAbilityPreview() {
 
 async function skipTest() {
   if (!confirm("跳过摸底测试将使用默认能力画像（各技法 0.35），推荐精度会降低。确定跳过吗？")) return;
+  const btn = document.getElementById("skipBtn");
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
   try {
     const data = await apiPostForm("/api/cat/skip", new FormData());
     answers = [];
@@ -1036,6 +1039,8 @@ async function skipTest() {
     showToast("warn", "⏭️ 已跳过测试", "使用默认能力画像，后续可重新进行摸底。");
   } catch (e) {
     showToast("warn", "跳过失败", e.message);
+  } finally {
+    if (document.getElementById("skipBtn")) btn.disabled = false;
   }
 }
 

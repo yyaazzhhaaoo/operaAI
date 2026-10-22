@@ -5,10 +5,11 @@ J2 复用 B2 分析管线，落 practice_records(source='cat_test') 并更新 BK
 J3 的 record_id 只作学生锚点，报告返回该生最新画像（口径见 DOC_ISSUES 第 47 条）。
 """
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.common.errors import BusinessError
-from app.models import BktHistory, PracticeRecord
+from app.models import BktHistory, PracticeRecord, Student
 from app.repositories import (
     audio_repo,
     bkt_history_repo,
@@ -142,6 +143,8 @@ def report(db: Session, *, user_id: int, is_student: bool, record_id: int) -> di
 def skip(db: Session, *, user_id: int) -> dict:
     """8.10：只给还没有 BKT 的技法写默认值，不覆盖已有画像。"""
     student_id = _own_student_id(db, user_id)
+    # 锁学生行，串行化同一学生的并发跳过，避免双击写入重复 BKT
+    db.execute(select(Student.id).where(Student.id == student_id).with_for_update())
     created = 0
     for skill in PROFILE_SKILLS:
         if bkt_history_repo.get_latest_for_student_skill(db, student_id, skill) is not None:

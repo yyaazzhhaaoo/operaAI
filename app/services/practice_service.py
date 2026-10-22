@@ -186,7 +186,7 @@ def bkt_snapshot_for_record(
     """
     before: dict[str, float] = {}
     after: dict[str, float] = {}
-    for row in bkt_history_repo.get_by_source(db, "practice", record.id):
+    for row in bkt_history_repo.get_by_source(db, record.source or "practice", record.id):
         previous = bkt_history_repo.get_previous_for_skill(
             db, record.student_id, row.skill, row.id
         )

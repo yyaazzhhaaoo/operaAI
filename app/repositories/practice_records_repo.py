@@ -1,10 +1,15 @@
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import Date, cast, desc, select, func, extract
+from sqlalchemy import Date, cast, desc, select, func, extract, or_
 from sqlalchemy.orm import Session, aliased
 
 from app.models import PracticeRecord, Segment, Student, User
 from app.schemas.dashboard import OverduePracticeAlert
+
+
+def _not_cat_test():
+    """练习读取路径只排除摸底记录；NULL 与历史值按练习处理。"""
+    return or_(PracticeRecord.source.is_(None), PracticeRecord.source != "cat_test")
 
 
 def get_records(db:Session) -> list[OverduePracticeAlert]:
@@ -18,6 +23,7 @@ def get_records(db:Session) -> list[OverduePracticeAlert]:
             )
             .label("rn"),
         )
+        .where(_not_cat_test())
         .subquery()
     )
     pr = aliased(PracticeRecord, subq, name="pr")
@@ -67,6 +73,7 @@ def get_last_practice_at(db: Session, student_ids: list[int]) -> dict[int, datet
     rows = db.execute(
         select(PracticeRecord.student_id, func.max(PracticeRecord.created_at))
         .where(PracticeRecord.student_id.in_(set(student_ids)))
+        .where(_not_cat_test())
         .group_by(PracticeRecord.student_id)
     ).all()
     return {sid: at for sid, at in rows if at is not None}
@@ -96,6 +103,7 @@ def get_weekly_totals(db: Session, student_ids: list[int]) -> dict[date, tuple[i
         )
         .where(PracticeRecord.student_id.in_(set(student_ids)))
         .where(PracticeRecord.created_at.is_not(None))
+        .where(_not_cat_test())
         .group_by(week)
     ).all()
     return {w.date(): (n, float(total)) for w, n, total in rows}
@@ -114,6 +122,7 @@ def get_practice_days(db: Session, student_ids: list[int]) -> dict[int, dict[dat
         select(PracticeRecord.student_id, day, func.count())
         .where(PracticeRecord.student_id.in_(set(student_ids)))
         .where(PracticeRecord.created_at.is_not(None))
+        .where(_not_cat_test())
         .group_by(PracticeRecord.student_id, day)
     ).all()
     out: dict[int, dict[date, int]] = {}
@@ -148,6 +157,7 @@ def get_interrupt_rows(db: Session, start: datetime, end: datetime) -> list[tupl
         .where(PracticeRecord.duration_sec.is_not(None))
         .where(PracticeRecord.created_at >= start)
         .where(PracticeRecord.created_at < end)
+        .where(_not_cat_test())
     ).all()
     return [(float(dur), float(seg_dur)) for dur, seg_dur in rows]
 
@@ -173,6 +183,7 @@ def get_retry_rows(db: Session, start: datetime, end: datetime) -> list[tuple[in
         .where(PracticeRecord.segment_id.is_not(None))
         .where(PracticeRecord.created_at >= start)
         .where(PracticeRecord.created_at < end)
+        .where(_not_cat_test())
         .order_by(PracticeRecord.created_at)
     ).all()
     return [(sid, seg_id, score, at) for sid, seg_id, score, at in rows]
@@ -195,6 +206,7 @@ def get_last_practice_dates(db: Session, student_ids: list[int], until: datetime
         .where(PracticeRecord.student_id.in_(set(student_ids)))
         .where(PracticeRecord.created_at.is_not(None))
         .where(PracticeRecord.created_at <= until)
+        .where(_not_cat_test())
         .group_by(PracticeRecord.student_id)
     ).all()
     return {sid: d for sid, d in rows if d is not None}
@@ -213,6 +225,7 @@ def get_latest_for_student(db: Session, student_id: int) -> PracticeRecord | Non
     return db.scalar(
         select(PracticeRecord)
         .where(PracticeRecord.student_id == student_id)
+        .where(_not_cat_test())
         .order_by(desc(PracticeRecord.created_at))
         .limit(1)
     )
@@ -229,6 +242,7 @@ def get_last_for_student_segment(
         select(PracticeRecord)
         .where(PracticeRecord.student_id == student_id)
         .where(PracticeRecord.segment_id == segment_id)
+        .where(_not_cat_test())
         .order_by(desc(PracticeRecord.created_at), desc(PracticeRecord.id))
         .limit(1)
     )
@@ -247,6 +261,7 @@ def get_by_student_audio(
         select(PracticeRecord)
         .where(PracticeRecord.student_id == student_id)
         .where(PracticeRecord.audio_id == audio_id)
+        .where(_not_cat_test())
         .order_by(desc(PracticeRecord.id))
         .limit(1)
     )
@@ -261,7 +276,11 @@ def list_for_student(
     offset: int = 0,
 ) -> list[PracticeRecord]:
     """D2：某学生的练习日志，按时间倒序。segment_id 为空时不按分段过滤。"""
-    stmt = select(PracticeRecord).where(PracticeRecord.student_id == student_id)
+    stmt = (
+        select(PracticeRecord)
+        .where(PracticeRecord.student_id == student_id)
+        .where(_not_cat_test())
+    )
     if segment_id is not None:
         stmt = stmt.where(PracticeRecord.segment_id == segment_id)
     return list(db.scalars(
@@ -275,8 +294,11 @@ def count_for_student(
     db: Session, student_id: int, *, segment_id: int | None = None
 ) -> int:
     """D2 分页用的总数，过滤条件与 list_for_student 保持一致。"""
-    stmt = select(func.count()).select_from(PracticeRecord).where(
-        PracticeRecord.student_id == student_id
+    stmt = (
+        select(func.count())
+        .select_from(PracticeRecord)
+        .where(PracticeRecord.student_id == student_id)
+        .where(_not_cat_test())
     )
     if segment_id is not None:
         stmt = stmt.where(PracticeRecord.segment_id == segment_id)
