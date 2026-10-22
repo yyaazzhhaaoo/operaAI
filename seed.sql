@@ -34,7 +34,7 @@ INSERT INTO segments (demo_id, seq, title, lyrics_json, duration) VALUES (1, 1, 
 '[{"word":"海","midi":57,"start":0.00,"end":1.20,"note":"NOTE_2","tip":"起音轻，气息下沉"},
   {"word":"岛","midi":55,"start":1.20,"end":1.80,"note":"NOTE_4","tip":"归韵收净"}]'::jsonb, 30.5);
 
--- 摸底题库占位（正式题目待教师录制）
+-- 摸底题库占位（正式题目待教师录制；真实演示数据用 scripts/seed_cat_questions.py 灌入）
 INSERT INTO cat_questions (seq, segment_id, focus_dims) VALUES (1, 1, '["音准","气息"]');
 
 -- 知识图谱最小示例

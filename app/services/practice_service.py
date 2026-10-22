@@ -138,44 +138,40 @@ def logs(
     return PracticeLogsOut(records=[_to_out(r) for r in records], total=total)
 
 
-def save_result(metadata: dict, result: dict) -> None:
+def save_result(metadata: dict, result: dict) -> dict:
     """worker 算完分析后落 practice_records 并更新 BKT。
 
-    `metadata` 是 D1 提交时随 Celery 消息传下来的纯数据；这里在**请求之外**
-    执行，所以用 `session_scope()` 而不是请求内的 `get_db()`。
-
-    记录与 BKT 必须在同一个事务里：只写记录不写 BKT 会让掌握度停在旧值，
-    只写 BKT 不写记录则 BKT 的 source_id 指向一个不存在的行。任何一步失败
-    都抛出去，由 run_analysis 把任务置为 failed——前端宁可看不到分数，
-    也不该看到一个「有分数但库里查不到」的结果。
+    返回 record_id 与本次 BKT 前后值，供 B4 附加给前端；
+    `metadata["kind"]` 决定 source（practice / cat_test），不再写死。
     """
     from app.db import session_scope
 
+    source = metadata.get("kind") or "practice"
     with session_scope() as db:
         record = PracticeRecord(
             student_id=metadata["student_id"],
             segment_id=metadata["segment_id"],
-            source="practice",
+            source=source,
             audio_id=metadata["audio_id"],
             ai_score=result.get("overall"),
             dimensions_json=result.get("dimensions"),
-            # 逐字偏差原样落库（B4 已算好）。没有歌词的曲目这里是 []，
-            # 与「没有数据源」的 None 区分开；历史结果缺该键时落 NULL。
             words_json=result.get("words"),
-            # CDM 归因由分析管线按规则引擎算好；历史结果缺该键时落 NULL
-            # （None = 没有数据源，与 defects=[] 的「查了是空」区分）。
             cdm_json=result.get("cdm"),
             duration_sec=metadata.get("duration_sec"),
         )
         db.add(record)
         db.flush()
-        apply_bkt(
+        before, after = apply_bkt(
             db,
             student_id=record.student_id,
             dimensions=record.dimensions_json,
-            source_type="practice",
+            source_type=source,
             source_id=record.id,
         )
+        return {
+            "record_id": record.id,
+            "bkt": {"before": before, "after": after},
+        }
 
 
 def bkt_snapshot_for_record(
@@ -190,7 +186,7 @@ def bkt_snapshot_for_record(
     """
     before: dict[str, float] = {}
     after: dict[str, float] = {}
-    for row in bkt_history_repo.get_by_source(db, "practice", record.id):
+    for row in bkt_history_repo.get_by_source(db, record.source or "practice", record.id):
         previous = bkt_history_repo.get_previous_for_skill(
             db, record.student_id, row.skill, row.id
         )
