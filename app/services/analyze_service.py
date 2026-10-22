@@ -353,7 +353,9 @@ def _analyze(
             homework_service.save_result(persist, result)
         else:
             from app.services import practice_service
-            practice_service.save_result(persist, result)
+            saved = practice_service.save_result(persist, result)
+            if isinstance(saved, dict):
+                result.update(saved)
 
     task_repo.update(
         task_id,
