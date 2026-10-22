@@ -1658,6 +1658,23 @@ if path.parent != root:
 
 **已知限制**：各条见 spec 第 11 节（多段作业只评一段、整曲降级、无重交/退回/关闭、回看无五维、`submitted_at` 的 UTC 口径、唯一索引上线前需确认无重复行）；另有「练习成绩只能归档学生点提交时对应的那一次录音」（按 `audio_id` 定位，换段重练后再提交的是最新那次）。
 
+## 47. 摸底测试 J1–J3 的响应体、record_id 语义、跳过接口与维度口径均未定义
+
+《5-接口清单》2.10 只有三句话。本轮（2026-10-22）口径：
+
+1. J1 `GET /api/cat/questions` 返回 `{"questions":[...]}`，字段 `id/seq/segment_id/title/demo_title/duration/focus_dims/lyrics/audio_url`；`audio_url` 由 `url_for("api.audio_download")` 生成。
+2. J2 `POST /api/cat/submit` 接受 multipart `segment_id`/`audio_id`/`duration_sec`，返回 `{"task_id"}`；落 `practice_records(source='cat_test')`，BKT `source_type='cat_test'`。
+3. J3 `GET /api/cat/report/<record_id>` 的 `record_id` 只作学生锚点，返回该生最新 5 维画像 + 最弱 3 项；没有 CAT session 表，不做单次测试快照。
+4. 8.10 跳过没有后端接口；新增 `POST /api/cat/skip`，只给尚无 BKT 的技法写 0.35，不覆盖已有画像。
+5. 页面 8 个技法 vs 分析 5 个维度：滑音/颤音/装饰音技巧无数据源，只展示 5 个。
+6. B4 新增 `record_id` / `bkt` 两个文档未定义的字段。
+7. 题库过渡数据：demo 34 的 6 段真实录音；正式题目待教师录制；剧目名「测试06」原样显示。
+8. `difficulty` / `description` 无数据库来源：难度 chip 删除，描述由 `focus_dims` 前端生成。
+9. 重唱 = 重新提交并再次更新 BKT，不做回滚。
+10. 8.3 只要求录音；为「跟唱」补「播放示范」按钮。
+11. 完成页「已掌握」统计口径与四档标签冲突，改为「P(L)≥60%」。
+12. `practice_records.source` / `bkt_history.source_type` 的长度足够 `cat_test`，无需改 schema。
+
 ---
 
 ## 待核实
