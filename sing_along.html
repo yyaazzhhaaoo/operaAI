@@ -461,6 +461,9 @@ body{
         .nav-group[data-role] { display: none; }
         body.role-teacher .nav-group[data-role="teacher"] { display: block; }
         body.role-student .nav-group[data-role="student"] { display: block; }
+        .nav-item[data-role] { display: none; }
+        body.role-teacher .nav-item[data-role="teacher"] { display: flex; }
+        body.role-student .nav-item[data-role="student"] { display: flex; }
 
         /* ===== 作业模式横幅 ===== */
         .homework-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
@@ -506,11 +509,11 @@ body{
       <a href="AI_teacher.html" class="nav-item"><span class="icon">🤖</span>AI教练对话</a>
       <a href="cat_test.html" class="nav-item"><span class="icon">🎯</span>摸底测试</a>
     </div>
-    <div class="nav-group" data-role="teacher">
+    <div class="nav-group">
       <div class="nav-group-title">数据分析</div>
-      <a href="tracking.html" class="nav-item"><span class="icon">📈</span>能力追踪</a>
+      <a data-role="teacher" href="tracking.html" class="nav-item"><span class="icon">📈</span>能力追踪</a>
       <a href="recommendation.html" class="nav-item"><span class="icon">🎯</span>渐进式推荐</a>
-      <a href="knowledge_graph.html" class="nav-item"><span class="icon">🧠</span>知识图谱</a>
+      <a data-role="teacher" href="knowledge_graph.html" class="nav-item"><span class="icon">🧠</span>知识图谱</a>
     </div>
   </aside>
 
