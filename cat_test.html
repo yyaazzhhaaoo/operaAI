@@ -754,7 +754,7 @@ body{
         </div>
         <div class="complete-stat">
           <div class="complete-stat-val up" id="statMastered">—</div>
-          <div class="complete-stat-label">已掌握技法</div>
+          <div class="complete-stat-label">P(L)≥60% 技法</div>
         </div>
       </div>
     </div>
@@ -1027,9 +1027,16 @@ function updateAbilityPreview() {
   }).join("");
 }
 
-function skipTest() {
-  // 任务 10 替换成真实实现；这里先占位，避免介绍页按钮在中间态报错
-  showToast("warn", "跳过功能接入中", "请稍后重试。");
+async function skipTest() {
+  if (!confirm("跳过摸底测试将使用默认能力画像（各技法 0.35），推荐精度会降低。确定跳过吗？")) return;
+  try {
+    const data = await apiPostForm("/api/cat/skip", new FormData());
+    answers = [];
+    renderComplete({ profile: data.profile || [], top3: data.top3 || [] });
+    showToast("warn", "⏭️ 已跳过测试", "使用默认能力画像，后续可重新进行摸底。");
+  } catch (e) {
+    showToast("warn", "跳过失败", e.message);
+  }
 }
 
 async function submitPhrase() {
@@ -1321,97 +1328,150 @@ function renderResult(result) {
 }
 
 function nextPhrase() {
-  if (currentIndex >= PHRASE_POOL.length - 1) showCompletePage();
-  else loadPhrase(currentIndex + 1);
+  if (currentIndex >= questions.length - 1) {
+    finishTest();
+    return;
+  }
+  loadPhrase(currentIndex + 1);
 }
 
 function retryPhrase() {
-  answers.pop();
-  const phrase = PHRASE_POOL[currentIndex];
-  phrase.testSkills.forEach(sk => {
-    if (abilityProfile[sk].history.length > 1) {
-      abilityProfile[sk].history.pop();
-      abilityProfile[sk].p_l = abilityProfile[sk].history[abilityProfile[sk].history.length - 1];
-    }
-  });
-  loadPhrase(currentIndex);
-  showToast('info', '↺ 重新跟唱', '已重置本句状态，请再次跟唱。');
+  if (isRecording || isAnalyzing) return;
+  showPhraseCard();
+  showToast("info", "↺ 重新跟唱", "重新提交会再次更新 BKT。");
 }
 
-function showCompletePage() {
-  document.getElementById('testPage').classList.add('hidden');
-  document.getElementById('completePage').classList.remove('hidden');
-  document.getElementById('completePage').classList.add('fade-in');
-  document.getElementById('abilityPreview').classList.remove('show');
-  const totalTime = Math.floor((Date.now() - sessionStartTime) / 1000);
-  document.getElementById('statTime').textContent = formatTime(totalTime);
-  const avgScore = Math.round(answers.reduce((a, b) => a + b.score, 0) / answers.length);
-  document.getElementById('statAvg').textContent = avgScore + '分';
-  document.getElementById('statAvg').style.color = avgScore >= 80 ? '#4A8F6B' : (avgScore >= 60 ? '#C9A84C' : '#B83A2F');
-  const masteredCount = TECHNIQUES.filter(t => abilityProfile[t.key].p_l >= 0.60).length;
-  document.getElementById('statMastered').textContent = masteredCount + '/' + TECHNIQUES.length;
-  renderProfileRadar();
-  renderProfileList();
-  renderSuggestions();
-  showToast('success', '🎉 摸底测试完成', '已建立初始能力画像，平均得分 ' + avgScore + ' 分。');
+async function finishTest() {
+  const last = answers[answers.length - 1];
+  if (!last || !last.recordId) {
+    showToast("warn", "无法生成报告", "没有可用的摸底记录。");
+    return;
+  }
+  try {
+    const report = await apiGet("/api/cat/report/" + last.recordId);
+    renderComplete(report);
+  } catch (e) {
+    showToast("warn", "报告加载失败", e.message);
+  }
 }
 
-function renderProfileRadar() {
-  const dom = document.getElementById('profileRadar');
+function renderComplete(report) {
+  // 跳过是在介绍页触发的，这里必须把介绍页也收起来，否则完成页会叠在它下面
+  document.getElementById("introPage").classList.add("hidden");
+  document.getElementById("testPage").classList.add("hidden");
+  document.getElementById("completePage").classList.remove("hidden");
+  document.getElementById("completePage").classList.add("fade-in");
+  document.getElementById("abilityPreview").classList.remove("show");
+  const profile = report.profile || [];
+  const top3 = report.top3 || [];
+  renderStats(profile);
+  renderProfileRadar(profile);
+  renderProfileList(profile);
+  renderSuggestions(top3);
+}
+
+function renderStats(profile) {
+  const totalTime = sessionStartTime
+    ? Math.floor((Date.now() - sessionStartTime) / 1000)
+    : 0;
+  document.getElementById("statTime").textContent = formatTime(totalTime);
+
+  const scored = answers.filter(a => Number.isFinite(a.score));
+  const avg = scored.length
+    ? Math.round(scored.reduce((s, a) => s + a.score, 0) / scored.length)
+    : null;
+  const avgEl = document.getElementById("statAvg");
+  avgEl.textContent = avg == null ? "—" : avg + "分";
+  avgEl.style.color = avg == null
+    ? "var(--text-muted)"
+    : avg >= 80 ? "#4A8F6B" : (avg >= 60 ? "#C9A84C" : "#B83A2F");
+
+  const mastered = profile.filter(p => Number.isFinite(p.p_l) && p.p_l >= 0.60).length;
+  document.getElementById("statMastered").textContent =
+    mastered + "/" + (profile.length || 5);
+}
+
+function renderProfileRadar(profile) {
+  const dom = document.getElementById("profileRadar");
   if (radarChart) radarChart.dispose();
   radarChart = echarts.init(dom);
-  const values = TECHNIQUES.map(t => abilityProfile[t.key].p_l);
+  const values = profile.map(p => Number.isFinite(p.p_l) ? p.p_l : 0);
   const option = {
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
     tooltip: {
-      backgroundColor: 'rgba(255,255,255,0.96)',
-      borderColor: 'var(--border-light)',
-      textStyle: { color: 'var(--text-primary)', fontSize: 12 },
+      backgroundColor: "rgba(255,255,255,0.96)",
+      borderColor: "var(--border-light)",
+      textStyle: { color: "var(--text-primary)", fontSize: 12 },
       formatter: function(p) {
-        const color = getPLColor(p.value);
-        return '<div style="font-weight:600">' + p.name + '</div><div style="color:' + color.text + ';font-size:16px;font-weight:700">' + (p.value*100).toFixed(0) + '% · ' + color.label + '</div>';
+        const item = profile[p.dataIndex] || {};
+        const v = Number.isFinite(item.p_l)
+          ? (item.p_l * 100).toFixed(0) + "% · " + getPLColor(item.p_l).label
+          : "未评估";
+        return '<div style="font-weight:600">' + escapeHtml(item.skill || "") +
+          '</div><div style="font-size:16px;font-weight:700">' + v + "</div>";
       }
     },
     radar: {
-      indicator: TECHNIQUES.map(t => ({ name: t.key, max: 1 })),
-      shape: 'polygon',
+      indicator: profile.map(p => ({ name: p.skill, max: 1 })),
+      shape: "polygon",
       splitNumber: 4,
-      axisName: { color: 'var(--text-secondary)', fontSize: 11 },
-      splitLine: { lineStyle: { color: 'var(--border-light)' } },
-      splitArea: { show: true, areaStyle: { color: ['rgba(245,237,228,0.4)', 'rgba(245,237,228,0.2)'] } },
-      axisLine: { lineStyle: { color: 'var(--border-light)' } }
+      axisName: { color: "var(--text-secondary)", fontSize: 11 },
+      splitLine: { lineStyle: { color: "var(--border-light)" } },
+      splitArea: { show: true, areaStyle: { color: ["rgba(245,237,228,0.4)", "rgba(245,237,228,0.2)"] } },
+      axisLine: { lineStyle: { color: "var(--border-light)" } }
     },
     series: [{
-      type: 'radar',
-      data: [{ value: values, name: '掌握度', areaStyle: { color: 'rgba(0,102,179,0.15)' }, lineStyle: { color: '#0066B3', width: 2 }, itemStyle: { color: '#0066B3' } }],
+      type: "radar",
+      data: [{
+        value: values,
+        name: "掌握度",
+        areaStyle: { color: "rgba(0,102,179,0.15)" },
+        lineStyle: { color: "#0066B3", width: 2 },
+        itemStyle: { color: "#0066B3" }
+      }],
       symbolSize: 5
     }]
   };
   radarChart.setOption(option);
-  window.addEventListener('resize', () => radarChart.resize());
+  if (!window.__catRadarResizeBound) {
+    window.__catRadarResizeBound = true;
+    window.addEventListener("resize", () => { if (radarChart) radarChart.resize(); });
+  }
 }
 
-function renderProfileList() {
-  const container = document.getElementById('profileList');
-  container.innerHTML = TECHNIQUES.map(t => {
-    const p = abilityProfile[t.key].p_l;
-    const color = getPLColor(p);
-    return '<div class="profile-item"><span class="skill-name">' + t.key + '</span><span style="font-size:11px;color:var(--text-muted)">' + t.category + '</span><div class="skill-bar"><div class="skill-fill" style="width:' + (p*100) + '%;background:' + color.bar + '"></div></div><span class="skill-val" style="color:' + color.text + '">' + (p*100).toFixed(1) + '%</span><span class="skill-status" style="background:' + color.bar + '20;color:' + color.text + '">' + color.label + '</span></div>';
-  }).join('');
+function renderProfileList(profile) {
+  document.getElementById("profileList").innerHTML = profile.map(p => {
+    const has = Number.isFinite(p.p_l);
+    const color = has ? getPLColor(p.p_l) : { bar: "#B89076", text: "#8A6E4B", label: "未评估" };
+    const pct = has ? (p.p_l * 100).toFixed(1) + "%" : "—";
+    return '<div class="profile-item"><span class="skill-name">' + escapeHtml(p.skill) +
+      '</span><span style="font-size:11px;color:var(--text-muted)">' +
+      (has ? "已评估" : "未评估") +
+      '</span><div class="skill-bar"><div class="skill-fill" style="width:' +
+      (has ? p.p_l * 100 : 0) + "%;background:" + color.bar +
+      '"></div></div><span class="skill-val" style="color:' + color.text + '">' + pct +
+      '</span><span class="skill-status" style="background:' + color.bar + "20;color:" +
+      color.text + '">' + color.label + "</span></div>";
+  }).join("");
 }
 
-function renderSuggestions() {
-  const weakSkills = TECHNIQUES.filter(t => abilityProfile[t.key].p_l < 0.50).sort((a, b) => abilityProfile[a.key].p_l - abilityProfile[b.key].p_l);
-  const strongSkills = TECHNIQUES.filter(t => abilityProfile[t.key].p_l >= 0.60).sort((a, b) => abilityProfile[b.key].p_l - abilityProfile[a.key].p_l);
-  let html = '';
-  if (weakSkills.length > 0) {
-    html += '<div class="suggest-card"><div class="suggest-num">1</div><div class="suggest-content"><div class="suggest-title">优先补齐基础：' + weakSkills.slice(0, 2).map(s => s.key).join('、') + '</div><div class="suggest-desc">这些技法掌握度低于50%，系统已为你安排前置基础练习，建议先完成基础训练再挑战唱段。</div></div></div>';
+function renderSuggestions(top3) {
+  const container = document.getElementById("suggestList");
+  if (!top3.length) {
+    container.innerHTML = '<div class="suggest-card"><div class="suggest-content">' +
+      '<div class="suggest-title">暂无足够数据</div>' +
+      '<div class="suggest-desc">完成更多练习后，系统会生成学习路径。</div></div></div>';
+    return;
   }
-  if (strongSkills.length > 0) {
-    html += '<div class="suggest-card"><div class="suggest-num">2</div><div class="suggest-content"><div class="suggest-title">保持优势：' + strongSkills.slice(0, 2).map(s => s.key).join('、') + '</div><div class="suggest-desc">这些技法已有一定基础，可在练习中继续巩固，并尝试将其应用到完整唱段中。</div></div></div>';
-  }
-  html += '<div class="suggest-card"><div class="suggest-num">3</div><div class="suggest-content"><div class="suggest-title">推荐入门唱段</div><div class="suggest-desc">基于你的画像，系统推荐从《气息基础短句》和《音准感知训练》开始，难度匹配度 85%。</div></div></div>';
-  document.getElementById('suggestList').innerHTML = html;
+  const titles = ["优先补齐基础", "重点巩固", "稳步提升"];
+  container.innerHTML = top3.map((item, i) => {
+    const pct = Number.isFinite(item.p_l) ? (item.p_l * 100).toFixed(0) + "%" : "—";
+    const label = Number.isFinite(item.p_l) ? getPLColor(item.p_l).label : "未评估";
+    return '<div class="suggest-card"><div class="suggest-num">' + (i + 1) +
+      '</div><div class="suggest-content"><div class="suggest-title">' + titles[i] + "： " +
+      escapeHtml(item.skill) + '</div><div class="suggest-desc">当前 P(L) ' + pct + " · " + label +
+      "。建议先完成该技法的入门练习，再进入完整唱段。</div></div></div>";
+  }).join("");
 }
 
 function enterLearning() {
