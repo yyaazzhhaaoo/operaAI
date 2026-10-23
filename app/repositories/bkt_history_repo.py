@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import select, desc, func
 from sqlalchemy.orm import Session, aliased
 
@@ -94,6 +96,43 @@ def get_previous_for_skill(
         .order_by(desc(BktHistory.recorded_at), desc(BktHistory.id))
         .limit(1)
     )
+
+
+def get_history_for_student_since(
+    db: Session, student_id: int, since: datetime
+) -> list[BktHistory]:
+    """某个学生在 `since`（含）之后的全部 BKT 记录，按技法、时间升序。
+
+    P(L) 历史曲线（功能 6.3）用。升序是刻意的：同一天同一技法可能有多条
+    （一次练习按维度各写一行，摸底测试一天能写十几行），service 层按顺序覆盖，
+    最后一条即当天最终值——降序会让覆盖方向反过来。
+    id 作时间的兜底排序，保证同秒写入的多条也是确定的。
+    """
+    return list(db.scalars(
+        select(BktHistory)
+        .where(BktHistory.student_id == student_id)
+        .where(BktHistory.recorded_at >= since)
+        .order_by(BktHistory.skill, BktHistory.recorded_at, BktHistory.id)
+    ).all())
+
+
+def get_latest_per_skill_for_student_before(
+    db: Session, student_id: int, before: datetime
+) -> list[BktHistory]:
+    """某个学生在 `before`（含）之前每个技法最新的那一条。
+
+    「综合统计四项」的 7 日变化用：当前值取 get_latest_per_skill_for_student，
+    对比值取这里，两端都是「该技法截至该时刻的最新值」。用 DISTINCT ON 与上面
+    两个函数同款，排序键仍命中 idx_bkt_student_skill 的
+    (student_id, skill, recorded_at DESC)。
+    """
+    return list(db.scalars(
+        select(BktHistory)
+        .where(BktHistory.student_id == student_id)
+        .where(BktHistory.recorded_at <= before)
+        .distinct(BktHistory.skill)
+        .order_by(BktHistory.skill, desc(BktHistory.recorded_at))
+    ).all())
 
 
 def get_latest_per_skill_for_student(db: Session, student_id: int) -> list[BktHistory]:

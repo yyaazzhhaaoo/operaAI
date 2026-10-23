@@ -295,10 +295,18 @@ body.role-student .student-selector { display: none; }
 
 /* ===== 前置锁定面板 ===== */
 #prereqPanel .prereq-item{
-  display:flex;align-items:center;gap:10px;
   padding:10px 12px;background:var(--bg-primary);border-radius:8px;
   border:1px solid var(--border-light);margin-bottom:8px;
 }
+#prereqPanel .prereq-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+#prereqPanel .prereq-skill{font-size:13px;font-weight:700;color:var(--text-primary)}
+#prereqPanel .prereq-count{font-size:11px;color:var(--text-muted)}
+#prereqPanel .prereq-line{display:flex;align-items:center;gap:8px;margin-top:6px}
+#prereqPanel .prereq-name{font-size:12px;color:var(--text-secondary);width:76px;flex-shrink:0}
+#prereqPanel .prereq-bar{flex:1;height:6px;background:var(--border-light);border-radius:3px;overflow:hidden}
+#prereqPanel .prereq-bar>div{height:100%;border-radius:3px}
+#prereqPanel .prereq-pct{font-size:12px;font-weight:700;min-width:36px;text-align:right}
+#prereqPanel .prereq-th{font-size:10px;color:var(--text-muted);min-width:52px;text-align:right}
 
 /* ===== 模态框 ===== */
 .modal{
@@ -415,7 +423,7 @@ body.role-student .student-selector { display: none; }
 <main class="main-content">
   <div class="page-header">
     <h2>🎯 渐进式推荐</h2>
-    <p>基于 BKT + Elo + 知识图谱的 Top-5 自适应推荐 · 实现"跳一跳够得着"的学习路径</p>
+    <p>基于 BKT + Elo + 知识图谱的 Top-3 自适应推荐 · 实现"跳一跳够得着"的学习路径</p>
   </div>
 
   <!-- 学生选择器 -->
@@ -431,9 +439,9 @@ body.role-student .student-selector { display: none; }
         <div class="card-header">
           <div class="card-title">
             <div class="icon" style="background:rgba(201,168,76,0.10);color:var(--warning)">🏆</div>
-            系统推荐 · Top 5
+            系统推荐 · Top 3
           </div>
-          <span style="font-size:12px;color:var(--text-muted)">按学习增益排序 · 老师可覆盖</span>
+          <span style="font-size:12px;color:var(--text-muted)">按匹配状态与难度排序</span>
         </div>
         <div class="rec-list" id="recList"></div>
       </div>
@@ -443,7 +451,7 @@ body.role-student .student-selector { display: none; }
         <div class="card-header">
           <div class="card-title">
             <div class="icon" style="background:rgba(0,102,179,0.10);color:var(--primary)">📚</div>
-            全部曲目库
+            全部曲目库 <span style="font-size:11px;color:var(--text-muted);font-weight:400">演示数据</span>
           </div>
           <span style="font-size:12px;color:var(--text-muted)">学生可手动选择 · 不受算法限制</span>
         </div>
@@ -487,10 +495,10 @@ body.role-student .student-selector { display: none; }
           </div>
         </div>
         <div style="font-size:12px;color:var(--text-secondary);line-height:1.8">
-          <p style="margin-bottom:8px"><strong style="color:var(--text-primary)">🎯 匹配度</strong> = 1 - |唱句难度 - 学生能力|，越接近越优</p>
-          <p style="margin-bottom:8px"><strong style="color:var(--text-primary)">📈 信息增益</strong> = 该唱句涉及未掌握技法的 BKT 置信度提升预期</p>
-          <p style="margin-bottom:8px"><strong style="color:var(--text-primary)">🔓 解锁状态</strong> = 前置技法掌握度 ≥ 0.85 方可解锁</p>
-          <p><strong style="color:var(--text-primary)">🚫 去重规则</strong> = 排除最近 3 次已练习的唱句</p>
+          <p style="margin-bottom:8px"><strong style="color:var(--text-primary)">🎯 难度匹配</strong> = 唱段难度与当前综合掌握度相差 ≤ 0.10</p>
+          <p style="margin-bottom:8px"><strong style="color:var(--text-primary)">🔥 挑战推荐</strong> = 难度高出当前水平 0.10 ~ 0.25</p>
+          <p style="margin-bottom:8px"><strong style="color:var(--text-primary)">🔒 已锁定</strong> = 所需技法的前置技法掌握度 &lt; 0.60</p>
+          <p><strong style="color:var(--text-primary)">🚫 不推荐</strong> = 难度差超过 0.25，或低于当前水平 0.10 以上</p>
         </div>
       </div>
     </div>
@@ -498,53 +506,17 @@ body.role-student .student-selector { display: none; }
 </main>
 </div>
 
-<!-- 老师覆盖确认模态框 -->
-<div class="modal" id="overrideModal">
-  <div class="modal-box">
-    <div class="modal-title">👩‍🏫 老师覆盖推荐</div>
-    <div class="modal-text">
-      您正在将「<strong id="overrideStudent">—</strong>」的推荐列表中的第 <strong id="overrideRank">—</strong> 位替换为：<br><br>
-      <strong id="overrideTarget" style="color:#7C3AED;font-size:15px">—</strong><br><br>
-      系统将记录此次覆盖，并作为推荐算法的反馈数据。被覆盖的原有推荐将移至备选列表。
-    </div>
-    <div class="modal-btns">
-      <button class="btn-confirm" onclick="confirmOverride()">确认覆盖</button>
-      <button class="btn-cancel" onclick="closeModal()">取消</button>
-    </div>
-  </div>
-</div>
-
 <!-- Toast 容器 -->
 <div class="toast-container" id="toastContainer"></div>
 
 <script>
 // ============================================
-// 模拟数据层（后端 API 预留接口）
+// 页面数据层
 // ============================================
-
-const STUDENTS = [
-  { id: "s01", name: "李小燕", avatar: "🎭", level: "初级" },
-  { id: "s02", name: "张博文", avatar: "🎤", level: "中级" },
-  { id: "s03", name: "刘思琪", avatar: "🎵", level: "初级" },
-  { id: "s04", name: "陈浩然", avatar: "🎶", level: "高级" },
-  { id: "s05", name: "赵雨桐", avatar: "🎼", level: "中级" },
-  { id: "s06", name: "周明轩", avatar: "🎹", level: "初级" },
-  { id: "s07", name: "吴佳怡", avatar: "🎸", level: "中级" },
-  { id: "s08", name: "孙志远", avatar: "🥁", level: "初级" }
-];
+// 已接真实数据：学生名单（教师）、推荐列表、顶部四张统计卡、能力雷达、
+// 前置技法锁定。仅「全部曲目库」仍是 mock（PHRASE_LIBRARY）。
 
 const TECHNIQUES = ["音准控制","气息支撑","滑音","拖腔","归韵咬字","节奏感知","颤音","装饰音技巧"];
-
-const ABILITY_DATA = {
-  s01: { overall: 0.58, ability: { "音准控制": 0.72, "气息支撑": 0.51, "滑音": 0.63, "拖腔": 0.28, "归韵咬字": 0.45, "节奏感知": 0.68, "颤音": 0.35, "装饰音技巧": 0.30 } },
-  s02: { overall: 0.81, ability: { "音准控制": 0.85, "气息支撑": 0.78, "滑音": 0.82, "拖腔": 0.71, "归韵咬字": 0.80, "节奏感知": 0.88, "颤音": 0.65, "装饰音技巧": 0.60 } },
-  s03: { overall: 0.42, ability: { "音准控制": 0.48, "气息支撑": 0.42, "滑音": 0.35, "拖腔": 0.22, "归韵咬字": 0.55, "节奏感知": 0.50, "颤音": 0.25, "装饰音技巧": 0.20 } },
-  s04: { overall: 0.88, ability: { "音准控制": 0.94, "气息支撑": 0.91, "滑音": 0.88, "拖腔": 0.85, "归韵咬字": 0.90, "节奏感知": 0.87, "颤音": 0.82, "装饰音技巧": 0.78 } },
-  s05: { overall: 0.74, ability: { "音准控制": 0.76, "气息支撑": 0.68, "滑音": 0.72, "拖腔": 0.65, "归韵咬字": 0.78, "节奏感知": 0.82, "颤音": 0.55, "装饰音技巧": 0.50 } },
-  s06: { overall: 0.50, ability: { "音准控制": 0.55, "气息支撑": 0.48, "滑音": 0.43, "拖腔": 0.30, "归韵咬字": 0.52, "节奏感知": 0.60, "颤音": 0.30, "装饰音技巧": 0.25 } },
-  s07: { overall: 0.78, ability: { "音准控制": 0.82, "气息支撑": 0.75, "滑音": 0.79, "拖腔": 0.68, "归韵咬字": 0.85, "节奏感知": 0.80, "颤音": 0.62, "装饰音技巧": 0.58 } },
-  s08: { overall: 0.35, ability: { "音准控制": 0.40, "气息支撑": 0.35, "滑音": 0.28, "拖腔": 0.28, "归韵咬字": 0.42, "节奏感知": 0.45, "颤音": 0.20, "装饰音技巧": 0.18 } }
-};
 
 const PHRASE_LIBRARY = [
   { id: "p01", title: "辕门外三声炮（前四句）", piece: "《穆桂英挂帅》", difficulty: 0.62, banshi: "西皮流水", duration: "18s", skills: ["音准控制","拖腔"] },
@@ -561,68 +533,15 @@ const PHRASE_LIBRARY = [
   { id: "p12", title: "拖腔专项练习 · 长音保持", piece: "专项练习", difficulty: 0.55, banshi: "练习曲", duration: "20s", skills: ["拖腔","气息支撑"] }
 ];
 
-const RECOMMENDATIONS = {
-  s01: [
-    { phraseId: "p01", matchScore: 0.81, infoGain: 0.45, status: "challenge", reason: "难度略高于当前水平（0.62 vs 0.58），适合挑战，重点练习拖腔" },
-    { phraseId: "p02", matchScore: 0.76, infoGain: 0.38, status: "match", reason: "难度匹配，前置技法已达标，巩固音准与气息" },
-    { phraseId: "p03", matchScore: 0.72, infoGain: 0.35, status: "match", reason: "难度适中，颤音技法可引入新挑战" },
-    { phraseId: "p08", matchScore: 0.65, infoGain: 0.52, status: "match", reason: "前置技能补齐，气息支撑薄弱需优先巩固" },
-    { phraseId: "p11", matchScore: 0.58, infoGain: 0.28, status: "lock", reason: "滑音前置技法「音准感知」未达标（0.63 < 0.85）" }
-  ],
-  s02: [
-    { phraseId: "p07", matchScore: 0.88, infoGain: 0.35, status: "match", reason: "难度匹配，综合技法训练，拖腔可再精进" },
-    { phraseId: "p04", matchScore: 0.82, infoGain: 0.42, status: "challenge", reason: "花旦唱腔，拓展滑音技法" },
-    { phraseId: "p06", matchScore: 0.78, infoGain: 0.38, status: "challenge", reason: "高难度挑战，四平调韵味处理" },
-    { phraseId: "p05", matchScore: 0.75, infoGain: 0.45, status: "challenge", reason: "老生慢板，气息长拖腔，跨流派拓展" },
-    { phraseId: "p12", matchScore: 0.60, infoGain: 0.20, status: "match", reason: "拖腔专项巩固，可作为热身练习" }
-  ],
-  s03: [
-    { phraseId: "p08", matchScore: 0.85, infoGain: 0.55, status: "match", reason: "前置技能补齐，气息支撑最薄弱，优先训练" },
-    { phraseId: "p09", matchScore: 0.82, infoGain: 0.58, status: "match", reason: "音准控制薄弱，需基础单音模唱训练" },
-    { phraseId: "p10", matchScore: 0.78, infoGain: 0.50, status: "match", reason: "整体音准偏低，调门找音建立基准" },
-    { phraseId: "p03", matchScore: 0.45, infoGain: 0.30, status: "lock", reason: "颤音前置「音准稳定性」未达标（0.48 < 0.85）" },
-    { phraseId: "p01", matchScore: 0.35, infoGain: 0.25, status: "lock", reason: "拖腔前置「气息支撑」未达标（0.42 < 0.85）" }
-  ],
-  s04: [
-    { phraseId: "p05", matchScore: 0.92, infoGain: 0.40, status: "challenge", reason: "高难度挑战，综合技法训练，老生唱腔拓展" },
-    { phraseId: "p06", matchScore: 0.88, infoGain: 0.35, status: "match", reason: "四平调韵味处理，梅派经典全段" },
-    { phraseId: "p07", matchScore: 0.85, infoGain: 0.30, status: "match", reason: "穆桂英挂帅全段，综合复习" },
-    { phraseId: "p04", matchScore: 0.78, infoGain: 0.38, status: "match", reason: "荀派花旦，风格拓展" },
-    { phraseId: "p12", matchScore: 0.55, infoGain: 0.15, status: "match", reason: "拖腔专项精进，可作为保持练习" }
-  ],
-  s05: [
-    { phraseId: "p07", matchScore: 0.82, infoGain: 0.38, status: "match", reason: "难度匹配，恢复练习，拖腔可再精进" },
-    { phraseId: "p06", matchScore: 0.78, infoGain: 0.42, status: "challenge", reason: "难度略高，四平调韵味适合挑战" },
-    { phraseId: "p02", matchScore: 0.75, infoGain: 0.30, status: "match", reason: "难度适中，巩固音准与气息" },
-    { phraseId: "p08", matchScore: 0.65, infoGain: 0.25, status: "match", reason: "气息支撑下降，建议巩固" },
-    { phraseId: "p05", matchScore: 0.55, infoGain: 0.35, status: "lock", reason: "老生唱腔前置「拖腔」需更稳固（0.65 < 0.85）" }
-  ],
-  s06: [
-    { phraseId: "p09", matchScore: 0.80, infoGain: 0.48, status: "match", reason: "音准感知 0.43，接近解锁滑音，基础训练" },
-    { phraseId: "p01", matchScore: 0.72, infoGain: 0.42, status: "match", reason: "前四句难度适中，音准控制训练" },
-    { phraseId: "p08", matchScore: 0.70, infoGain: 0.45, status: "match", reason: "气息支撑 0.48，前置技能补齐" },
-    { phraseId: "p11", matchScore: 0.48, infoGain: 0.30, status: "lock", reason: "前置技法「音准感知」未达标（0.43 < 0.85）" },
-    { phraseId: "p04", matchScore: 0.35, infoGain: 0.20, status: "lock", reason: "多前置技法未达标，节奏感知不足" }
-  ],
-  s07: [
-    { phraseId: "p07", matchScore: 0.85, infoGain: 0.35, status: "match", reason: "难度匹配，拖腔可再精进" },
-    { phraseId: "p04", matchScore: 0.80, infoGain: 0.40, status: "challenge", reason: "花旦活泼唱腔，拓展风格" },
-    { phraseId: "p05", matchScore: 0.78, infoGain: 0.45, status: "challenge", reason: "老生慢板，气息长拖腔挑战" },
-    { phraseId: "p06", matchScore: 0.75, infoGain: 0.38, status: "match", reason: "四平调韵味处理" },
-    { phraseId: "p12", matchScore: 0.60, infoGain: 0.18, status: "match", reason: "拖腔专项保持" }
-  ],
-  s08: [
-    { phraseId: "p10", matchScore: 0.88, infoGain: 0.55, status: "match", reason: "整体音准偏低，需基础调门找音训练" },
-    { phraseId: "p08", matchScore: 0.85, infoGain: 0.50, status: "match", reason: "气息支撑 0.35，最薄弱前置技能补齐" },
-    { phraseId: "p09", matchScore: 0.80, infoGain: 0.48, status: "match", reason: "音准控制 0.40，单音模唱建立感知" },
-    { phraseId: "p03", matchScore: 0.30, infoGain: 0.20, status: "lock", reason: "多前置技法未达标" },
-    { phraseId: "p01", matchScore: 0.25, infoGain: 0.15, status: "lock", reason: "气息支撑与音准稳定性均未达标" }
-  ]
-};
+// ============================================
+// 页面状态
+// ============================================
 
-let currentStudentId = "s01";
-let overrideTarget = null;
-let overrideRank = null;
+let currentStudentId = null;      // 真实 students.id（教师=选中学生，学生=本人）
+let currentUser = null;           // GET /api/auth/me 的 data
+let roster = [];                  // 教师端学生名单（GET /api/students）
+let currentRecommendation = null; // G5 / 本人入口的 data
+let recState = "loading";         // loading / ok / error
 let abilityChart = null;
 
 // ============================================
@@ -642,54 +561,105 @@ function getPLColor(p) {
   return { bar: "#B83A2F", text: "#B83A2F", label: "未掌握" };
 }
 
+// 标题/理由来自数据库，拼进 innerHTML 前转义，避免曲目名里的 < > 破坏结构
+function escapeHtml(v) {
+  return String(v == null ? "" : v)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function statusLabel(status) {
+  return status === "match" ? "难度匹配" : (status === "challenge" ? "挑战" : "已锁定");
+}
+
+// 四张统计卡与雷达卡片下方的文字共用：summary.overall_mastery 为 null
+// 表示该生一个技法都没测过，显示「—」而不是 0（0 是真实测量值）。
+function summaryOverall() {
+  const summary = currentRecommendation && currentRecommendation.summary;
+  return summary && Number.isFinite(summary.overall_mastery)
+    ? summary.overall_mastery
+    : null;
+}
+
+function renderOverallText() {
+  const overall = summaryOverall();
+  const overallEl = document.getElementById("overallMastery");
+  if (overallEl) {
+    overallEl.textContent = overall == null ? "—" : (overall * 100).toFixed(0) + "%";
+  }
+  const diffEl = document.getElementById("diffRange");
+  if (diffEl) {
+    if (overall == null) {
+      diffEl.textContent = "—";
+    } else {
+      // 与后端推荐判据同源：难度差 ≤0.10 为 match，高出 0.10~0.25 为 challenge，
+      // 所以展示区间取 [overall-0.10, overall+0.25]，两端截到 0~1。
+      const minDiff = Math.max(0, overall - 0.10);
+      const maxDiff = Math.min(1, overall + 0.25);
+      diffEl.textContent = minDiff.toFixed(2) + " ~ " + maxDiff.toFixed(2);
+    }
+  }
+}
+
 // ============================================
 // 渲染逻辑
 // ============================================
 
 function renderStudentSelector() {
-  document.getElementById("studentSelector").innerHTML = STUDENTS.map(s => {
-    const isActive = s.id === currentStudentId;
-    return `<div class="student-chip ${isActive ? 'active' : ''}" onclick="selectStudent('${s.id}')">
-      <span class="st-avatar">${s.avatar}</span>
-      <span>${s.name}</span>
-      <span style="font-size:11px;color:var(--text-muted)">· ${s.level}</span>
+  const el = document.getElementById("studentSelector");
+  if (!roster.length) {
+    el.innerHTML = `<div style="font-size:12px;color:var(--text-muted)">学生名单加载失败，请刷新重试</div>`;
+    return;
+  }
+  el.innerHTML = roster.map(s => {
+    const isActive = String(s.id) === String(currentStudentId);
+    return `<div class="student-chip ${isActive ? 'active' : ''}" onclick="selectStudent(${s.id})">
+      <span class="st-avatar">${escapeHtml(s.avatar || "👤")}</span>
+      <span>${escapeHtml(s.name || "—")}</span>
+      <span style="font-size:11px;color:var(--text-muted)">· ${escapeHtml(s.level || "—")}</span>
     </div>`;
   }).join("");
 }
 
+// 顶部四卡：综合掌握度 + 三种推荐状态计数，全部来自 G5 / 本人入口的 summary。
+// 三个计数按全部候选唱段统计（后端在截断 Top3 之前计数），不是只数列表里的条目。
 function renderStats() {
-  const data = ABILITY_DATA[currentStudentId];
-  const recs = RECOMMENDATIONS[currentStudentId];
-  const matchCount = recs.filter(r => r.status === "match").length;
-  const challengeCount = recs.filter(r => r.status === "challenge").length;
-  const lockCount = recs.filter(r => r.status === "lock").length;
+  const summary = currentRecommendation && currentRecommendation.summary;
+  const overall = summaryOverall();
+  const overallText = overall == null ? "—" : (overall * 100).toFixed(0) + "%";
+  const matchText = summary ? summary.match_count : "—";
+  const challengeText = summary ? summary.challenge_count : "—";
+  const lockText = summary ? summary.lock_count : "—";
 
   document.getElementById("statsRow").innerHTML = `
     <div class="stat-card">
       <div class="stat-icon" style="background:rgba(0,102,179,0.10)">📊</div>
       <div class="stat-info">
-        <div class="stat-value" style="color:var(--primary)">${(data.overall * 100).toFixed(0)}%</div>
+        <div class="stat-value" style="color:var(--primary)">${overallText}</div>
         <div class="stat-label">综合掌握度</div>
       </div>
     </div>
     <div class="stat-card">
       <div class="stat-icon" style="background:rgba(74,143,107,0.10)">✅</div>
       <div class="stat-info">
-        <div class="stat-value" style="color:var(--success)">${matchCount}</div>
+        <div class="stat-value" style="color:var(--success)">${matchText}</div>
         <div class="stat-label">难度匹配</div>
       </div>
     </div>
     <div class="stat-card">
       <div class="stat-icon" style="background:rgba(201,168,76,0.10)">🔥</div>
       <div class="stat-info">
-        <div class="stat-value" style="color:var(--warning)">${challengeCount}</div>
+        <div class="stat-value" style="color:var(--warning)">${challengeText}</div>
         <div class="stat-label">挑战推荐</div>
       </div>
     </div>
     <div class="stat-card">
       <div class="stat-icon" style="background:rgba(139,92,246,0.10)">🔒</div>
       <div class="stat-info">
-        <div class="stat-value" style="color:#7C3AED">${lockCount}</div>
+        <div class="stat-value" style="color:#7C3AED">${lockText}</div>
         <div class="stat-label">已锁定</div>
       </div>
     </div>
@@ -697,67 +667,52 @@ function renderStats() {
 }
 
 function renderRecList() {
-  const recs = RECOMMENDATIONS[currentStudentId];
-  const ability = ABILITY_DATA[currentStudentId];
   const container = document.getElementById("recList");
 
+  if (recState === "loading") {
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">推荐加载中…</div>`;
+    return;
+  }
+  if (recState === "error" || !currentRecommendation) {
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">推荐加载失败，请刷新重试</div>`;
+    return;
+  }
+
+  const recs = currentRecommendation.recommendations || [];
+  if (!recs.length) {
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">暂无推荐唱段（已测技法不足以匹配现有曲目）</div>`;
+    return;
+  }
+
   container.innerHTML = recs.map((rec, idx) => {
-    const phrase = PHRASE_LIBRARY.find(p => p.id === rec.phraseId);
-    const diffInfo = getDiffLabel(phrase.difficulty);
-    const isLock = rec.status === "lock";
-    const isTop3 = idx < 3;
-
-    const skillsHtml = phrase.skills.map(sk => {
-      const mastery = ability.ability[sk] || 0;
-      const ready = mastery >= 0.60;
-      return `<span class="rec-skill ${ready ? 'ready' : 'blocked'}"><span class="dot" style="background:${ready ? '#4A8F6B' : '#B83A2F'}"></span>${sk} ${(mastery * 100).toFixed(0)}%</span>`;
-    }).join("");
-
-    const matchColor = rec.status === "match" ? "#4A8F6B" : (rec.status === "challenge" ? "#C9A84C" : "#7C3AED");
+    const status = ["match", "challenge", "lock"].includes(rec.status) ? rec.status : "lock";
+    const isLock = status === "lock";
+    const difficulty = Number(rec.difficulty);
+    const hasDiff = Number.isFinite(difficulty);
+    const diffInfo = hasDiff ? getDiffLabel(difficulty) : { text: "—", color: "var(--text-muted)" };
 
     const lockOverlay = isLock ? `
       <div class="lock-overlay">
         <div class="lock-content">
           <div class="lock-icon">🔒</div>
           <div class="lock-text">前置技法未达标</div>
-          <div class="lock-detail">${rec.reason}</div>
-          <div class="lock-skills">${phrase.skills.map(sk => {
-            const m = ability.ability[sk] || 0;
-            const r = m >= 0.60;
-            return `<span class="rec-skill ${r ? 'ready' : 'blocked'}"><span class="dot" style="background:${r ? '#4A8F6B' : '#B83A2F'}"></span>${sk}</span>`;
-          }).join("")}</div>
+          <div class="lock-detail">${escapeHtml(rec.reason)}</div>
         </div>
       </div>
     ` : "";
 
     return `
-      <div class="rec-item ${rec.status} ${rec.teacherOverride ? 'teacher-override' : ''}" id="rec-${idx}">
+      <div class="rec-item ${status}">
         ${lockOverlay}
-        <div class="rec-rank ${isTop3 ? 'top' : rec.status}">${idx + 1}</div>
+        <div class="rec-rank ${idx < 3 ? 'top' : status}">${idx + 1}</div>
         <div class="rec-body">
           <div class="rec-header-row">
-            <span class="rec-title">${phrase.title}</span>
-            <span class="rec-badge ${rec.status}">${rec.status === "match" ? "难度匹配" : (rec.status === "challenge" ? "挑战" : "已锁定")}</span>
-            <span class="rec-piece">${phrase.piece} · ${phrase.banshi}</span>
+            <span class="rec-title">${escapeHtml(rec.title)}</span>
+            <span class="rec-badge ${status}">${statusLabel(status)}</span>
           </div>
-          <div class="rec-reason">${rec.reason}</div>
+          <div class="rec-reason">${escapeHtml(rec.reason)}</div>
           <div class="rec-meta">
-            <span class="rec-meta-item">难度: <span class="val" style="color:${diffInfo.color}">${phrase.difficulty.toFixed(2)} · ${diffInfo.text}</span></span>
-            <span class="rec-meta-item">匹配度: <span class="val">${(rec.matchScore * 100).toFixed(0)}%</span></span>
-            <span class="rec-meta-item">信息增益: <span class="val">${(rec.infoGain * 100).toFixed(0)}%</span></span>
-            <span class="rec-meta-item">⏱️ ${phrase.duration}</span>
-          </div>
-          <div class="rec-bar-wrap">
-            <div class="rec-bar" style="width:${rec.matchScore * 100}%;background:linear-gradient(90deg,${matchColor},${matchColor}80)"></div>
-          </div>
-          <div class="rec-bar-label">
-            <span>学习增益综合评分</span>
-            <span>${(rec.matchScore * rec.infoGain * 100).toFixed(1)} 分</span>
-          </div>
-          <div class="rec-skills">${skillsHtml}</div>
-          <div class="rec-actions">
-            <button class="btn-start" onclick="startPractice('${phrase.id}')" ${isLock ? 'disabled' : ''}>${isLock ? '🔒 前置未达标' : '▶ 开始练习'}</button>
-            <button class="btn-override" onclick="openOverrideModal(${idx})">👩‍🏫 老师推荐</button>
+            <span class="rec-meta-item">难度: <span class="val" style="color:${diffInfo.color}">${hasDiff ? difficulty.toFixed(2) + " · " + diffInfo.text : "—"}</span></span>
           </div>
         </div>
       </div>
@@ -765,16 +720,12 @@ function renderRecList() {
   }).join("");
 }
 
+// 全部曲目库仍是 mock（没有对应接口），不再按推荐做高亮。
 function renderLibGrid() {
-  const ability = ABILITY_DATA[currentStudentId];
-  const recs = RECOMMENDATIONS[currentStudentId];
-  const recIds = recs.map(r => r.phraseId);
-
   document.getElementById("libGrid").innerHTML = PHRASE_LIBRARY.map(p => {
-    const inRec = recIds.includes(p.id);
     const diffInfo = getDiffLabel(p.difficulty);
     return `
-      <div class="lib-item ${inRec ? 'selected' : ''}" onclick="selectFromLib('${p.id}')">
+      <div class="lib-item" onclick="selectFromLib('${p.id}')">
         <div class="lib-icon">🎵</div>
         <div class="lib-info">
           <div class="lib-title">${p.title}</div>
@@ -786,15 +737,40 @@ function renderLibGrid() {
   }).join("");
 }
 
-function initAbilityChart() {
-  const data = ABILITY_DATA[currentStudentId];
+// 能力雷达只画**已测技法**：abilities 是 G5 / 本人入口返回的「技法 -> 最新 P(L)」，
+// 未测技法根本不在对象里，也不该补成 0（0 是真实测量值，null≠0）。
+// 雷达至少要 3 个轴才成形，已测不足 3 项时给占位而不是画一个畸形三角。
+function renderAbilityCard() {
   const dom = document.getElementById("abilityChart");
-  if (abilityChart) abilityChart.dispose();
+  const abilities = (currentRecommendation && currentRecommendation.abilities) || {};
+  const measured = TECHNIQUES.filter(t => Number.isFinite(abilities[t]));
+
+  // 先 dispose 再清空容器：反过来会把 canvas 先摘掉，dispose 时可能找不到
+  // 自己创建的 DOM 而抛错，切换学生时雷达图就停在已销毁状态。
+  if (abilityChart) { abilityChart.dispose(); abilityChart = null; }
+  dom.innerHTML = "";
+
+  if (measured.length < 3) {
+    let text;
+    if (recState === "loading") {
+      text = "能力数据加载中…";
+    } else if (recState === "error") {
+      text = "能力数据加载失败，请刷新重试";
+    } else if (measured.length === 0) {
+      text = "该生暂无能力数据（尚未练习过任何技法）";
+    } else {
+      text = `已测技法仅 ${measured.length} 项，不足以绘制能力雷达`;
+    }
+    dom.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px;text-align:center;padding:0 16px">${text}</div>`;
+    renderOverallText();
+    return;
+  }
+
   abilityChart = echarts.init(dom);
 
-  const values = TECHNIQUES.map(t => data.ability[t] || 0);
+  const values = measured.map(t => abilities[t]);
 
-  const option = {
+  abilityChart.setOption({
     backgroundColor: "transparent",
     tooltip: {
       backgroundColor: "var(--bg-secondary)",
@@ -806,7 +782,7 @@ function initAbilityChart() {
       }
     },
     radar: {
-      indicator: TECHNIQUES.map(t => ({ name: t, max: 1 })),
+      indicator: measured.map(t => ({ name: t, max: 1 })),
       shape: "polygon",
       splitNumber: 4,
       axisName: { color: "#2D1F14", fontSize: 10 },
@@ -825,141 +801,157 @@ function initAbilityChart() {
       }],
       symbolSize: 5
     }]
-  };
+  });
 
-  abilityChart.setOption(option);
-  
-  // 延迟确保图表渲染完成后更新文字信息
-  setTimeout(() => {
-    const overallEl = document.getElementById("overallMastery");
-    if (overallEl) {
-      overallEl.textContent = (data.overall * 100).toFixed(0) + "%";
-    }
-    
-    const diffEl = document.getElementById("diffRange");
-    if (diffEl) {
-      const minDiff = Math.max(0.20, data.overall - 0.15);
-      const maxDiff = Math.min(0.95, data.overall + 0.20);
-      diffEl.textContent = minDiff.toFixed(2) + " ~ " + maxDiff.toFixed(2);
-    }
-    
-    if (abilityChart) {
-      abilityChart.resize();
-    }
-  }, 150);
-
-  window.addEventListener("resize", () => { if (abilityChart) abilityChart.resize(); });
+  renderOverallText();
 }
 
+window.addEventListener("resize", () => { if (abilityChart) abilityChart.resize(); });
+
+// 前置技法锁定面板：数据来自 G5 / 本人入口的 prereq_locks（学生级，与唱段候选无关）。
+// 判据与看板 5.4 一致：前置技法当前 P(L) 低于它自己的达标线，下游技法就被锁。
 function renderPrereqPanel() {
-  const ability = ABILITY_DATA[currentStudentId];
   const container = document.getElementById("prereqPanel");
+  const placeholder = text =>
+    `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">${text}</div>`;
 
-  const blocked = TECHNIQUES.filter(t => (ability.ability[t] || 0) < 0.60).map(t => {
-    const p = ability.ability[t] || 0;
-    const color = getPLColor(p);
-    return `
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-primary);border-radius:8px;border:1px solid var(--border-light);margin-bottom:8px">
-        <span style="font-size:13px;font-weight:700;color:var(--text-primary);flex:1">${t}</span>
-        <div style="width:80px;height:6px;background:var(--border-light);border-radius:3px;overflow:hidden">
-          <div style="width:${p*100}%;height:100%;background:${color.bar};border-radius:3px"></div>
-        </div>
-        <span style="font-size:12px;font-weight:700;color:${color.text};min-width:50px;text-align:right">${(p*100).toFixed(0)}%</span>
-        <span style="font-size:10px;padding:2px 8px;border-radius:4px;background:${color.bar}20;color:${color.text};font-weight:700">${color.label}</span>
-      </div>
-    `;
-  }).join("");
-
-  if (!blocked || blocked.length === 0) {
-    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">🔓 所有前置技法均已达标，全部唱句已解锁</div>`;
-  } else {
-    container.innerHTML = blocked + `<div style="font-size:11px;color:var(--text-muted);margin-top:8px">以上技法掌握度 &lt; 0.60，依赖这些技法的唱句将被锁定。建议优先练习基础曲目提升前置技能。</div>`;
+  if (recState === "loading") {
+    container.innerHTML = placeholder("前置技法状态加载中…");
+    return;
   }
+  if (recState === "error") {
+    container.innerHTML = placeholder("前置技法状态加载失败，请刷新重试");
+    return;
+  }
+
+  // 一个技法都没测过时，判定不出任何前置关系；此时不能显示「全部达标」。
+  const abilities = (currentRecommendation && currentRecommendation.abilities) || {};
+  if (!Object.keys(abilities).length) {
+    container.innerHTML = placeholder("该生暂无能力数据，无法判断前置技法锁定");
+    return;
+  }
+
+  const locks = (currentRecommendation && currentRecommendation.prereq_locks) || [];
+  if (!locks.length) {
+    container.innerHTML = placeholder("🔓 所有前置技法均已达标，没有技法被锁定");
+    return;
+  }
+
+  container.innerHTML = locks.map(lock => {
+    const prereqs = lock.prereqs || [];
+    const lines = prereqs.map(p => {
+      const mastery = Number(p.mastery);
+      const threshold = Number(p.threshold);
+      if (!Number.isFinite(mastery)) return "";
+      const color = getPLColor(mastery);
+      const width = Math.max(0, Math.min(1, mastery)) * 100;
+      return `
+        <div class="prereq-line">
+          <span class="prereq-name">${escapeHtml(p.skill)}</span>
+          <div class="prereq-bar"><div style="width:${width}%;background:${color.bar}"></div></div>
+          <span class="prereq-pct" style="color:${color.text}">${(mastery * 100).toFixed(0)}%</span>
+          <span class="prereq-th">达标 ${Number.isFinite(threshold) ? (threshold * 100).toFixed(0) + "%" : "—"}</span>
+        </div>`;
+    }).join("");
+    return `
+      <div class="prereq-item">
+        <div class="prereq-head">
+          <span class="prereq-skill">🔒 ${escapeHtml(lock.skill)}</span>
+          <span class="prereq-count">被 ${prereqs.length} 项前置技法锁定</span>
+        </div>
+        ${lines}
+      </div>`;
+  }).join("") + `<div style="font-size:11px;color:var(--text-muted);margin-top:8px">前置技法掌握度低于各自达标线时，依赖它的下游技法会被锁定；先练前置技法即可解锁。</div>`;
+}
+
+// ============================================
+// 数据加载
+// ============================================
+
+async function loadRecommendation(id) {
+  recState = "loading";
+  currentRecommendation = null;
+  renderStats();
+  renderRecList();
+  renderAbilityCard();
+  renderPrereqPanel();
+  renderOverallText();
+
+  let data = null;
+  try {
+    const r = await fetch(`/api/students/${id}/recommendations`, { credentials: "same-origin" });
+    if (r.ok) data = (await r.json()).data;
+  } catch (e) { /* 落到失败文案 */ }
+
+  // 竞态：快速切换学生时先发的请求可能后回来，丢弃过期结果
+  if (String(currentStudentId) !== String(id)) return;
+
+  currentRecommendation = data || null;
+  recState = data ? "ok" : "error";
+  renderStats();
+  renderRecList();
+  renderAbilityCard();
+  renderPrereqPanel();
+  renderOverallText();
+}
+
+async function loadSelfRecommendation() {
+  recState = "loading";
+  currentRecommendation = null;
+  renderStats();
+  renderRecList();
+  renderAbilityCard();
+  renderPrereqPanel();
+  renderOverallText();
+
+  let data = null;
+  try {
+    const r = await fetch("/api/recommendations/me", { credentials: "same-origin" });
+    if (r.ok) data = (await r.json()).data;
+  } catch (e) { /* 落到失败文案 */ }
+
+  if (!data) {
+    recState = "error";
+    renderStats();
+    renderRecList();
+    renderAbilityCard();
+    renderPrereqPanel();
+    renderOverallText();
+    return;
+  }
+
+  currentStudentId = data.student_id;
+  currentRecommendation = data;
+  recState = "ok";
+  renderStats();
+  renderRecList();
+  renderAbilityCard();
+  renderPrereqPanel();
+  renderOverallText();
 }
 
 // ============================================
 // 交互操作
 // ============================================
 
-function selectStudent(id) {
+function applyStudent(id) {
   currentStudentId = id;
   renderStudentSelector();
-  renderStats();
-  renderRecList();
-  renderLibGrid();
-  initAbilityChart();
+  renderAbilityCard();
   renderPrereqPanel();
+  renderLibGrid();
 }
 
-function startPractice(phraseId) {
-  const phrase = PHRASE_LIBRARY.find(p => p.id === phraseId);
-  showToast("success", "▶ 开始练习", `已选择「${phrase.title}」，系统将记录练习数据并更新 BKT 状态。`);
+function selectStudent(id) {
+  const s = roster.find(x => String(x.id) === String(id));
+  if (!s) return;
+  applyStudent(s.id);
+  loadRecommendation(s.id);
 }
 
 function selectFromLib(phraseId) {
   const phrase = PHRASE_LIBRARY.find(p => p.id === phraseId);
   showToast("info", "📚 手动选择曲目", `已选择「${phrase.title}」，学生可自主练习。`);
-}
-
-function openOverrideModal(rankIdx) {
-  overrideRank = rankIdx;
-  const student = STUDENTS.find(s => s.id === currentStudentId);
-  document.getElementById("overrideStudent").textContent = student.name;
-  document.getElementById("overrideRank").textContent = rankIdx + 1;
-
-  const currentRec = RECOMMENDATIONS[currentStudentId][rankIdx];
-  const currentPhrase = PHRASE_LIBRARY.find(p => p.id === currentRec.phraseId);
-
-  const recIds = RECOMMENDATIONS[currentStudentId].map(r => r.phraseId);
-  const alternatives = PHRASE_LIBRARY.filter(p => !recIds.includes(p.id));
-
-  let html = alternatives.map(p => {
-    const diffInfo = getDiffLabel(p.difficulty);
-    return `<div class="override-item" onclick="selectOverrideTarget('${p.id}', this)">
-      <strong style="color:var(--text-primary)">${p.title}</strong> · ${p.piece}
-      <span style="margin-left:8px;padding:2px 6px;border-radius:3px;font-size:10px;background:${diffInfo.color}20;color:${diffInfo.color}">${diffInfo.text}</span>
-    </div>`;
-  }).join("");
-
-  const modalText = document.querySelector("#overrideModal .modal-text");
-  modalText.innerHTML = `
-    您正在将「<strong>${student.name}</strong>」的推荐列表中的第 <strong>${rankIdx + 1}</strong> 位<br>
-    「<span style="color:var(--text-secondary)">${currentPhrase.title}</span>」替换为以下曲目：<br><br>
-    <div class="override-list" style="max-height:200px;overflow-y:auto">${html}</div>
-  `;
-
-  document.getElementById("overrideModal").classList.add("show");
-}
-
-function selectOverrideTarget(phraseId, el) {
-  overrideTarget = phraseId;
-  document.querySelectorAll(".override-item").forEach(o => o.classList.remove("selected"));
-  el.classList.add("selected");
-}
-
-function confirmOverride() {
-  if (!overrideTarget) {
-    alert("请先选择一个替换曲目");
-    return;
-  }
-  const phrase = PHRASE_LIBRARY.find(p => p.id === overrideTarget);
-  RECOMMENDATIONS[currentStudentId][overrideRank] = {
-    phraseId: overrideTarget,
-    matchScore: 0.95,
-    infoGain: 0.50,
-    status: "match",
-    reason: "👩‍🏫 老师手动推荐：" + phrase.title,
-    teacherOverride: true
-  };
-  closeModal();
-  renderRecList();
-  showToast("success", "👩‍🏫 已覆盖推荐", `已将第 ${overrideRank + 1} 位推荐替换为「${phrase.title}」。系统将记录此次覆盖作为算法反馈。`);
-}
-
-function closeModal() {
-  document.getElementById("overrideModal").classList.remove("show");
-  overrideTarget = null;
-  overrideRank = null;
 }
 
 function showToast(type, title, msg) {
@@ -981,13 +973,62 @@ function showToast(type, title, msg) {
 // 初始化
 // ============================================
 
-function init() {
-  renderStudentSelector();
+async function init() {
   renderStats();
   renderRecList();
   renderLibGrid();
-  initAbilityChart();
-  renderPrereqPanel();
+
+  let user = null;
+  try {
+    const r = await fetch("/api/auth/me", { credentials: "same-origin" });
+    if (r.ok) user = (await r.json()).data;
+  } catch (e) { /* 下面的失败分支统一处理 */ }
+
+  if (!user) {
+    recState = "error";
+    renderRecList();
+    document.getElementById("studentSelector").innerHTML =
+      `<div style="font-size:12px;color:var(--text-muted)">登录状态获取失败，请刷新重试</div>`;
+    return;
+  }
+  currentUser = user;
+
+  if (user.role === "student") {
+    // 学生只看本人：切换器由 CSS 隐藏，四卡与列表走本人入口
+    renderAbilityCard();
+    renderPrereqPanel();
+    renderLibGrid();
+    await loadSelfRecommendation();
+    return;
+  }
+
+  // 教师：学生芯片用真实名单（H1 GET /api/students）
+  let data = null;
+  try {
+    const r = await fetch("/api/students", { credentials: "same-origin" });
+    if (r.ok) data = (await r.json()).data;
+  } catch (e) { /* 落到失败文案 */ }
+
+  if (!data || !Array.isArray(data.students)) {
+    document.getElementById("studentSelector").innerHTML =
+      `<div style="font-size:12px;color:var(--text-muted)">学生名单加载失败，请刷新重试</div>`;
+    recState = "error";
+    renderRecList();
+    return;
+  }
+
+  roster = data.students;
+  if (!roster.length) {
+    document.getElementById("studentSelector").innerHTML =
+      `<div style="font-size:12px;color:var(--text-muted)">暂无学生</div>`;
+    recState = "ok";
+    renderRecList();
+    return;
+  }
+
+  const first = roster[0];
+  applyStudent(first.id);
+  await loadRecommendation(first.id);
 }
 
 if (document.readyState === 'complete' || document.readyState === 'interactive') {

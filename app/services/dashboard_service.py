@@ -9,7 +9,7 @@ from app.common.errors import BusinessError
 from app.models import BktHistory, GraphNode, TeacherDemo
 from app.schemas.dashboard import DashBoardSummary, MasteryDropAlert, AlertResponse, PrereqLockAlert, PrereqSkill, \
     HeatmapStudent, HeatmapResponse, StudentAbility, StudentAbilityResponse, \
-    RecommendationItem, RecommendationResponse, ProcessMetrics, \
+    RecommendationItem, RecommendationResponse, RecommendationSummary, PrereqLockItem, ProcessMetrics, \
     HomeworkProgressItem, HomeworkProgressResponse
 
 BEIJING = ZoneInfo("Asia/Shanghai")
@@ -324,6 +324,14 @@ def recommendations(db: Session, student_id: int) -> RecommendationResponse:
        （前置没过关时，难度合不合适不是重点）。lock 项排最后。
     5. 排序 match → challenge → lock，同档按「偏离当前水平越小越靠前」，取前 3。
        不足 3 条、甚至为空都是正常的（数据现状就会如此），前端有对应占位。
+    6. 页面顶部四张统计卡的 summary 也在这里算：overall_mastery 就是上面的 level；
+       match/challenge/lock 三个计数按**全部候选**（ranked）统计，在截断 Top3
+       之前计数——lock 排在最后，只看 Top3 会让「已锁定」永远是 0。
+    7. abilities 直接返回上面那份 mastery：能力雷达按它的键动态出轴，未测技法
+       不出现（不拿 0 充数），一个都没测过时为空对象。
+    8. prereq_locks 是**学生级**的前置锁定（功能 5.4），与唱段候选无关：判据与
+       看板 alerts 的 prerequisiteLockAlert 一致（前置技法当前 P(L) 低于它自己的
+       达标线），未测的前置技法判不了、跳过；候选为空时页面照样能看到被卡住的技法。
     """
     if not any(row[0] == student_id for row in user_repo.get_student_roster(db)):
         raise BusinessError(404, "学生不存在")
@@ -335,7 +343,18 @@ def recommendations(db: Session, student_id: int) -> RecommendationResponse:
         if r.student_id == student_id and r.p_l is not None
     }
     if not mastery:
-        return RecommendationResponse(student_id=student_id, recommendations=[])
+        return RecommendationResponse(
+            student_id=student_id,
+            summary=RecommendationSummary(
+                overall_mastery=None,
+                match_count=0,
+                challenge_count=0,
+                lock_count=0,
+            ),
+            abilities={},
+            prereq_locks=[],
+            recommendations=[],
+        )
 
     level = sum(mastery.values()) / len(mastery)
 
@@ -343,6 +362,25 @@ def recommendations(db: Session, student_id: int) -> RecommendationResponse:
     prereq_by_skill: dict[str, list[tuple[str, float]]] = {}
     for p_skill, threshold, skill in graph_repo.get_prereq_edges(db):
         prereq_by_skill.setdefault(skill, []).append((p_skill, threshold))
+
+    # 前置技法锁定（功能 5.4）：学生级、与唱段候选无关。前置技法当前 P(L) 低于
+    # 它自己的达标线才锁；未测的前置技法判不了，跳过——与 alerts 的口径一致。
+    prereq_locks: list[PrereqLockItem] = []
+    for locked_skill, prereqs in prereq_by_skill.items():
+        unmet = [
+            PrereqSkill(
+                skill=p_skill,
+                mastery=round(mastery[p_skill], 6),
+                threshold=threshold,
+            )
+            for p_skill, threshold in prereqs
+            if p_skill in mastery and mastery[p_skill] < threshold
+        ]
+        if unmet:
+            unmet.sort(key=lambda p: p.mastery)
+            prereq_locks.append(PrereqLockItem(skill=locked_skill, prereqs=unmet))
+    # 卡得最死的排前面：取每个被锁技法里最低的那个前置掌握度
+    prereq_locks.sort(key=lambda item: (item.prereqs[0].mastery, item.skill))
 
     need_by_segment = graph_repo.get_segment_skill_map(db)
     seg_demo = library_repo.get_segment_demo_map(db)
@@ -393,8 +431,20 @@ def recommendations(db: Session, student_id: int) -> RecommendationResponse:
         )))
 
     ranked.sort(key=lambda x: x[0])
+    counts = {
+        status: sum(1 for _, item in ranked if item.status == status)
+        for status in ("match", "challenge", "lock")
+    }
     return RecommendationResponse(
         student_id=student_id,
+        summary=RecommendationSummary(
+            overall_mastery=round(level, 6),
+            match_count=counts["match"],
+            challenge_count=counts["challenge"],
+            lock_count=counts["lock"],
+        ),
+        abilities={skill: round(p_l, 6) for skill, p_l in mastery.items()},
+        prereq_locks=prereq_locks,
         recommendations=[item for _, item in ranked[:3]],
     )
 

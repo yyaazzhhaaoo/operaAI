@@ -36,6 +36,7 @@ from . import homeworks
 from . import dashboard
 from . import students
 from . import graph
+from . import cdm
 from . import cat
 from . import health
 from . import demo_library

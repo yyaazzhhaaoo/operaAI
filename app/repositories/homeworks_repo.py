@@ -1,4 +1,6 @@
-from sqlalchemy import Date, and_, cast, distinct, func, select, tuple_
+from datetime import datetime
+
+from sqlalchemy import Date, and_, cast, desc, distinct, func, select, tuple_
 from sqlalchemy.orm import Session
 
 from app.models import Homework, ScoreCalibration, Student, Submission, TeacherDemo, User
@@ -220,6 +222,49 @@ def get_pending_submissions(
     return [tuple(row) for row in db.execute(stmt).all()]
 
 
+def get_cdm_submissions(
+    db: Session,
+) -> list[tuple[Submission, str | None, str | None, str | None, str | None]]:
+    """有 CDM 归因数据的提交，[(提交, 姓名, 等级, 头像, 作业标题)]，最新在前。
+
+    「有 CDM 数据」= `ai_detail` 里带 `defects` 键：分析管线与 F3 归档都写这个键，
+    只有逐字偏差、没有 CDM 的提交不算。`defects` 为空数组仍算——那是「查了没缺陷」，
+    与「没有数据源」是两件事（项目约定，见 DOC_ISSUES 第 23 条）。
+
+    三层 join 全用 LEFT，理由同 get_pending_submissions / get_submission_detail：
+    `submissions.student_id` / `homework_id` 可空，INNER JOIN 会让真实提交整条
+    从列表里消失；姓名必须经 `students.user_id` 拐一次（DOC_ISSUES 第 21 条）。
+
+    排序 `submitted_at DESC NULLS LAST, id DESC`：页面默认选中第一条，顺序必须
+    稳定；库里 24/26/27 的 submitted_at 完全相同，只按时间排会让选中项在刷新后漂移。
+    """
+    stmt = (
+        select(
+            Submission,
+            User.display_name,
+            Student.level,
+            Student.avatar,
+            Homework.title,
+        )
+        .outerjoin(Student, Student.id == Submission.student_id)
+        .outerjoin(User, User.id == Student.user_id)
+        .outerjoin(Homework, Homework.id == Submission.homework_id)
+        .where(Submission.ai_detail.is_not(None))
+        .where(Submission.ai_detail.has_key("defects"))
+        .order_by(Submission.submitted_at.desc().nulls_last(), Submission.id.desc())
+    )
+    return [tuple(row) for row in db.execute(stmt).all()]
+
+
+def get_cdm_submission(db: Session, submission_id: int) -> Submission | None:
+    """单条提交（含 ai_detail），供 CDM 摘要接口判 404。
+
+    只取 `submissions` 一张表：摘要四个指标都在 `ai_score` / `ai_detail` 里，
+    不需要 `get_submission_detail` 那组学生与作业字段。
+    """
+    return db.get(Submission, submission_id)
+
+
 def get_submission_detail(
     db: Session, submission_id: int
 ) -> tuple[Submission, str | None, str | None, str | None, str | None] | None:
@@ -312,6 +357,25 @@ def get_calibration(
             ScoreCalibration.teacher_id == teacher_id,
         )
     )
+
+
+def list_submissions_since(
+    db: Session, student_id: int, since: datetime
+) -> list[tuple[Submission, str | None]]:
+    """某学生在 `since` 之后的作业提交，带作业标题，按提交时间倒序。
+
+    能力追踪页事件时间轴（功能 6.8 / H4）用。`submitted_at` 为空的提交不参与：
+    时间轴上没有可落的时间点。标题走外连接，作业行被删时取到 None。
+    """
+    rows = db.execute(
+        select(Submission, Homework.title)
+        .outerjoin(Homework, Homework.id == Submission.homework_id)
+        .where(Submission.student_id == student_id)
+        .where(Submission.submitted_at.is_not(None))
+        .where(Submission.submitted_at >= since)
+        .order_by(desc(Submission.submitted_at), desc(Submission.id))
+    ).all()
+    return [(row[0], row[1]) for row in rows]
 
 
 def get_latest_calibration(

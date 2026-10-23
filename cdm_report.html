@@ -418,6 +418,11 @@
     .defect-card.ignored {
         opacity: 0.65;
     }
+    /* 从修正记录跳过来时短暂高亮目标缺陷卡（放在状态样式之后，避免被覆盖） */
+    .defect-card.defect-focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(0, 102, 179, 0.25);
+    }
 
     .defect-header {
         display: flex;
@@ -657,6 +662,11 @@
         border-radius: 8px;
         border: 1px solid var(--border-light);
         font-size: 12px;
+        cursor: pointer;
+        transition: border-color 0.2s;
+    }
+    .correction-item:hover {
+        border-color: var(--border-medium);
     }
     .correction-item .corr-header {
         display: flex;
@@ -690,6 +700,30 @@
         color: var(--text-secondary);
         line-height: 1.5;
     }
+    .correction-item .corr-index {
+        color: var(--text-muted);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+    }
+    .correction-item .corr-ref {
+        color: var(--primary);
+        font-size: 10px;
+        font-weight: 600;
+    }
+    .corr-line {
+        display: flex;
+        gap: 6px;
+        line-height: 1.7;
+    }
+    .corr-key {
+        flex: none;
+        color: var(--text-muted);
+    }
+    .corr-old { color: var(--text-secondary); }
+    .corr-new {
+        color: var(--warning);
+        font-weight: 600;
+    }
 
     /* ===== 数据回流 ===== */
     .feedback-panel {
@@ -709,7 +743,7 @@
     }
     .feedback-stats {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(4, 1fr);
         gap: 10px;
         margin-bottom: 12px;
     }
@@ -967,7 +1001,7 @@
             padding: 18px;
         }
         .feedback-stats {
-            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-columns: 1fr 1fr;
         }
     }
 
@@ -1034,8 +1068,11 @@
             </div>
 
             <div class="submission-selector" id="submissionSelector"></div>
+
             <div class="summary-grid" id="summaryGrid"></div>
 
+            <!-- 本轮只接入四指标摘要；详情面板未接入前整块隐藏，显示占位 -->
+            <div id="reportArea">
             <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px">
                 <div>
                     <div class="card">
@@ -1079,6 +1116,7 @@
                             <div class="card-title">
                                 <div class="icon" style="background:rgba(201,168,76,0.10);color:var(--warning)">✏️</div>
                                 老师修正记录
+                                <span style="font-size:11px;font-weight:400;color:var(--text-muted)">仅本会话</span>
                             </div>
                             <span class="card-action" onclick="clearCorrections()">清空记录</span>
                         </div>
@@ -1087,13 +1125,18 @@
 
                     <div class="card" style="border-color:rgba(74,143,107,0.2)">
                         <div class="feedback-panel">
-                            <div class="feedback-title">🔄 数据回流状态</div>
+                            <div class="feedback-title">🔄 数据回流状态
+                                <span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--text-muted)">本地缓存 · 未回流</span>
+                            </div>
                             <div class="feedback-stats" id="feedbackStats"></div>
                             <div class="feedback-note" id="feedbackNote"></div>
                         </div>
                     </div>
                 </div>
             </div>
+            </div><!-- /reportArea -->
+
+            <div class="card" id="reportPlaceholder" style="display:none"></div>
         </main>
     </div>
 
@@ -1119,129 +1162,25 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <script>
-        const SUBMISSIONS = [{
-            id: "sub01",
-            student: { id: "s01", name: "李小燕", avatar: "🎭", level: "初级" },
-            piece: "《穆桂英挂帅》· 辕门外三声炮",
-            date: "2026-08-02",
-            aiScore: 82.5,
-            cdm: {
-                overallConfidence: 0.72,
-                defects: [
-                    { id: "d1", label: "气息支撑不足", confidence: 0.82, status: "high", category: "气息",
-                        evidence: "长音能量波动大，拖腔'炮'字出现明显抖动。能量标准差 0.34，超过阈值 0.25。",
-                        features: { "能量标准差": "0.34", "阈值": "0.25", "关联字": "炮" } },
-                    { id: "d2", label: "拖腔时值偏短", confidence: 0.78, status: "high", category: "节奏",
-                        evidence: "'雷'字拖腔时长 0.55s，低于标准 0.70s，差值 -0.15s（-21%）。",
-                        features: { "实际时长": "0.55s", "标准时长": "0.70s", "差值": "-0.15s" } },
-                    { id: "d3", label: "归韵口型保持不足", confidence: 0.45, status: "low", category: "咬字",
-                        evidence: "'侯'字口型保持 0.3s < 标准 0.5s，归韵不完整，收音偏急。",
-                        features: { "口型保持": "0.3s", "标准": "0.5s" } }
-                ],
-                featureMatrix: { pitchMean: -12, pitchStd: 28, pitchTrend: "random", energyStd: 0.34, vibratoDepth: 15,
-                    rhythmAccuracy: 0.72, durationMeanDiff: -0.08, highPitchBias: -8, lowPitchBias: -15 }
-            },
-            corrections: []
-        }, {
-            id: "sub02",
-            student: { id: "s03", name: "刘思琪", avatar: "🎵", level: "初级" },
-            piece: "《穆桂英挂帅》· 辕门外三声炮",
-            date: "2026-08-01",
-            aiScore: 75.2,
-            cdm: {
-                overallConfidence: 0.68,
-                defects: [
-                    { id: "d1", label: "音准偏差随机", confidence: 0.85, status: "high", category: "音准",
-                        evidence: "整句音高偏差无系统性倾向，-30~+20 cents 随机波动，标准差 28cents。",
-                        features: { "偏差均值": "-5c", "标准差": "28c", "趋势": "随机波动" } },
-                    { id: "d2", label: "听辨能力弱", confidence: 0.76, status: "high", category: "音准",
-                        evidence: "音高偏差随机分布，无明显偏高/偏低趋势，提示听辨感知能力不足。",
-                        features: { "偏高比例": "35%", "偏低比例": "42%", "准确比例": "23%" } },
-                    { id: "d3", label: "拖腔不足", confidence: 0.71, status: "medium", category: "节奏",
-                        evidence: "'帅'字拖腔仅 0.4s < 标准 0.7s，气息不足以支撑完整拖腔。",
-                        features: { "实际": "0.4s", "标准": "0.7s" } },
-                    { id: "d4", label: "气息支撑不足", confidence: 0.52, status: "medium", category: "气息",
-                        evidence: "长音段能量衰减明显，'炮'字后半段能量下降 18%。",
-                        features: { "能量衰减": "18%", "阈值": "10%" } }
-                ],
-                featureMatrix: { pitchMean: -5, pitchStd: 32, pitchTrend: "random", energyStd: 0.38, vibratoDepth: 8,
-                    rhythmAccuracy: 0.65, durationMeanDiff: -0.12, highPitchBias: 2, lowPitchBias: -18 }
-            },
-            corrections: []
-        }, {
-            id: "sub03",
-            student: { id: "s06", name: "周明轩", avatar: "🎹", level: "初级" },
-            piece: "《穆桂英挂帅》· 辕门外三声炮",
-            date: "2026-08-02",
-            aiScore: 78.9,
-            cdm: {
-                overallConfidence: 0.75,
-                defects: [
-                    { id: "d1", label: "节奏感知弱", confidence: 0.80, status: "high", category: "节奏",
-                        evidence: "快速段落（如'三声炮如同'）时值偏差明显，多处抢拍，节奏准确度 0.65。",
-                        features: { "节奏准确度": "0.65", "阈值": "0.75", "抢拍次数": "4次" } },
-                    { id: "d2", label: "气息不稳定", confidence: 0.74, status: "high", category: "气息",
-                        evidence: "'想'字拖腔气息不够，音高下滑 15cents，能量包络呈下降趋势。",
-                        features: { "音高下滑": "15c", "能量趋势": "下降" } }
-                ],
-                featureMatrix: { pitchMean: -10, pitchStd: 22, pitchTrend: "systematic_low", energyStd: 0.29,
-                    vibratoDepth: 12, rhythmAccuracy: 0.65, durationMeanDiff: -0.05, highPitchBias: -5,
-                    lowPitchBias: -12 }
-            },
-            corrections: []
-        }, {
-            id: "sub04",
-            student: { id: "s08", name: "孙志远", avatar: "🥁", level: "初级" },
-            piece: "《穆桂英挂帅》· 辕门外三声炮",
-            date: "2026-08-01",
-            aiScore: 71.3,
-            cdm: {
-                overallConfidence: 0.81,
-                defects: [
-                    { id: "d1", label: "整体音准偏低", confidence: 0.88, status: "high", category: "音准",
-                        evidence: "多字系统性偏低 -30cents 以下，整句音高中心偏移约 -25cents。",
-                        features: { "偏差均值": "-28c", "系统性": "95%", "偏移量": "-25c" } },
-                    { id: "d2", label: "调门不准", confidence: 0.82, status: "high", category: "音准",
-                        evidence: "整段音高中心偏移约 -25cents，提示调门选择偏低或听辨基准偏移。",
-                        features: { "音高中心": "-25c", "标准": "0c" } },
-                    { id: "d3", label: "声带紧张", confidence: 0.65, status: "medium", category: "发声",
-                        evidence: "高音区（> MIDI 72）系统性偏高趋势，提示声带过度紧张。",
-                        features: { "高音区偏差": "+12c", "低音区偏差": "-35c" } }
-                ],
-                featureMatrix: { pitchMean: -28, pitchStd: 18, pitchTrend: "systematic_low", energyStd: 0.22,
-                    vibratoDepth: 6, rhythmAccuracy: 0.70, durationMeanDiff: -0.03, highPitchBias: 12,
-                    lowPitchBias: -35 }
-            },
-            corrections: []
-        }, {
-            id: "sub05",
-            student: { id: "s05", name: "赵雨桐", avatar: "🎼", level: "中级" },
-            piece: "《穆桂英挂帅》· 辕门外三声炮",
-            date: "2026-08-01",
-            aiScore: 85.7,
-            cdm: {
-                overallConfidence: 0.55,
-                defects: [
-                    { id: "d1", label: "收尾偏急", confidence: 0.72, status: "medium", category: "节奏",
-                        evidence: "'军'字收尾时长 1.65s < 标准 1.88s，收束偏急，影响韵味表达。",
-                        features: { "实际": "1.65s", "标准": "1.88s", "差值": "-0.23s" } }
-                ],
-                featureMatrix: { pitchMean: -3, pitchStd: 12, pitchTrend: "stable", energyStd: 0.18, vibratoDepth: 22,
-                    rhythmAccuracy: 0.88, durationMeanDiff: -0.02, highPitchBias: -2, lowPitchBias: -4 }
-            },
-            corrections: []
-        }];
+        // 数据源：GET /api/cdm/submissions（真实作业提交列表）。
+        // 顶部四指标走 GET /api/cdm/submissions/<id>；缺陷标签明细走 .../defects；
+        // 特征矩阵走 .../features；音高偏差模式走 .../pitch-pattern
+        // （DOC_ISSUES 第 54–58 条）。
+        let SUBMISSIONS = [];
 
         const ALL_DEFECT_LABELS = ["气息支撑不足", "拖腔时值偏短", "归韵口型保持不足", "音准偏差随机", "听辨能力弱", "拖腔不足", "节奏感知弱", "气息不稳定",
             "整体音准偏低", "调门不准", "声带紧张", "收尾偏急", "滑音幅度不足", "颤音不稳定", "咬字不清", "高音区发声困难"
         ];
-        let currentSubId = "sub01";
+        let currentSubId = null;
+        let currentSummary = null;   // GET /api/cdm/submissions/<id> 的结果
         let correctingDefectId = null;
         let featureChart = null;
+        let focusTimer = null;       // 缺陷卡高亮的定时器
 
         function getScoreClass(s) { return s >= 85 ? "high" : s >= 70 ? "mid" : "low"; }
 
         function getConfBadge(c) {
+            if (!Number.isFinite(c)) return { cls: "conf-low", text: "置信度缺失 · 待确认" };
             return c >= 0.70 ? { cls: "conf-high", text: `高置信度 ${(c*100).toFixed(0)}%` } :
                 c >= 0.50 ? { cls: "conf-medium", text: `中置信度 ${(c*100).toFixed(0)}%` } :
                 { cls: "conf-low", text: `低置信度 ${(c*100).toFixed(0)}% · 待确认` };
@@ -1250,75 +1189,115 @@
         function getCatIcon(cat) { const m = { "气息": "💨", "节奏": "⏱️", "音准": "🎵", "咬字": "🗣️", "发声": "🎤",
                 "装饰": "✨" }; return m[cat] || "🔍"; }
 
+        // 姓名/曲目等来自数据库，拼进 innerHTML 前必须转义（同 homework.html 的 esc）。
+        function esc(s) {
+            return String(s == null ? "" : s)
+                .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        }
+
+        // 拼进内联 onclick 的单引号字符串：先做 JS 转义，再转义 HTML 属性。
+        function jsStr(s) {
+            return String(s == null ? "" : s)
+                .replace(/\\/g, "\\\\").replace(/'/g, "\\'")
+                .replace(/</g, "\\x3c").replace(/"/g, "&quot;")
+                .replace(/\r/g, "\\r").replace(/\n/g, "\\n");
+        }
+
         function renderSubmissionSelector() {
             document.getElementById("submissionSelector").innerHTML = SUBMISSIONS.map(sub => {
-                const isActive = sub.id === currentSubId,
-                    sc = getScoreClass(sub.aiScore);
+                const isActive = sub.id === currentSubId;
+                // ai_score 可空：没有分数时显示破折号，不能直接拼出 null
+                const hasScore = Number.isFinite(sub.aiScore);
+                const sc = hasScore ? getScoreClass(sub.aiScore) : "low";
                 return `<div class="sub-chip ${isActive?'active':''}" onclick="selectSubmission('${sub.id}')">
-              <span class="sub-avatar">${sub.student.avatar}</span>
-              <div class="sub-info"><div class="sub-name">${sub.student.name} · ${sub.student.level}</div><div class="sub-meta">${sub.piece} · ${sub.date}</div></div>
-              <span class="sub-score ${sc}">${sub.aiScore}</span></div>`;
+              <span class="sub-avatar">${esc(sub.student.avatar)}</span>
+              <div class="sub-info"><div class="sub-name">${esc(sub.student.name)} · ${esc(sub.student.level)}</div><div class="sub-meta">${esc(sub.piece)} · ${esc(sub.date)}</div></div>
+              <span class="sub-score ${sc}">${hasScore ? sub.aiScore : "—"}</span></div>`;
             }).join("");
         }
 
+        // 四个指标来自 GET /api/cdm/submissions/<id>。摘要尚未返回时 AI 初评分先用
+        // 列表里的 ai_score 顶上，其余显示「—」，避免四格在加载中反复跳动。
+        // 「已处理」按本会话的本地确认/修正/忽略计数：库里没有标签修正表，刷新归零
+        // （DOC_ISSUES 第 55 条）。
         function renderSummary() {
             const sub = SUBMISSIONS.find(s => s.id === currentSubId);
-            const d = sub.cdm.defects,
-                co = sub.corrections;
-            const confirmed = co.filter(c => c.action === "confirmed").length;
-            const corrected = co.filter(c => c.action === "corrected").length;
-            const high = d.filter(x => x.confidence >= 0.70).length;
-            const pending = d.length - confirmed - corrected;
-            document.getElementById("summaryGrid").innerHTML = `
-            <div class="summary-item"><div class="summary-val" style="color:${getScoreClass(sub.aiScore)==='high'?'var(--success)':(getScoreClass(sub.aiScore)==='mid'?'var(--warning)':'var(--danger)')}">${sub.aiScore}</div><div class="summary-label">AI 初评分</div></div>
-            <div class="summary-item"><div class="summary-val" style="color:var(--danger)">${high}</div><div class="summary-label">高置信度缺陷</div></div>
-            <div class="summary-item"><div class="summary-val" style="color:var(--primary)">${sub.cdm.overallConfidence.toFixed(2)}</div><div class="summary-label">综合置信度</div></div>
-            <div class="summary-item"><div class="summary-val" style="color:${pending===0?'var(--success)':'var(--warning)'}">${confirmed+corrected}/${d.length}</div><div class="summary-label">已处理 / 总标签</div></div>`;
+            const grid = document.getElementById("summaryGrid");
+            if (!sub) { grid.innerHTML = ""; return; }
+
+            const s = currentSummary || {};
+            const score = Number.isFinite(s.ai_score) ? s.ai_score : sub.aiScore;
+            const hasScore = Number.isFinite(score);
+            const scoreCls = hasScore ? getScoreClass(score) : null;
+            const scoreColor = scoreCls === "high" ? "var(--success)"
+                : (scoreCls === "mid" ? "var(--warning)" : "var(--danger)");
+
+            const high = Number.isFinite(s.high_confidence_count) ? s.high_confidence_count : null;
+            const overall = Number.isFinite(s.overall_confidence) ? s.overall_confidence : null;
+            const total = Number.isFinite(s.defect_count) ? s.defect_count : null;
+            // 同一个标签至多一条处理记录（处理完按钮即禁用），按 defectId 去重防御
+            const processed = new Set((sub.corrections || []).map(c => c.defectId)).size;
+            const allDone = total != null && processed >= total;
+
+            grid.innerHTML = `
+            <div class="summary-item"><div class="summary-val" style="color:${hasScore ? scoreColor : 'var(--text-muted)'}">${hasScore ? score : "—"}</div><div class="summary-label">AI 初评分</div></div>
+            <div class="summary-item"><div class="summary-val" style="color:${high == null ? 'var(--text-muted)' : 'var(--danger)'}">${high == null ? "—" : high}</div><div class="summary-label">高置信度缺陷</div></div>
+            <div class="summary-item"><div class="summary-val" style="color:${overall == null ? 'var(--text-muted)' : 'var(--primary)'}">${overall == null ? "—" : overall.toFixed(2)}</div><div class="summary-label">综合置信度</div></div>
+            <div class="summary-item"><div class="summary-val" style="color:${total == null ? 'var(--text-muted)' : (allDone ? 'var(--success)' : 'var(--warning)')}">${processed}/${total == null ? "—" : total}</div><div class="summary-label">已处理 / 总标签</div></div>`;
         }
 
         function renderDefects() {
-            const sub = SUBMISSIONS.find(s => s.id === currentSubId),
-                d = sub.cdm.defects;
-            const high = d.filter(x => x.confidence >= 0.70),
-                med = d.filter(x => x.confidence >= 0.50 && x.confidence < 0.70),
-                low = d.filter(x => x.confidence < 0.50);
+            const sub = SUBMISSIONS.find(s => s.id === currentSubId);
+            const el = document.getElementById("defectsContainer");
+            const d = sub && sub.cdm && Array.isArray(sub.cdm.defects) ? sub.cdm.defects : null;
+            if (d === null) {
+                el.innerHTML = `<div class="empty-state"><div class="empty-icon">🗂️</div>该提交没有可用的缺陷标签数据</div>`;
+                return;
+            }
+            const isConf = c => Number.isFinite(c);
+            const high = d.filter(x => isConf(x.confidence) && x.confidence >= 0.70),
+                med = d.filter(x => isConf(x.confidence) && x.confidence >= 0.50 && x.confidence < 0.70),
+                low = d.filter(x => !isConf(x.confidence) || x.confidence < 0.50);
             let html = "";
             if (high.length) html += `<div class="defect-section"><div class="section-header"><span class="dot" style="background:var(--danger)"></span><span style="color:var(--danger)">高置信度缺陷（建议优先处理）</span><span class="section-count">${high.length} 项</span></div>${high.map(x=>renderDefectCard(sub,x)).join("")}</div>`;
             if (med.length) html += `<div class="defect-section"><div class="section-header"><span class="dot" style="background:var(--warning)"></span><span style="color:var(--warning)">中置信度缺陷（需关注）</span><span class="section-count">${med.length} 项</span></div>${med.map(x=>renderDefectCard(sub,x)).join("")}</div>`;
             if (low.length) html += `<div class="defect-section"><div class="section-header"><span class="dot" style="background:var(--text-muted)"></span><span style="color:var(--text-muted)">低置信度 / 待确认</span><span class="section-count">${low.length} 项</span></div>${low.map(x=>renderDefectCard(sub,x)).join("")}</div>`;
             if (!d.length) html =
                 `<div class="empty-state"><div class="empty-icon">✅</div>本次练习未发现明显缺陷，表现良好！</div>`;
-            document.getElementById("defectsContainer").innerHTML = html;
+            el.innerHTML = html;
         }
 
+        // 后端字段可能缺失（null = 没有数据源），展示层兜底占位，不拼出 null/NaN。
         function renderDefectCard(sub, defect) {
-            const corr = sub.corrections.find(c => c.defectId === defect.id);
-            let cardCls = defect.status,
-                iconCls = defect.status,
+            const did = defect.id == null ? "" : String(defect.id);
+            const corr = did ? sub.corrections.find(c => c.defectId === did) : null;
+            const statusCls = ["high", "medium", "low"].includes(defect.status) ? defect.status : "low";
+            let cardCls = statusCls,
+                iconCls = statusCls,
                 conf = getConfBadge(defect.confidence);
             if (corr) { cardCls = corr.action;
                 iconCls = corr.action;
                 conf = { cls: `conf-${corr.action}`, text: corr.action === "confirmed" ? "✓ 老师已确认" :
                         (corr.action === "corrected" ? "✏️ 老师已修正" : "⏸️ 已忽略") }; }
-            const feats = Object.entries(defect.features).map(([k, v]) =>
-                `<span class="feature-tag">${k}: <span class="val">${v}</span></span>`).join("");
+            const feats = Object.entries(defect.features || {}).map(([k, v]) =>
+                `<span class="feature-tag">${esc(k)}: <span class="val">${esc(v)}</span></span>`).join("");
             const status = corr ?
-                `<div class="defect-status show ${corr.action}"><span>${corr.action==="confirmed"?"✅":(corr.action==="corrected"?"✏️":"⏸️")}</span><span>${corr.action==="confirmed"?`老师确认该标签准确`:(corr.action==="corrected"?`老师修正为「${corr.newLabel}」`:`老师选择忽略该标签`)} · ${corr.time}</span></div>` :
+                `<div class="defect-status show ${corr.action}"><span>${corr.action==="confirmed"?"✅":(corr.action==="corrected"?"✏️":"⏸️")}</span><span>${corr.action==="confirmed"?`老师确认该标签准确`:(corr.action==="corrected"?`老师修正为「${esc(corr.newLabel)}」`:`老师选择忽略该标签`)} · ${esc(corr.time)}</span></div>` :
                 "";
-            const dis = corr ? "disabled" : "";
-            return `<div class="defect-card ${cardCls}" id="defect-${defect.id}">
-            <div class="defect-header"><div class="defect-icon ${iconCls}">${getCatIcon(defect.category)}</div><div class="defect-title"><div class="defect-name">${defect.label}</div><div class="defect-category">${defect.category} · ${defect.id.toUpperCase()}</div></div><span class="defect-confidence ${conf.cls}">${conf.text}</span></div>
-            <div class="defect-evidence">${defect.evidence}</div>
+            const dis = (corr || !did) ? "disabled" : "";
+            return `<div class="defect-card ${cardCls}" id="defect-${esc(did)}">
+            <div class="defect-header"><div class="defect-icon ${iconCls}">${getCatIcon(defect.category)}</div><div class="defect-title"><div class="defect-name">${esc(defect.label || "未命名缺陷")}</div><div class="defect-category">${esc(defect.category || "未分类")} · ${esc(did ? did.toUpperCase() : "—")}</div></div><span class="defect-confidence ${conf.cls}">${conf.text}</span></div>
+            <div class="defect-evidence">${esc(defect.evidence || "—")}</div>
             <div class="defect-features">${feats}</div>
             <div class="defect-actions">
-              <button class="btn-confirm" onclick="confirmDefect('${defect.id}')" ${dis}>✓ 确认准确</button>
-              <button class="btn-correct" onclick="openCorrectModal('${defect.id}')" ${dis}>✗ 修正标签</button>
-              <button class="btn-ignore" onclick="ignoreDefect('${defect.id}')" ${dis}>⏸️ 暂不处理</button>
+              <button class="btn-confirm" onclick="confirmDefect('${jsStr(did)}')" ${dis}>✓ 确认准确</button>
+              <button class="btn-correct" onclick="openCorrectModal('${jsStr(did)}')" ${dis}>✗ 修正标签</button>
+              <button class="btn-ignore" onclick="ignoreDefect('${jsStr(did)}')" ${dis}>⏸️ 暂不处理</button>
             </div>${status}</div>`;
         }
 
-        function initFeatureChart() {
-            const fm = SUBMISSIONS.find(s => s.id === currentSubId).cdm.featureMatrix;
+        function initFeatureChart(fm) {
             const dom = document.getElementById("featureChart");
             if (featureChart) featureChart.dispose();
             featureChart = echarts.init(dom);
@@ -1368,79 +1347,296 @@
                 },
                 series: [{ type: "radar", data: data, symbolSize: 6 }]
             });
-            window.addEventListener("resize", () => featureChart.resize());
         }
 
-        function renderPitchPattern() {
-            const fm = SUBMISSIONS.find(s => s.id === currentSubId).cdm.featureMatrix;
+        // 数据来自 .../pitch-pattern：source=feature_matrix（旧种子）或 words
+        // （新提交用逐字偏差现算）。逐字来源没有可靠的声区划分，不画高/低音区两条。
+        function renderPitchPattern(p) {
+            const trend = p.trend;
             let tt, tc;
-            if (fm.pitchTrend === "systematic_low") { tt = "系统性偏低";
-                tc = "var(--danger)"; } else if (fm.pitchTrend === "systematic_high") { tt = "系统性偏高";
-                tc = "var(--danger)"; } else if (fm.pitchTrend === "random") { tt = "随机波动";
-                tc = "var(--warning)"; } else { tt = "相对稳定";
-                tc = "var(--success)"; }
-            const bar = (l, v, mx, c, u = "") => { const p = Math.min(100, Math.abs(v) / mx * 100),
-                    n = v < 0; return `<div class="pattern-bar"><span class="pattern-label">${l}</span><div class="pattern-track"><div class="pattern-center"></div><div class="pattern-fill" style="width:${p}%;background:${c};margin-${n?'right':'left'}:50%;${n?'margin-left:auto;':''}"></div></div><span class="pattern-val" style="color:${c}">${v>0?'+':''}${v}${u}</span></div>`; };
+            if (trend === "systematic_low") { tt = "系统性偏低";
+                tc = "var(--danger)"; } else if (trend === "systematic_high") { tt = "系统性偏高";
+                tc = "var(--danger)"; } else if (trend === "random") { tt = "随机波动";
+                tc = "var(--warning)"; } else if (trend === "stable") { tt = "相对稳定";
+                tc = "var(--success)"; } else { tt = "未知";
+                tc = "var(--text-muted)"; }
+            const num = v => Number.isFinite(v) ? v : null;
+            const mean = num(p.mean), median = num(p.median), std = num(p.std);
+            const high = num(p.high_pitch_bias), low = num(p.low_pitch_bias);
+            const bar = (l, v, mx, c, u = "") => { const width = Math.min(100, Math.abs(v) / mx * 100),
+                    n = v < 0; return `<div class="pattern-bar"><span class="pattern-label">${l}</span><div class="pattern-track"><div class="pattern-center"></div><div class="pattern-fill" style="width:${width}%;background:${c};margin-${n?'right':'left'}:50%;${n?'margin-left:auto;':''}"></div></div><span class="pattern-val" style="color:${c}">${v>0?'+':''}${v}${u}</span></div>`; };
+            // 逐字来源的模式由中位数判定，本卡的中心偏移条也用中位数，避免
+            // 「均值 -9.4 却判系统性偏高」的视觉矛盾；均值放进来源说明。
+            const center = p.source === "words" ? median : mean;
+            const bars = [];
+            if (high != null) bars.push(bar("高音区偏差", high, 50, "#0066B3", "c"));
+            if (low != null) bars.push(bar("低音区偏差", low, 50, "#4A8F6B", "c"));
+            if (center != null) bars.push(bar("音准偏移", center, 50, "#C9A84C", "c"));
+            const stats = p.source === "words"
+                ? `中位数: ${median == null ? "—" : median}cents · 标准差: ${std == null ? "—" : std}cents`
+                : `偏差均值: ${mean == null ? "—" : mean}cents · 标准差: ${std == null ? "—" : std}cents`;
+            const sourceNote = p.source === "words"
+                ? `<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">数据来源：本次逐字偏差（${p.word_count == null ? "—" : p.word_count} 字，均值 ${mean == null ? "—" : mean}cents）；模式阈值沿用 CDM 规则（中位数 ±25c / 标准差 30c）。</div>`
+                : "";
             document.getElementById("pitchPatternAnalysis").innerHTML = `
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:10px 12px;background:var(--bg-primary);border-radius:6px;border:1px solid var(--border-light)">
               <span style="font-size:13px;color:var(--text-secondary)">音高偏差模式：</span><span style="font-size:14px;font-weight:700;color:${tc}">${tt}</span>
-              <span style="font-size:11px;color:var(--text-muted);margin-left:auto">偏差均值: ${fm.pitchMean}cents · 标准差: ${fm.pitchStd}cents</span>
+              <span style="font-size:11px;color:var(--text-muted);margin-left:auto">${stats}</span>
             </div>
-            ${bar("高音区偏差",fm.highPitchBias,50,"#0066B3","c")}
-            ${bar("低音区偏差",fm.lowPitchBias,50,"#4A8F6B","c")}
-            ${bar("音准偏移",fm.pitchMean,50,"#C9A84C","c")}
+            ${bars.join("")}
             <div style="margin-top:10px;font-size:11px;color:var(--text-secondary);line-height:1.7">
-              ${fm.pitchTrend==="systematic_low"?"🔴 系统性偏低：建议先进行调门找音练习，建立正确的音高基准。":fm.pitchTrend==="random"?"🟡 随机波动：听辨能力可能不足，建议加强单音模唱训练。":"🟢 音准相对稳定，继续保持。"}
-            </div>`;
+              ${trend==="systematic_low"?"🔴 系统性偏低：建议先进行调门找音练习，建立正确的音高基准。":trend==="systematic_high"?"🔴 系统性偏高：建议降低调门，先建立正确的音高基准。":trend==="random"?"🟡 随机波动：听辨能力可能不足，建议加强单音模唱训练。":trend==="stable"?"🟢 音准相对稳定，继续保持。":"⚪ 分析结果未提供音高趋势判定。"}
+            </div>${sourceNote}`;
         }
 
+        // 记录只存在于本会话（DOC_ISSUES 第 55 条）：序号按发生顺序，点击一条
+        // 记录会滚动到对应缺陷卡并短暂高亮。
         function renderCorrections() {
             const co = SUBMISSIONS.find(s => s.id === currentSubId).corrections;
             const el = document.getElementById("correctionList");
             if (!co.length) { el.innerHTML =
                     `<div class="empty-state"><div class="empty-icon">📝</div>暂无修正记录，请对 AI 标签进行确认或修正</div>`; return; }
-            el.innerHTML = co.map(c => { const tc = c.action,
-                    tt = c.action === "confirmed" ? "确认" : (c.action === "corrected" ? "修正" : "忽略");
-                const det = c.action === "corrected" ? `将「${c.originalLabel}」修正为「${c.newLabel}」` : c
-                    .action === "confirmed" ? `确认「${c.originalLabel}」标签准确` : `忽略「${c.originalLabel}」标签`;
-                return `<div class="correction-item"><div class="corr-header"><span class="corr-type ${tc}">${tt}</span><span class="corr-time">${c.time}</span></div><div class="corr-detail">${det}</div></div>`;
+            // 动作 → 徽标类名（CSS 用的是 confirm/correct/ignore）+ 文案
+            const typeMap = { confirmed: ["confirm", "确认"], corrected: ["correct", "修正"], ignored: ["ignore", "忽略"] };
+            el.innerHTML = co.map((c, i) => {
+                const [tc, tt] = typeMap[c.action] || ["ignore", "处理"];
+                const did = c.defectId == null ? "" : String(c.defectId);
+                const ref = did ? `<span class="corr-ref">缺陷 ${esc(did.toUpperCase())}</span>` : "";
+                const original = `<div class="corr-line"><span class="corr-key">原标签</span><span class="corr-old">${esc(c.originalLabel || "—")}</span></div>`;
+                const lines = c.action === "corrected" ? original +
+                    `<div class="corr-line"><span class="corr-key">新标签</span><span class="corr-new">${esc(c.newLabel || "—")}</span></div>` : original;
+                const click = did ? ` onclick="focusDefect('${jsStr(did)}')" title="点击定位到对应缺陷"` : "";
+                return `<div class="correction-item"${click}>
+                    <div class="corr-header"><span class="corr-index">#${i + 1}</span><span class="corr-type ${tc}">${tt}</span>${ref}<span class="corr-time">${esc(c.time)}</span></div>
+                    <div class="corr-detail">${lines}</div></div>`;
             }).join("");
         }
 
+        // 修正记录 → 缺陷卡定位：滚动到卡片并短暂高亮（记录在右列、卡片在左列）。
+        function focusDefect(id) {
+            const card = document.getElementById("defect-" + id);
+            if (!card) { showToast("warn", "未找到缺陷卡", `缺陷 ${String(id).toUpperCase()} 不在当前列表中。`); return; }
+            document.querySelectorAll(".defect-card.defect-focus").forEach(c => c.classList.remove("defect-focus"));
+            card.scrollIntoView({ behavior: "smooth", block: "center" });
+            card.classList.add("defect-focus");
+            clearTimeout(focusTimer);
+            focusTimer = setTimeout(() => card.classList.remove("defect-focus"), 1600);
+        }
+
+        // 回流卡只反映本次会话的本地标注（库里没有缺陷标注表，DOC_ISSUES 第 55 条）：
+        // 三个动作计数 + 待处理数 + 已处理/总数，明确标注尚未回流。
         function renderFeedback() {
             const sub = SUBMISSIONS.find(s => s.id === currentSubId),
                 co = sub.corrections;
             const confirmed = co.filter(c => c.action === "confirmed").length,
                 corrected = co.filter(c => c.action === "corrected").length,
                 ignored = co.filter(c => c.action === "ignored").length,
-                total = sub.cdm.defects.length;
+                total = sub.cdm && Array.isArray(sub.cdm.defects) ? sub.cdm.defects.length : 0;
+            // 与顶部「已处理」同口径：按 defectId 去重，不按动作条数。
+            const processed = new Set(co.map(c => c.defectId)).size;
+            const pending = Math.max(0, total - processed);
             document.getElementById("feedbackStats").innerHTML = `
             <div class="feedback-stat"><div class="val" style="color:var(--success)">${confirmed}</div><div class="lab">已确认</div></div>
             <div class="feedback-stat"><div class="val" style="color:var(--warning)">${corrected}</div><div class="lab">已修正</div></div>
-            <div class="feedback-stat"><div class="val" style="color:var(--text-muted)">${ignored}</div><div class="lab">已忽略</div></div>`;
-            const processed = confirmed + corrected + ignored;
+            <div class="feedback-stat"><div class="val" style="color:var(--text-muted)">${ignored}</div><div class="lab">已忽略</div></div>
+            <div class="feedback-stat"><div class="val" style="color:${pending ? "var(--warning)" : "var(--success)"}">${pending}</div><div class="lab">待处理</div></div>`;
             const el = document.getElementById("feedbackNote");
-            if (!processed) el.innerHTML =
-                `本提交共 <strong>${total}</strong> 个缺陷标签，等待老师审核。您的修正将直接回流到 CDM 训练数据，帮助模型提升准确率。`;
-            else if (processed < total) el
-                .innerHTML =
-                `已处理 <strong>${processed}/${total}</strong> 个标签。剩余 ${total-processed} 个标签待审核。修正数据已缓存，将在每日凌晨批量回流至模型训练管道。`;
-            else el
-                .innerHTML =
-                `✅ 全部 <strong>${total}</strong> 个标签已处理完毕！本次共产生 ${confirmed} 条确认、${corrected} 条修正、${ignored} 条忽略记录，已纳入 CDM 模型优化队列。`;
+            if (!total) el.innerHTML = "该提交没有缺陷标签，暂无需要回流的数据。";
+            else if (!processed) el.innerHTML =
+                `本提交共 <strong>${total}</strong> 个缺陷标签，已处理 <strong>0/${total}</strong>，全部待审核。标注仅保存在本次会话，尚未回流至模型。`;
+            else if (processed < total) el.innerHTML =
+                `已处理 <strong>${processed}/${total}</strong> 个标签，待处理 <strong>${pending}</strong> 个。标注仅保存在本次会话，尚未回流至模型，刷新后重置。`;
+            else el.innerHTML =
+                `✅ 全部 <strong>${total}</strong> 个标签已处理完毕（确认 ${confirmed} / 修正 ${corrected} / 忽略 ${ignored}）。标注仅保存在本次会话，尚未回流至模型，刷新后重置。`;
         }
 
         function selectSubmission(id) { currentSubId = id;
             correctingDefectId = null;
-            renderAll(); }
+            currentSummary = null;   // 旧摘要不能挂到新选中的提交上
+            renderAll();
+            loadSummary(id);
+            loadDetail(id);
+            loadFeatures(id);
+            loadPitchPattern(id); }
 
-        function renderAll() { renderSubmissionSelector();
+        // 列表级空态/无选中提交时用占位；选中提交后整块报告区可见。
+        function showReportPlaceholder(message) {
+            document.getElementById("reportArea").style.display = "none";
+            const ph = document.getElementById("reportPlaceholder");
+            ph.style.display = "block";
+            ph.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div>
+                <div>${esc(message)}</div></div>`;
+        }
+
+        function renderAll() {
+            renderSubmissionSelector();
             renderSummary();
-            renderDefects();
-            initFeatureChart();
-            renderPitchPattern();
-            renderCorrections();
-            renderFeedback(); }
+            const sub = SUBMISSIONS.find(s => s.id === currentSubId);
+            if (!sub) { showReportPlaceholder("暂无 CDM 报告"); return; }
+            document.getElementById("reportPlaceholder").style.display = "none";
+            document.getElementById("reportArea").style.display = "block";
+            renderDefectModule();
+            renderFeatureModule();
+            renderPitchModule();
+        }
+
+        // 缺陷模块：真实缺陷标签 + 本会话标注记录 + 回流统计。
+        // 特征矩阵、音高分析本轮没有取数口径，固定显示「待接入」空态。
+        function renderDefectModule() {
+            const sub = SUBMISSIONS.find(s => s.id === currentSubId);
+            if (!sub) return;
+            if (sub.detailState === "ready") {
+                renderDefects();
+                renderCorrections();
+                renderFeedback();
+            } else {
+                const err = sub.detailState === "error";
+                const msg = err ? "缺陷数据加载失败，请切换提交后重试" : "缺陷数据加载中…";
+                const icon = err ? "⚠️" : "⏳";
+                document.getElementById("defectsContainer").innerHTML =
+                    `<div class="empty-state"><div class="empty-icon">${icon}</div>${msg}</div>`;
+                document.getElementById("correctionList").innerHTML =
+                    `<div class="empty-state"><div class="empty-icon">📝</div>暂无修正记录</div>`;
+                document.getElementById("feedbackStats").innerHTML = "";
+                document.getElementById("feedbackNote").innerHTML = msg;
+            }
+        }
+
+        // 雷达图 8 个数值 + 趋势判定必须齐全；缺一项就出空态，不拿 0 顶替。
+        const MATRIX_NUMERIC_KEYS = ["pitchStd", "energyStd", "vibratoDepth", "rhythmAccuracy",
+            "durationMeanDiff", "highPitchBias", "lowPitchBias", "pitchMean"];
+
+        function matrixComplete(fm) {
+            return !!fm && MATRIX_NUMERIC_KEYS.every(k => Number.isFinite(fm[k]));
+        }
+
+        // 特征矩阵只服务雷达图；新提交（49 起）没有 featureMatrix，按 null 出空态，
+        // 不从逐字偏差或五维分倒推（音高卡另有逐字来源，见 renderPitchModule）。
+        function renderFeatureModule() {
+            const sub = SUBMISSIONS.find(s => s.id === currentSubId);
+            if (!sub) return;
+            const fm = sub.features;
+            if (sub.featureState === "ready" && matrixComplete(fm)) {
+                initFeatureChart(fm);
+                return;
+            }
+            if (featureChart) { featureChart.dispose(); featureChart = null; }
+            const err = sub.featureState === "error";
+            const loading = sub.featureState === "idle" || sub.featureState === "loading";
+            const msg = err ? "特征矩阵加载失败，请切换提交后重试"
+                : loading ? "特征矩阵加载中…"
+                : (fm == null ? "该提交没有特征矩阵数据" : "特征矩阵字段不完整");
+            const icon = err ? "⚠️" : (loading ? "⏳" : "🧬");
+            document.getElementById("featureChart").innerHTML =
+                `<div class="empty-state" style="padding:24px 0"><div class="empty-icon">${icon}</div>${msg}</div>`;
+        }
+
+        // 音高卡独立取数：特征矩阵优先，没有时用逐字偏差现算（DOC_ISSUES 第 58 条）。
+        function renderPitchModule() {
+            const sub = SUBMISSIONS.find(s => s.id === currentSubId);
+            if (!sub) return;
+            if (sub.pitchState === "ready" && sub.pitch && sub.pitch.source) {
+                renderPitchPattern(sub.pitch);
+                return;
+            }
+            const err = sub.pitchState === "error";
+            const loading = sub.pitchState === "idle" || sub.pitchState === "loading";
+            const msg = err ? "音高偏差数据加载失败，请切换提交后重试"
+                : loading ? "音高偏差数据加载中…"
+                : "该提交没有可用的音高偏差数据";
+            const icon = err ? "⚠️" : (loading ? "⏳" : "📊");
+            document.getElementById("pitchPatternAnalysis").innerHTML =
+                `<div class="empty-state" style="padding:24px 0"><div class="empty-icon">${icon}</div>${msg}</div>`;
+        }
+
+        // 单条缺陷明细：GET /api/cdm/submissions/<id>/defects。切换提交时丢弃过期响应；
+        // 失败只影响报告区，不回退 mock（同摘要）。
+        async function loadDetail(id) {
+            const sub = SUBMISSIONS.find(s => s.id === id);
+            if (!sub) return;
+            sub.cdm = null;          // 不把上一个提交的缺陷挂到新提交上
+            sub.detailState = "loading";
+            if (currentSubId === id) renderDefectModule();
+            try {
+                const r = await fetch(`/api/cdm/submissions/${id}/defects`, { credentials: "same-origin" });
+                if (r.status === 401) return location.replace("/login.html");
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                const data = (await r.json()).data;
+                if (currentSubId !== id) return;
+                sub.cdm = { defects: Array.isArray(data.defects) ? data.defects : null };
+                sub.detailState = "ready";
+            } catch (e) {
+                if (currentSubId !== id) return;
+                sub.cdm = null;
+                sub.detailState = "error";
+            }
+            if (currentSubId === id) renderDefectModule();
+        }
+
+        // 单条特征矩阵：GET /api/cdm/submissions/<id>/features。与缺陷明细各自独立，
+        // 失败只影响矩阵与音高卡。
+        async function loadFeatures(id) {
+            const sub = SUBMISSIONS.find(s => s.id === id);
+            if (!sub) return;
+            sub.features = null;
+            sub.featureState = "loading";
+            if (currentSubId === id) renderFeatureModule();
+            try {
+                const r = await fetch(`/api/cdm/submissions/${id}/features`, { credentials: "same-origin" });
+                if (r.status === 401) return location.replace("/login.html");
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                const data = (await r.json()).data;
+                if (currentSubId !== id) return;
+                sub.features = data.feature_matrix;
+                sub.featureState = "ready";
+            } catch (e) {
+                if (currentSubId !== id) return;
+                sub.features = null;
+                sub.featureState = "error";
+            }
+            if (currentSubId === id) renderFeatureModule();
+        }
+
+        // 单条音高偏差模式：GET /api/cdm/submissions/<id>/pitch-pattern。
+        // 服务端优先用特征矩阵，缺失时回退逐字偏差；失败只影响音高卡。
+        async function loadPitchPattern(id) {
+            const sub = SUBMISSIONS.find(s => s.id === id);
+            if (!sub) return;
+            sub.pitch = null;
+            sub.pitchState = "loading";
+            if (currentSubId === id) renderPitchModule();
+            try {
+                const r = await fetch(`/api/cdm/submissions/${id}/pitch-pattern`, { credentials: "same-origin" });
+                if (r.status === 401) return location.replace("/login.html");
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                const data = (await r.json()).data;
+                if (currentSubId !== id) return;
+                sub.pitch = data;
+                sub.pitchState = "ready";
+            } catch (e) {
+                if (currentSubId !== id) return;
+                sub.pitch = null;
+                sub.pitchState = "error";
+            }
+            if (currentSubId === id) renderPitchModule();
+        }
+
+        // 单条摘要：GET /api/cdm/submissions/<id>。401 回登录页；其余失败保留「—」，
+        // 不回退到任何 mock 数值。
+        async function loadSummary(id) {
+            try {
+                const r = await fetch(`/api/cdm/submissions/${id}`, { credentials: "same-origin" });
+                if (r.status === 401) return location.replace("/login.html");
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                const data = (await r.json()).data;
+                if (currentSubId !== id) return;   // 已切换提交，丢弃过期响应
+                currentSummary = data;
+            } catch (e) {
+                if (currentSubId !== id) return;
+                currentSummary = null;
+            }
+            renderSummary();
+        }
 
         function confirmDefect(id) {
             const sub = SUBMISSIONS.find(s => s.id === currentSubId),
@@ -1452,7 +1648,7 @@
             renderCorrections();
             renderFeedback();
             renderSummary();
-            showToast("success", "✅ 已确认标签", `「${d.label}」标签已被确认准确，数据将回流至 CDM 模型。`);
+            showToast("success", "✅ 已确认标签", `「${esc(d.label)}」标签已被确认准确（仅本次会话）。`);
         }
 
         function ignoreDefect(id) {
@@ -1465,15 +1661,16 @@
             renderCorrections();
             renderFeedback();
             renderSummary();
-            showToast("warn", "⏸️ 已忽略标签", `「${d.label}」标签已被忽略，系统将不再将其纳入该次诊断。`);
+            showToast("warn", "⏸️ 已忽略标签", `「${esc(d.label)}」标签已被忽略（仅本次会话）。`);
         }
 
         function openCorrectModal(id) {
             correctingDefectId = id;
             const sub = SUBMISSIONS.find(s => s.id === currentSubId),
                 d = sub.cdm.defects.find(x => x.id === id);
-            document.getElementById("modalOriginalLabel").textContent = d.label;
-            document.getElementById("modalOriginalConf").textContent = (d.confidence * 100).toFixed(0) + "%";
+            document.getElementById("modalOriginalLabel").textContent = d.label || "未命名缺陷";
+            document.getElementById("modalOriginalConf").textContent =
+                Number.isFinite(d.confidence) ? (d.confidence * 100).toFixed(0) + "%" : "—";
             document.getElementById("modalCustomInput").value = "";
             const opts = document.getElementById("modalOptions");
             opts.innerHTML = ALL_DEFECT_LABELS.filter(l => l !== d.label).map(l =>
@@ -1503,7 +1700,7 @@
             renderCorrections();
             renderFeedback();
             renderSummary();
-            showToast("success", "✏️ 已修正标签", `「${d.label}」已修正为「${newLabel}」，修正数据将回流优化 CDM 模型。`);
+            showToast("success", "✏️ 已修正标签", `「${esc(d.label)}」已修正为「${esc(newLabel)}」（仅本次会话）。`);
         }
 
         function clearCorrections() {
@@ -1528,7 +1725,70 @@
             setTimeout(() => { if (t.parentElement) t.remove(); }, 4000);
         }
 
-        renderAll();
+        // 只查列表：GET /api/cdm/submissions（教师）。401 回登录页，403 提示仅教师可见，
+        // 其余失败显示错误态，不回退到 mock——把别人的数据当成本人的展示更糟。
+        async function initPage() {
+            const selector = document.getElementById("submissionSelector");
+            selector.innerHTML = `<div style="padding:20px;color:var(--text-muted);font-size:13px">加载中…</div>`;
+            currentSummary = null;
+            renderSummary();   // 清空四指标（此时还没有选中提交）
+            showReportPlaceholder("正在加载学生提交列表");
+
+            let items;
+            try {
+                const r = await fetch("/api/cdm/submissions", { credentials: "same-origin" });
+                if (r.status === 401) return location.replace("/login.html");
+                if (r.status === 403) {
+                    selector.innerHTML = `<div style="padding:20px;color:var(--text-muted);font-size:13px">学生列表仅教师可见</div>`;
+                    showReportPlaceholder("学生列表仅教师可见");
+                    return;
+                }
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                items = (await r.json()).data.submissions || [];
+            } catch (e) {
+                selector.innerHTML = `<div style="padding:20px;color:var(--text-muted);font-size:13px">学生列表加载失败，请刷新重试</div>`;
+                showReportPlaceholder("学生列表加载失败");
+                return;
+            }
+
+            SUBMISSIONS = items.map(s => ({
+                id: String(s.submission_id),
+                student: {
+                    id: s.student_id,
+                    name: s.student_name || "未命名",
+                    avatar: s.student_avatar || "🎭",
+                    level: s.student_level || "未分级"
+                },
+                piece: s.homework_title || "未知作业",
+                date: s.submitted_at ? String(s.submitted_at).slice(0, 10) : "—",
+                aiScore: s.ai_score,
+                corrections: [],  // 本会话的本地处理记录；库中没有修正表
+                cdm: null,        // {defects: [...] | null}，由 loadDetail 填充
+                detailState: "idle",  // idle / loading / ready / error
+                features: null,   // ai_detail.featureMatrix 原样；null = 没有数据源
+                featureState: "idle",
+                pitch: null,      // 音高偏差模式；featureMatrix 优先，回退 words
+                pitchState: "idle"
+            }));
+
+            if (!SUBMISSIONS.length) {
+                selector.innerHTML = `<div style="padding:20px;color:var(--text-muted);font-size:13px">暂无带 CDM 数据的作业提交</div>`;
+                showReportPlaceholder("暂无带 CDM 数据的作业提交");
+                return;
+            }
+
+            currentSubId = SUBMISSIONS[0].id;
+            renderAll();
+            loadSummary(currentSubId);
+            loadDetail(currentSubId);
+            loadFeatures(currentSubId);
+            loadPitchPattern(currentSubId);
+        }
+
+        // 雷达图实例在切换提交时会被重建，resize 监听只挂一次。
+        window.addEventListener("resize", () => { if (featureChart) featureChart.resize(); });
+
+        initPage();
     </script>
 
 <!-- ==== 登录用户条 + 登出（页面鉴权配套，见 docs/superpowers/specs/2026-09-15-page-auth-design.md）==== -->

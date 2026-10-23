@@ -122,9 +122,42 @@ class RecommendationItem(BaseModel):
     reason: str              # 一句话理由，直接展示
 
 
+class RecommendationSummary(BaseModel):
+    """推荐页顶部四张统计卡的数据（功能 5.7 的页面指标）。
+
+    文档没有定义这四个指标，口径见 dashboard_service.recommendations 的注释：
+    overall_mastery 与难度匹配用的 level 同源；三个计数按**全部候选唱段**统计，
+    在截断 Top3 之前计数——只看 Top3 会让「已锁定」几乎恒为 0（lock 排在最后）。
+    """
+    model_config = ConfigDict(from_attributes=True)
+    overall_mastery: float | None   # 已测技法 P(L) 均值；一个都没测过为 None
+    match_count: int                # 难度匹配的候选唱段数
+    challenge_count: int            # 挑战推荐的候选唱段数
+    lock_count: int                 # 前置技法未达标的候选唱段数
+
+
+class PrereqLockItem(BaseModel):
+    """推荐页「前置技法锁定状态」面板的一条（功能 5.4 的单学生视图）。
+
+    判据与看板 alerts 的 prerequisiteLockAlert 完全一致：前置技法**当前 P(L)**
+    低于它自己的达标线就锁掉下游技法；前置技法没测过则判不了，跳过不报。
+
+    下游技法可能不在 BKT 的 8 维里（图谱里的「润腔」「归韵」），照样返回——
+    它确实处于被锁状态，过滤掉反而会让学生看不到真实的解锁路径。
+    """
+    model_config = ConfigDict(from_attributes=True)
+    skill: str                    # 被锁定的下游技法
+    prereqs: list[PrereqSkill]    # 导致锁定的前置技法，按掌握度从低到高
+
+
 class RecommendationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     student_id: int
+    summary: RecommendationSummary              # 页面顶部统计卡
+    # 已测技法 -> 最新 P(L)，只含真有 BKT 记录的技法；未测技法不出现（null≠0）。
+    # 能力雷达按这里的键动态出轴，一个都没有时为空对象。
+    abilities: dict[str, float]
+    prereq_locks: list[PrereqLockItem]          # 前置技法未达标造成的锁定，可能为空
     recommendations: list[RecommendationItem]   # 不足 3 条是正常的，可能为空
 
 

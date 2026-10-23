@@ -17,7 +17,7 @@ from pathlib import Path
 
 from flask import Blueprint, send_from_directory
 
-from app.common.decorators import page_login_required
+from app.common.decorators import page_login_required, page_teacher_required
 
 # app/pages.py → parents[0]=app/ → parents[1]=项目根
 PAGES_DIR = Path(__file__).resolve().parents[1]
@@ -50,6 +50,11 @@ PROTECTED_PAGES = [
 ]
 
 
+# 整页仅教师可用的页面。其它受保护页面对学生开放（页内按角色降级），
+# 只有这些页面学生进来没有任何可用内容，直接 302 回学生首页。
+TEACHER_ONLY_PAGES = {"tracking"}
+
+
 def _serve(name):
     def view():
         # send_from_directory 而非 send_file：入参是目录 + 文件名，对 '..'
@@ -67,8 +72,11 @@ def _serve(name):
 # 字符串抄 14 遍。endpoint 必须显式命名——不指定的话 Flask 会从函数名
 # "view" 推导，14 条路由全叫 page.view 而当场冲突。
 for _name in PROTECTED_PAGES:
+    _view_func = _serve(_name)
+    if _name in TEACHER_ONLY_PAGES:
+        _view_func = page_teacher_required(_view_func)
     page_bp.add_url_rule(
         f"/{_name}.html",
         endpoint=f"page_{_name}",
-        view_func=page_login_required(_serve(_name)),
+        view_func=page_login_required(_view_func),
     )

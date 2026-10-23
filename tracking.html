@@ -449,19 +449,12 @@ body{
 
 <script>
 // ============================================
-// 模拟数据层（后端 API 预留接口）
+// 页面常量（全部数据来自后端接口，这里只剩展示配置）
 // ============================================
 
-const STUDENTS = [
-  { id: "s01", name: "李小燕", avatar: "🎭", level: "初级", overallTrend: "up" },
-  { id: "s02", name: "张博文", avatar: "🎤", level: "中级", overallTrend: "up" },
-  { id: "s03", name: "刘思琪", avatar: "🎵", level: "初级", overallTrend: "down" },
-  { id: "s04", name: "陈浩然", avatar: "🎶", level: "高级", overallTrend: "up" },
-  { id: "s05", name: "赵雨桐", avatar: "🎼", level: "中级", overallTrend: "flat" },
-  { id: "s06", name: "周明轩", avatar: "🎹", level: "初级", overallTrend: "up" },
-  { id: "s07", name: "吴佳怡", avatar: "🎸", level: "中级", overallTrend: "up" },
-  { id: "s08", name: "孙志远", avatar: "🥁", level: "初级", overallTrend: "down" }
-];
+// 学生名单由 GET /api/students 提供（见页面末尾 initPage）。
+// 接口只返回八维技法都有 BKT 记录的学生，姓名/等级/头像/趋势都来自数据库。
+let STUDENTS = [];
 
 const TECHNIQUES = [
   { key: "音准控制", color: "#0066B3", category: "基础" },
@@ -482,103 +475,15 @@ const TIME_RANGES = [
   { label: "全部", days: 365 }
 ];
 
-function generateHistory(baseValues, days = 30) {
-  const history = {};
-  const today = new Date("2026-08-04");
-  TECHNIQUES.forEach((tech, idx) => {
-    const base = baseValues[idx] || 0.5;
-    const points = [];
-    let current = Math.max(0.1, Math.min(0.95, base - 0.15 + Math.random() * 0.1));
-    for (let i = days; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split("T")[0];
-      const change = (Math.random() - 0.45) * 0.06;
-      current = Math.max(0.05, Math.min(0.98, current + change));
-      const confidence = Math.min(0.95, 0.55 + (days - i) / days * 0.35);
-      points.push({
-        date: dateStr,
-        p_l: parseFloat(current.toFixed(3)),
-        confidence: parseFloat(confidence.toFixed(2))
-      });
-    }
-    history[tech.key] = points;
-  });
-  return history;
-}
-
-const BKT_DATA = {
-  s01: {
-    base: [0.72, 0.51, 0.63, 0.28, 0.45, 0.68, 0.35, 0.30],
-    history: generateHistory([0.72, 0.51, 0.63, 0.28, 0.45, 0.68, 0.35, 0.30], 30),
-    events: [
-      { date: "2026-08-02", type: "homework", title: "《穆桂英挂帅》作业提交", skills: ["音准控制","拖腔"], detail: "AI评分82.5，拖腔偏差改善" },
-      { date: "2026-07-28", type: "practice", title: "自主练习 · 气息基础短句", skills: ["气息支撑"], detail: "练习时长12分钟，气息稳定性提升" },
-      { date: "2026-07-25", type: "test", title: "摸底测试（入学）", skills: ["音准控制","气息支撑","节奏感知"], detail: "初始能力画像建立" },
-      { date: "2026-07-20", type: "homework", title: "《霸王别姬》作业提交", skills: ["归韵咬字","颤音"], detail: "AI评分76.2，归韵有进步" }
-    ]
-  },
-  s02: {
-    base: [0.85, 0.78, 0.82, 0.71, 0.80, 0.88, 0.65, 0.60],
-    history: generateHistory([0.85, 0.78, 0.82, 0.71, 0.80, 0.88, 0.65, 0.60], 30),
-    events: [
-      { date: "2026-08-03", type: "homework", title: "《贵妃醉酒》作业提交", skills: ["滑音","气息支撑"], detail: "AI评分88.5，滑音处理到位" },
-      { date: "2026-07-30", type: "practice", title: "自主练习 · 拖腔专项", skills: ["拖腔"], detail: "练习时长20分钟" }
-    ]
-  },
-  s03: {
-    base: [0.48, 0.42, 0.35, 0.22, 0.55, 0.50, 0.25, 0.20],
-    history: generateHistory([0.48, 0.42, 0.35, 0.22, 0.55, 0.50, 0.25, 0.20], 30),
-    events: [
-      { date: "2026-08-01", type: "homework", title: "《穆桂英挂帅》作业提交", skills: ["音准控制","拖腔"], detail: "AI评分75.2，音准偏差较大" },
-      { date: "2026-07-26", type: "practice", title: "自主练习 · 音阶模唱", skills: ["音准控制"], detail: "基础音准训练" }
-    ]
-  },
-  s04: {
-    base: [0.94, 0.91, 0.88, 0.85, 0.90, 0.87, 0.82, 0.78],
-    history: generateHistory([0.94, 0.91, 0.88, 0.85, 0.90, 0.87, 0.82, 0.78], 30),
-    events: [
-      { date: "2026-08-03", type: "homework", title: "《空城计》挑战作业", skills: ["拖腔","气息支撑"], detail: "AI评分91.2，高难度曲目表现优秀" }
-    ]
-  },
-  s05: {
-    base: [0.76, 0.68, 0.72, 0.65, 0.78, 0.82, 0.55, 0.50],
-    history: generateHistory([0.76, 0.68, 0.72, 0.65, 0.78, 0.82, 0.55, 0.50], 30),
-    events: [
-      { date: "2026-08-01", type: "homework", title: "《穆桂英挂帅》作业提交", skills: ["音准控制","归韵咬字"], detail: "AI评分85.7" },
-      { date: "2026-07-29", type: "practice", title: "自主练习", skills: ["气息支撑"], detail: "已3天未练习" }
-    ]
-  },
-  s06: {
-    base: [0.55, 0.48, 0.43, 0.30, 0.52, 0.60, 0.30, 0.25],
-    history: generateHistory([0.55, 0.48, 0.43, 0.30, 0.52, 0.60, 0.30, 0.25], 30),
-    events: [
-      { date: "2026-08-02", type: "homework", title: "《穆桂英挂帅》作业提交", skills: ["音准控制","节奏感知"], detail: "AI评分78.9，节奏不稳" },
-      { date: "2026-07-27", type: "test", title: "阶段小测", skills: ["音准控制","气息支撑"], detail: "音准感知0.43，接近解锁滑音" }
-    ]
-  },
-  s07: {
-    base: [0.82, 0.75, 0.79, 0.68, 0.85, 0.80, 0.62, 0.58],
-    history: generateHistory([0.82, 0.75, 0.79, 0.68, 0.85, 0.80, 0.62, 0.58], 30),
-    events: [
-      { date: "2026-08-03", type: "homework", title: "《贵妃醉酒》作业提交", skills: ["滑音","归韵咬字"], detail: "AI评分87.4" }
-    ]
-  },
-  s08: {
-    base: [0.40, 0.35, 0.28, 0.28, 0.42, 0.45, 0.20, 0.18],
-    history: generateHistory([0.40, 0.35, 0.28, 0.28, 0.42, 0.45, 0.20, 0.18], 30),
-    events: [
-      { date: "2026-08-01", type: "homework", title: "《穆桂英挂帅》作业提交", skills: ["音准控制","拖腔"], detail: "AI评分71.3，整体音准偏低" },
-      { date: "2026-07-24", type: "practice", title: "自主练习 · 调门找音", skills: ["音准控制"], detail: "基础调门训练" }
-    ]
-  }
-};
-
 // ============================================
 // 状态管理
 // ============================================
 
-let currentStudentId = "s01";
+let currentStudentId = null;
+let currentOverview = null;   // GET /api/students/<id>/overview 的结果（含预警）
+let currentHistory = null;    // GET /api/students/<id>/bkt-history 的结果
+let currentEvents = null;     // GET /api/students/<id>/events 的结果
+let currentSkillsDetail = null;   // GET /api/students/<id>/skills-detail 的结果
 let currentTimeRange = 30;
 let selectedTechs = new Set(TECHNIQUES.map(t => t.key));
 let chart = null;
@@ -594,13 +499,6 @@ function getPLColor(p) {
   return { bar: "#B83A2F", text: "#B83A2F", label: "未掌握", cls: "unmastered" };
 }
 
-function getTrend(p_now, p_before) {
-  const diff = p_now - p_before;
-  if (diff > 0.02) return { arrow: "↗", color: "#4A8F6B", cls: "up", diff: diff };
-  if (diff < -0.02) return { arrow: "↘", color: "#B83A2F", cls: "down", diff: diff };
-  return { arrow: "→", color: "#8A7A6A", cls: "flat", diff: diff };
-}
-
 function formatPL(p) {
   return (p * 100).toFixed(1) + "%";
 }
@@ -614,9 +512,12 @@ function renderStudentSelector() {
   container.innerHTML = STUDENTS.map(s => {
     const isActive = s.id === currentStudentId;
     const trendCls = s.overallTrend === "up" ? "up" : (s.overallTrend === "down" ? "down" : "flat");
-    const trendText = s.overallTrend === "up" ? "上升" : (s.overallTrend === "down" ? "下降" : "持平");
+    // null = 记录不足两条，趋势无从谈起，显示破折号而不是谎报「持平」
+    const trendText = s.overallTrend === "up" ? "上升"
+      : (s.overallTrend === "down" ? "下降"
+      : (s.overallTrend === "flat" ? "持平" : "—"));
     return `
-      <div class="student-chip ${isActive ? 'active' : ''}" onclick="selectStudent('${s.id}')">
+      <div class="student-chip ${isActive ? 'active' : ''}" onclick="selectStudent(${s.id})">
         <span class="st-avatar">${s.avatar}</span>
         <span>${s.name}</span>
         <span style="font-size:11px;color:var(--text-muted)">· ${s.level}</span>
@@ -646,41 +547,44 @@ function renderTechSelector() {
   }).join("");
 }
 
+// 综合统计四项（GET /api/students/<id>/overview，功能 6.2）。
+// currentOverview 为 null 表示取数失败（403 / 后端不可达），显示提示而不回退 mock。
 function renderStats() {
-  const data = BKT_DATA[currentStudentId];
-  const student = STUDENTS.find(s => s.id === currentStudentId);
-  const history = data.history;
+  const o = currentOverview;
+  if (!o) {
+    document.getElementById("statsRow").innerHTML =
+      `<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:13px">统计数据加载失败，请刷新重试</div>`;
+    return;
+  }
 
-  const latestPLs = TECHNIQUES.map(t => {
-    const pts = history[t.key];
-    return pts[pts.length - 1].p_l;
-  });
-  const overall = latestPLs.reduce((a, b) => a + b, 0) / latestPLs.length;
+  // 接口对「没有数据」给 null（如 7 日变化无对比值），不能当 0 用
+  const overall = Number.isFinite(o.overall) ? o.overall : null;
+  const delta = Number.isFinite(o.overall_delta_7d) ? o.overall_delta_7d : null;
+  const weekCount = o.week_practice_count || 0;
+  const weakCount = o.weak_count || 0;
+  const masteredCount = o.mastered_count || 0;
+  const skillCount = o.skill_count || 0;
 
-  const prevPLs = TECHNIQUES.map(t => {
-    const pts = history[t.key];
-    const idx = Math.max(0, pts.length - 8);
-    return pts[idx].p_l;
-  });
-  const prevOverall = prevPLs.reduce((a, b) => a + b, 0) / prevPLs.length;
-  const weekDelta = overall - prevOverall;
-
-  const practiceCount = data.events.filter(e => e.type === "practice" || e.type === "homework").length;
-  const alertCount = latestPLs.filter(p => p < 0.60).length;
+  const overallText = overall === null ? "—" : (overall*100).toFixed(1) + "%";
+  const overallColor = overall === null ? "var(--text-muted)" : getPLColor(overall).text;
+  const deltaText = delta === null
+    ? "7日变化 —"
+    : `${delta >= 0 ? '↑' : '↓'} 7日 ${Math.abs(delta*100).toFixed(1)}%`;
+  const deltaCls = delta === null ? "" : (delta >= 0 ? "up" : "down");
 
   document.getElementById("statsRow").innerHTML = `
     <div class="stat-card">
       <div class="stat-icon" style="background:rgba(0,102,179,0.10)">📊</div>
       <div class="stat-info">
-        <div class="stat-value" style="color:${getPLColor(overall).text}">${(overall*100).toFixed(1)}%</div>
+        <div class="stat-value" style="color:${overallColor}">${overallText}</div>
         <div class="stat-label">综合掌握度</div>
-        <div class="stat-change ${weekDelta >= 0 ? 'up' : 'down'}">${weekDelta >= 0 ? '↑' : '↓'} 7日 ${Math.abs(weekDelta*100).toFixed(1)}%</div>
+        <div class="stat-change ${deltaCls}">${deltaText}</div>
       </div>
     </div>
     <div class="stat-card">
       <div class="stat-icon" style="background:rgba(74,143,107,0.10)">📈</div>
       <div class="stat-info">
-        <div class="stat-value">${latestPLs.filter(p => p >= 0.85).length}/${TECHNIQUES.length}</div>
+        <div class="stat-value">${masteredCount}/${skillCount}</div>
         <div class="stat-label">已掌握技法</div>
         <div class="stat-change up">目标: 全部掌握</div>
       </div>
@@ -688,81 +592,127 @@ function renderStats() {
     <div class="stat-card">
       <div class="stat-icon" style="background:rgba(201,168,76,0.10)">🎯</div>
       <div class="stat-info">
-        <div class="stat-value">${practiceCount}</div>
+        <div class="stat-value">${weekCount}</div>
         <div class="stat-label">本周练习/作业次数</div>
-        <div class="stat-change ${practiceCount >= 3 ? 'up' : 'warn'}">${practiceCount >= 3 ? '练习频率良好' : '建议增加练习'}</div>
+        <div class="stat-change ${weekCount >= 3 ? 'up' : 'warn'}">${weekCount >= 3 ? '练习频率良好' : '建议增加练习'}</div>
       </div>
     </div>
     <div class="stat-card">
       <div class="stat-icon" style="background:rgba(184,58,47,0.10)">🚨</div>
       <div class="stat-info">
-        <div class="stat-value" style="color:${alertCount > 0 ? '#B83A2F' : '#4A8F6B'}">${alertCount}</div>
+        <div class="stat-value" style="color:${weakCount > 0 ? '#B83A2F' : '#4A8F6B'}">${weakCount}</div>
         <div class="stat-label">薄弱技法数量</div>
-        <div class="stat-change ${alertCount > 0 ? 'down' : 'up'}">${alertCount > 0 ? '需重点关注' : '状态良好'}</div>
+        <div class="stat-change ${weakCount > 0 ? 'down' : 'up'}">${weakCount > 0 ? '需重点关注' : '状态良好'}</div>
       </div>
     </div>
   `;
+}
+
+async function loadOverview(id) {
+  try {
+    const r = await fetch(`/api/students/${id}/overview`, { credentials: "same-origin" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = (await r.json()).data;
+    if (currentStudentId !== id) return;   // 学生已切换，丢弃过期响应
+    currentOverview = data;
+  } catch (e) {
+    if (currentStudentId !== id) return;
+    currentOverview = null;
+  }
+  renderStats();
+  renderAlerts();
+}
+
+async function loadEvents(id) {
+  try {
+    const r = await fetch(`/api/students/${id}/events`, { credentials: "same-origin" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = (await r.json()).data;
+    if (currentStudentId !== id) return;   // 学生已切换，丢弃过期响应
+    currentEvents = data;
+  } catch (e) {
+    if (currentStudentId !== id) return;
+    currentEvents = null;
+  }
+  renderEvents();
+}
+
+async function loadSkillsDetail(id) {
+  try {
+    const r = await fetch(`/api/students/${id}/skills-detail`, { credentials: "same-origin" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = (await r.json()).data;
+    if (currentStudentId !== id) return;   // 学生已切换，丢弃过期响应
+    currentSkillsDetail = data;
+  } catch (e) {
+    if (currentStudentId !== id) return;
+    currentSkillsDetail = null;
+  }
+  renderTechTable();
 }
 
 function initChart() {
   const dom = document.getElementById("trendChart");
   if (chart) chart.dispose();
   chart = echarts.init(dom);
-  updateChart();
   window.addEventListener("resize", () => chart.resize());
 }
 
-function updateChart() {
-  const data = BKT_DATA[currentStudentId];
-  const history = data.history;
-  const rangeDays = currentTimeRange;
-
-  const dates = history[TECHNIQUES[0].key].slice(-rangeDays - 1).map(p => p.date);
-
-  const series = TECHNIQUES.filter(t => selectedTechs.has(t.key)).map(t => {
-    const points = history[t.key].slice(-rangeDays - 1);
-    return {
-      name: t.key,
-      type: "line",
-      data: points.map(p => p.p_l),
-      smooth: true,
-      symbol: "circle",
-      symbolSize: 6,
-      lineStyle: { width: 2.5, color: t.color },
-      itemStyle: { color: t.color },
-      areaStyle: {
-        color: {
-          type: "linear", x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: t.color + "30" },
-            { offset: 1, color: t.color + "05" }
-          ]
-        }
-      },
-      markLine: {
-        silent: true,
-        symbol: "none",
-        lineStyle: { type: "dashed", width: 1 },
-        data: [
-          { yAxis: 0.85, lineStyle: { color: "#4A8F6B" }, label: { formatter: "掌握线 0.85", color: "#4A8F6B", fontSize: 10 } },
-          { yAxis: 0.60, lineStyle: { color: "#0066B3" }, label: { formatter: "学习线 0.60", color: "#0066B3", fontSize: 10 } },
-          { yAxis: 0.40, lineStyle: { color: "#C9A84C" }, label: { formatter: "薄弱线 0.40", color: "#C9A84C", fontSize: 10 } }
-        ]
-      },
-      markPoint: {
-        symbol: "pin",
-        symbolSize: 32,
-        itemStyle: { color: t.color },
-        data: data.events
-          .filter(e => e.skills.includes(t.key))
-          .map(e => ({
-            coord: [e.date, points.find(p => p.date === e.date)?.p_l || 0.5],
-            value: e.type === "homework" ? "作业" : (e.type === "test" ? "测试" : "练习"),
-            itemStyle: { color: e.type === "homework" ? "#C9A84C" : (e.type === "test" ? "#7C3AED" : "#0066B3") }
-          }))
-      }
-    };
+// 取不到数（403 / 后端不可达）与窗口内确实没有记录，都走这个空态。
+// 不回退到 mock 曲线——那会把演示数据当成真实进步。
+function showEmptyChart() {
+  if (!chart) return;
+  chart.clear();
+  chart.setOption({
+    backgroundColor: "transparent",
+    title: {
+      text: `近 ${currentTimeRange} 天暂无练习数据`,
+      left: "center",
+      top: "middle",
+      textStyle: { color: "#8A7A6A", fontSize: 14, fontWeight: 400 }
+    }
   });
+}
+
+function updateChart() {
+  if (!chart) return;
+  const h = currentHistory;
+  if (!h || !h.series) { showEmptyChart(); return; }
+
+  // 窗口内没有任何记录的技法不在 series 里，图例也只列真正画出来的
+  const active = TECHNIQUES.filter(t => selectedTechs.has(t.key) && h.series[t.key]);
+  if (active.length === 0) { showEmptyChart(); return; }
+
+  const series = active.map(t => ({
+    name: t.key,
+    type: "line",
+    data: h.series[t.key],
+    smooth: true,
+    connectNulls: false,
+    symbol: "circle",
+    symbolSize: 6,
+    lineStyle: { width: 2.5, color: t.color },
+    itemStyle: { color: t.color },
+    areaStyle: {
+      color: {
+        type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+        colorStops: [
+          { offset: 0, color: t.color + "30" },
+          { offset: 1, color: t.color + "05" }
+        ]
+      }
+    },
+    markLine: {
+      silent: true,
+      symbol: "none",
+      lineStyle: { type: "dashed", width: 1 },
+      data: [
+        { yAxis: 0.85, lineStyle: { color: "#4A8F6B" }, label: { formatter: "掌握线 0.85", color: "#4A8F6B", fontSize: 10 } },
+        { yAxis: 0.60, lineStyle: { color: "#0066B3" }, label: { formatter: "学习线 0.60", color: "#0066B3", fontSize: 10 } },
+        { yAxis: 0.40, lineStyle: { color: "#C9A84C" }, label: { formatter: "薄弱线 0.40", color: "#C9A84C", fontSize: 10 } }
+      ]
+    }
+  }));
 
   const option = {
     backgroundColor: "transparent",
@@ -772,8 +722,11 @@ function updateChart() {
       borderColor: "var(--border-light)",
       textStyle: { color: "var(--text-primary)", fontSize: 12 },
       formatter: function(params) {
+        // 曲线前段可能是 null（该技法在窗口内还没有记录），跳过不显示成 0%
+        const pts = params.filter(p => p.value !== null && p.value !== undefined);
+        if (pts.length === 0) return "";
         let html = `<div style="font-weight:700;margin-bottom:6px;color:var(--text-primary)">${params[0].axisValue}</div>`;
-        params.forEach(p => {
+        pts.forEach(p => {
           const color = getPLColor(p.value);
           html += `<div style="display:flex;align-items:center;gap:8px;margin:3px 0">
             <span style="width:8px;height:8px;border-radius:50%;background:${p.color}"></span>
@@ -786,7 +739,7 @@ function updateChart() {
       }
     },
     legend: {
-      data: Array.from(selectedTechs),
+      data: series.map(s => s.name),
       textStyle: { color: "var(--text-secondary)", fontSize: 11 },
       bottom: 0,
       icon: "roundRect",
@@ -795,9 +748,9 @@ function updateChart() {
     grid: { left: 50, right: 30, top: 30, bottom: 50 },
     xAxis: {
       type: "category",
-      data: dates,
+      data: h.dates,
       axisLine: { lineStyle: { color: "var(--border-light)" } },
-      axisLabel: { color: "var(--text-muted)", fontSize: 11, rotate: rangeDays > 14 ? 30 : 0 },
+      axisLabel: { color: "var(--text-muted)", fontSize: 11, rotate: h.dates.length > 14 ? 30 : 0 },
       splitLine: { show: false }
     },
     yAxis: {
@@ -816,75 +769,81 @@ function updateChart() {
   chart.setOption(option, true);
 }
 
+async function loadHistory(id, days) {
+  try {
+    const r = await fetch(`/api/students/${id}/bkt-history?days=${days}`, { credentials: "same-origin" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = (await r.json()).data;
+    if (currentStudentId !== id || currentTimeRange !== days) return;   // 已切换，丢弃过期响应
+    currentHistory = data;
+  } catch (e) {
+    if (currentStudentId !== id || currentTimeRange !== days) return;
+    currentHistory = null;
+  }
+  updateChart();
+}
+
+// 掌握度预警（功能 6.7）。预警随 overview 一起返回，口径见后端 _alerts：
+// 最新 P(L)<0.60 记 danger；近 30 天最近 3 条记录严格递减且降幅≥2% 记 warn。
 function renderAlerts() {
-  const data = BKT_DATA[currentStudentId];
-  const history = data.history;
-  const alerts = [];
-
-  TECHNIQUES.forEach(t => {
-    const pts = history[t.key];
-    const latest = pts[pts.length - 1];
-    const prev7 = pts[Math.max(0, pts.length - 8)];
-    const prev3 = pts[Math.max(0, pts.length - 4)];
-
-    if (latest.p_l < 0.60) {
-      alerts.push({
-        skill: t.key,
-        type: "danger",
-        desc: `当前掌握度 ${(latest.p_l*100).toFixed(1)}%，低于薄弱线 60%，建议优先练习前置技法`,
-        val: latest.p_l
-      });
-    } else if (latest.p_l < prev3.p_l && prev3.p_l < pts[Math.max(0, pts.length - 7)].p_l) {
-      alerts.push({
-        skill: t.key,
-        type: "warn",
-        desc: `连续下降，从 ${(pts[Math.max(0, pts.length - 7)].p_l*100).toFixed(1)}% 降至 ${(latest.p_l*100).toFixed(1)}%，需关注`,
-        val: latest.p_l
-      });
-    }
-  });
-
   const container = document.getElementById("alertPanel");
+  const o = currentOverview;
+  if (!o) {
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">预警数据加载失败，请刷新重试</div>`;
+    return;
+  }
+
+  const alerts = Array.isArray(o.alerts) ? o.alerts : [];
   if (alerts.length === 0) {
     container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">✅ 暂无预警，该学生所有技法掌握度趋势良好</div>`;
     return;
   }
 
   container.innerHTML = alerts.map(a => {
-    const color = getPLColor(a.val);
+    const danger = a.type === "danger";
+    const val = Number.isFinite(a.p_l) ? formatPL(a.p_l) : "—";
+    const from = Number.isFinite(a.from_p_l) ? formatPL(a.from_p_l) : "—";
+    const desc = danger
+      ? `当前掌握度 ${val}，低于薄弱线 60%，建议优先练习前置技法`
+      : `近 30 天连续下降，从 ${from} 降至 ${val}，需关注`;
     return `
-      <div class="alert-item ${a.type}">
-        <div class="alert-icon" style="background:${a.type==='danger'?'rgba(184,58,47,0.10)':'rgba(201,168,76,0.10)'}">${a.type==='danger'?'🔴':'🟡'}</div>
+      <div class="alert-item ${danger ? 'danger' : 'warn'}">
+        <div class="alert-icon" style="background:${danger?'rgba(184,58,47,0.10)':'rgba(201,168,76,0.10)'}">${danger?'🔴':'🟡'}</div>
         <div class="alert-info">
           <div class="alert-skill">${a.skill}</div>
-          <div class="alert-desc">${a.desc}</div>
+          <div class="alert-desc">${desc}</div>
         </div>
-        <div class="alert-val ${a.type}">${(a.val*100).toFixed(1)}%</div>
+        <div class="alert-val ${danger?'danger':'warn'}">${val}</div>
       </div>
     `;
   }).join("");
 }
 
+// 练习事件时间轴（功能 6.8 / H4）。后端固定最近 30 天，按「日期 + 类型」合并。
 function renderEvents() {
-  const data = BKT_DATA[currentStudentId];
   const container = document.getElementById("eventTimeline");
-
-  if (data.events.length === 0) {
-    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">暂无练习事件</div>`;
+  if (currentEvents === null) {
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">事件数据加载失败，请刷新重试</div>`;
     return;
   }
 
-  container.innerHTML = data.events.map(e => {
-    const tagCls = e.type;
+  const events = currentEvents.events || [];
+  if (events.length === 0) {
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">最近 30 天暂无练习事件</div>`;
+    return;
+  }
+
+  container.innerHTML = events.map(e => {
     const tagText = e.type === "homework" ? "作业" : (e.type === "test" ? "测试" : "练习");
-    const skillsHtml = e.skills.map(s => `<span class="event-skill">${s}</span>`).join("");
+    const dot = e.type === "homework" ? "#C9A84C" : (e.type === "test" ? "#7C3AED" : "#0066B3");
+    const skillsHtml = (e.skills || []).map(s => `<span class="event-skill">${s}</span>`).join("");
     return `
       <div class="event-item">
-        <div class="event-dot" style="background:${e.type==='homework'?'#C9A84C':(e.type==='test'?'#7C3AED':'#0066B3')}"></div>
+        <div class="event-dot" style="background:${dot}"></div>
         <div class="event-content">
           <div class="event-header">
-            <span class="event-date">${e.date}</span>
-            <span class="event-tag ${tagCls}">${tagText}</span>
+            <span class="event-date">${e.date} ${e.time || ""}</span>
+            <span class="event-tag ${e.type}">${tagText}</span>
           </div>
           <div class="event-title">${e.title}</div>
           <div class="event-detail">${e.detail}</div>
@@ -895,30 +854,37 @@ function renderEvents() {
   }).join("");
 }
 
+// 技法详情表（功能 6.9 / H5）。8 行固定按 TECHNIQUES 顺序；缺失值与加载失败
+// 都显示「—」，不回退 mock。est_state 是后端状态码，文案在这里拼。
 function renderTechTable() {
-  const data = BKT_DATA[currentStudentId];
-  const history = data.history;
   const tbody = document.getElementById("techTableBody");
+  if (currentSkillsDetail === null) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">技法详情加载失败，请刷新重试</td></tr>`;
+    return;
+  }
+
+  const bySkill = {};
+  (currentSkillsDetail.skills || []).forEach(row => { bySkill[row.skill] = row; });
+  const pct = v => (Number.isFinite(v) ? formatPL(v) : "—");
+  const estText = d => {
+    if (d.est_state === "ok") {
+      return Number.isFinite(d.est_practices) ? `约 ${d.est_practices} 次` : "—";
+    }
+    return { mastered: "已达标", needs_practice: "需加强练习", insufficient: "数据不足" }[d.est_state] || "—";
+  };
 
   tbody.innerHTML = TECHNIQUES.map(t => {
-    const pts = history[t.key];
-    const latest = pts[pts.length - 1];
-    const p7 = pts[Math.max(0, pts.length - 8)];
-    const p30 = pts[0];
-    const trend = getTrend(latest.p_l, p7.p_l);
-    const color = getPLColor(latest.p_l);
+    const d = bySkill[t.key] || {};
+    const current = Number.isFinite(d.current) ? d.current : null;
+    const color = current === null
+      ? { bar: "#C9C0B5", text: "var(--text-muted)", cls: "" }
+      : getPLColor(current);
 
-    let est = "—";
-    if (latest.p_l < 0.85) {
-      const avgGrowth = (latest.p_l - p30.p_l) / 30;
-      if (avgGrowth > 0.005) {
-        const need = Math.ceil((0.85 - latest.p_l) / avgGrowth);
-        est = `约 ${need} 次`;
-      } else {
-        est = "需加强练习";
-      }
-    } else {
-      est = "已达标";
+    let trendHtml = `<span style="color:var(--text-muted)">—</span>`;
+    if (d.trend && Number.isFinite(d.delta)) {
+      const trendColor = d.trend === "up" ? "#4A8F6B" : (d.trend === "down" ? "#B83A2F" : "#8A7A6A");
+      const arrow = d.trend === "up" ? "↗" : (d.trend === "down" ? "↘" : "→");
+      trendHtml = `<span class="trend-arrow ${d.trend}" style="color:${trendColor}">${arrow} ${Math.abs(d.delta*100).toFixed(1)}%</span>`;
     }
 
     return `
@@ -926,16 +892,16 @@ function renderTechTable() {
         <td><span class="skill-name">${t.key}</span><br><span style="font-size:11px;color:var(--text-muted)">${t.category}</span></td>
         <td>
           <div style="display:flex;align-items:center;gap:10px">
-            <div class="tech-bar-wrap"><div class="tech-bar" style="width:${latest.p_l*100}%;background:${color.bar}"></div></div>
-            <span class="tech-val ${color.cls}">${formatPL(latest.p_l)}</span>
+            <div class="tech-bar-wrap"><div class="tech-bar" style="width:${current === null ? 0 : current*100}%;background:${color.bar}"></div></div>
+            <span class="tech-val ${color.cls}">${pct(d.current)}</span>
           </div>
         </td>
-        <td>${formatPL(p7.p_l)} <span class="trend-arrow ${getTrend(p7.p_l, pts[Math.max(0,pts.length-15)].p_l).cls}" style="color:${getTrend(p7.p_l, pts[Math.max(0,pts.length-15)].p_l).color}">${getTrend(p7.p_l, pts[Math.max(0,pts.length-15)].p_l).arrow}</span></td>
-        <td>${formatPL(p30.p_l)}</td>
-        <td><span class="trend-arrow ${trend.cls}" style="color:${trend.color}">${trend.arrow} ${Math.abs(trend.diff*100).toFixed(1)}%</span></td>
-        <td>${(latest.confidence*100).toFixed(0)}%</td>
-        <td>${data.events.filter(e => e.skills.includes(t.key)).length} 次</td>
-        <td>${est}</td>
+        <td>${pct(d.p7)}</td>
+        <td>${pct(d.p30)}</td>
+        <td>${trendHtml}</td>
+        <td>${Number.isFinite(d.confidence) ? (d.confidence*100).toFixed(0) + "%" : "—"}</td>
+        <td>${Number.isFinite(d.practice_count) ? d.practice_count + " 次" : "—"}</td>
+        <td>${estText(d)}</td>
       </tr>
     `;
   }).join("");
@@ -949,18 +915,17 @@ function selectStudent(id) {
   currentStudentId = id;
   selectedTechs = new Set(TECHNIQUES.map(t => t.key));
   renderStudentSelector();
-  renderStats();
   renderTechSelector();
-  updateChart();
-  renderAlerts();
-  renderEvents();
-  renderTechTable();
+  loadOverview(id);                    // 统计四项 + 预警
+  loadHistory(id, currentTimeRange);   // 趋势曲线按当前时间范围重新请求
+  loadEvents(id);                      // 练习事件时间轴
+  loadSkillsDetail(id);                // 技法详情表
 }
 
 function selectTimeRange(days) {
   currentTimeRange = days;
   renderTimeFilter();
-  updateChart();
+  if (currentStudentId !== null) loadHistory(currentStudentId, days);
 }
 
 function toggleTech(key) {
@@ -982,8 +947,59 @@ function toggleTech(key) {
   }
 }
 
+// CSV 单元格转义：日期与数字一般不需要，但学生姓名等字段可能含逗号/引号
+function csvCell(v) {
+  const s = v === null || v === undefined ? "" : String(v);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// 导出当前学生 + 当前时间范围的 P(L) 日序列。
+// 只导「窗口内确实有记录」的技法，与图表口径一致；不受图例勾选影响——
+// 勾选只是看图时的取舍，导出给的是全量数据。
+// 返回 { filename, csv }；没有可导出数据时返回 null。
+function buildBktCsv() {
+  const h = currentHistory;
+  const skills = TECHNIQUES.filter(t => h && h.series && h.series[t.key]);
+  if (!h || !h.dates || h.dates.length === 0 || skills.length === 0) return null;
+
+  const header = ["日期", ...skills.map(t => t.key)];
+  const rows = h.dates.map((date, i) => [
+    date,
+    ...skills.map(t => {
+      const v = h.series[t.key][i];
+      return v === null || v === undefined ? "" : v.toFixed(4);
+    })
+  ]);
+  const csv = [header, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n");
+
+  const student = STUDENTS.find(s => s.id === currentStudentId);
+  const rangeLabel = (TIME_RANGES.find(r => r.days === currentTimeRange) || {}).label || `近${currentTimeRange}天`;
+  const now = new Date();
+  const pad = n => String(n).padStart(2, "0");
+  const stamp = "" + now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate());
+
+  return {
+    filename: `${student ? student.name : "学生"}_BKT掌握度_${rangeLabel}_${stamp}.csv`,
+    csv
+  };
+}
+
 function exportData() {
-  alert("📥 正在导出 BKT 历史数据...\n（实际将调用 /api/v1/students/" + currentStudentId + "/bkt-history?export=csv）");
+  const f = buildBktCsv();
+  if (!f) {
+    alert("当前时间范围内没有可导出的数据");
+    return;
+  }
+  // UTF-8 BOM：不带的话 Excel 双击打开中文会乱码
+  const blob = new Blob(["\uFEFF" + f.csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = f.filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function refreshData() {
@@ -994,14 +1010,56 @@ function refreshData() {
 // 初始化
 // ============================================
 
-renderStudentSelector();
-renderTimeFilter();
-renderTechSelector();
-renderStats();
-initChart();
-renderAlerts();
-renderEvents();
-renderTechTable();
+// ============================================
+// 初始化：先拉真实学生名单，再渲染整页
+// ============================================
+
+async function initPage() {
+  let students;
+  try {
+    const r = await fetch("/api/students", { credentials: "same-origin" });
+    if (r.status === 403) {
+      // 接口挂 @teacher_required。学生账号打开本页时不往下渲染，也不回退到
+      // mock 名单——那会把别人的数据当成他的展示出来。
+      document.getElementById("studentSelector").innerHTML =
+        `<div style="padding:20px;color:var(--text-muted);font-size:13px">学生名单仅教师可见</div>`;
+      return;
+    }
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    students = (await r.json()).data.students;
+  } catch (e) {
+    document.getElementById("studentSelector").innerHTML =
+      `<div style="padding:20px;color:var(--text-muted);font-size:13px">学生名单加载失败，请刷新重试</div>`;
+    return;
+  }
+
+  STUDENTS = (students || []).map(s => ({
+    id: s.id,
+    name: s.name || "未命名",
+    avatar: s.avatar || "🎭",
+    level: s.level || "未分级",
+    overallTrend: s.trend
+  }));
+
+  if (STUDENTS.length === 0) {
+    document.getElementById("studentSelector").innerHTML =
+      `<div style="padding:20px;color:var(--text-muted);font-size:13px">暂无八维技法齐全的学生</div>`;
+    return;
+  }
+
+  currentStudentId = STUDENTS[0].id;
+
+  renderStudentSelector();
+  renderTimeFilter();
+  renderTechSelector();
+  initChart();
+  loadOverview(currentStudentId);
+  loadHistory(currentStudentId, currentTimeRange);
+  loadEvents(currentStudentId);
+  loadSkillsDetail(currentStudentId);
+}
+
+initPage();
 </script>
 <!-- ==== 登录用户条 + 登出（页面鉴权配套，见 docs/superpowers/specs/2026-09-15-page-auth-design.md）==== -->
 <!-- 页面已被服务端保护，能加载出来就说明会话有效。这段脚本不做守卫，

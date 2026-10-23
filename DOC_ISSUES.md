@@ -1679,11 +1679,165 @@ if path.parent != root:
 
 《1-PRD》8.9「系统推荐学习路径」是摸底报告的一部分、面向**学生**；但《5-接口清单》里唯一的推荐接口 G5 `GET /api/students/<id>/recommendations` 权限写的是**教师**，11 份文档没有定义学生自助获取推荐的页面归属、接口与响应契约。
 
-前端 `recommendation.html` 实现的是 5.7「学生推荐路径」（教师选学生、老师覆盖推荐），数据仍为 mock。2026-10-22 起该页对学生开放（隐藏学生切换器、导航中的「渐进式推荐」不再按角色隐藏），但学生看到的是默认 mock 学生 `s01` 的数据，卡片上的「老师推荐 / 覆盖推荐」仍是教师操作。
+前端 `recommendation.html` 实现的是 5.7「学生推荐路径」（教师选学生、老师覆盖推荐）。2026-10-22 起该页对学生开放（隐藏学生切换器、导航中的「渐进式推荐」不再按角色隐藏）。
 
-**待文档方确认**：学生个性化学习应落在哪个页面、用哪个接口（新增学生自助推荐接口，或允许 G5 由学生本人访问），以及学生视图是否保留「手动选择 / 老师推荐」入口。
+**本轮（2026-10-22）实现口径**：
+
+1. 教师仍用 G5 `GET /api/students/<id>/recommendations`；新增学生本人入口 `GET /api/recommendations/me`（`@student_required`，路径不带 id），经 `students.user_id` 反查本人。学生不能调用 G5，也不能用本人入口查别人。
+2. G5 与本人入口的响应新增 `summary`：`overall_mastery` 是该生已测技法最新 P(L) 的均值（与难度匹配用的 level 同源，null 表示一个技法都没测过）；`match_count` / `challenge_count` / `lock_count` 按**全部候选唱段**统计，在截断 Top3 之前计数——lock 排在最后，只看 Top3 会让「已锁定」恒为 0。响应另带 `abilities`（已测技法 → 最新 P(L)）与 `prereq_locks`（见第 5 条），能力雷达按 `abilities` 的键动态出轴，未测技法不出现。
+3. 前端顶部四卡（综合掌握度 / 难度匹配 / 挑战推荐 / 已锁定）与推荐列表已接真实数据；「系统推荐」标题由 Top 5 改为 Top 3，并去掉 mock 的匹配度、信息增益、进度条、技能标签与时长读数（后端没有这些字段）。
+4. 能力雷达已接真实 `abilities`：只画已测技法（如 stu002/李四 5 轴、李小燕 8 轴），已测不足 3 项时显示占位；卡片下方的综合掌握度与推荐难度区间（`[max(0, 掌握度-0.10), min(1, 掌握度+0.25)]`）同源。
+5. 前置技法锁定状态面板已接真实 `prereq_locks`：学生级、与唱段候选无关，按被锁的下游技法分组，列出未达标前置技法及其当前 P(L) / 各自达标线。判据与看板 5.4 的 `prerequisiteLockAlert` 一致（前置技法当前 P(L) 低于达标线），未测的前置技法判不了、跳过；下游技法可能不在 BKT 的 8 维里（如「润腔」「归韵」），仍照实返回。一个技法都没测过时显示「无法判断」，不能显示「全部达标」。
+6. 页面内 mock 只剩「全部曲目库」（`PHRASE_LIBRARY`，并标有「演示数据」）；能力雷达原有的 `ABILITY_DATA` 与学生姓名到 s01–s08 的映射已随真实化删除。
+7. 「老师推荐 / 覆盖推荐」按钮与模态框已删除：没有后端接口，真实推荐条目无法覆盖。`students.user_id` 为空的账号拿不到本人推荐（返回 403）。
+8. 当前种子数据下全部学生的推荐都是空数组（图谱 4 个唱段节点均有技法名不在 BKT 或解析不到曲目），四卡计数为 0 属数据现状，不是实现 bug。
+
+**待文档方确认**：学生个性化学习应落在哪个页面、是否保留「手动选择 / 老师推荐」入口，以及上述学生自助接口是否写入《5-接口清单》。
 
 ---
+
+## 49. 掌握度预警没有接口；练习事件时间轴 H4 的响应体未定义
+
+《5-接口清单》2.8 只有 H1–H5，功能 6.7「掌握度预警」**没有对应接口**；《3-功能清单》对它的描述也只有一句「P(L)<0.60 或连续下降」。H4 同样只有一句话「练习事件时间轴（功能 6.8）」，没有字段、时间窗口与合并规则。
+
+本轮（2026-10-22）口径：
+
+1. 预警不新增接口，随 H2 `GET /api/students/<id>/overview` 一起返回 `alerts` 数组，避免每个学生多打一次请求；前端「掌握度预警」卡片直接消费它。
+2. `danger` = 该技法最新 P(L) < 0.60（与 6.2 的薄弱线同一条）；`warn` = 近 30 天内该技法最近 3 条 BKT 记录严格递减且首末降幅 ≥ 0.02。用**记录级**而非日级曲线判定：BKT 只在练习/测试后写行，日级曲线会把同一天的多次更新压成一个点。
+3. 同一技法 `danger` 优先，不重复报；按严重度、P(L) 升序。条目形状 `{skill,type,p_l,from_p_l}`，`from_p_l` 只在 `warn` 时有值；文案由前端拼，与页面其它卡片措辞一致。
+4. H4 固定最近 30 天（卡片标题即「最近 30 天」，与 6.6 的时间范围筛选无关），按「日期 + 类型」合并 `practice_records`：一次摸底测试会写逐段的多行，逐行展示会把时间轴刷成同一分钟的十几条。作业提交按次展示（同一天可能有多份作业）。
+5. 响应形状 `{student_id,days,events:[{date,time,type,title,detail,skills}]}`，倒序。`type` 取 `test` / `homework` / `practice`；`detail` 形如「12 次 · 平均 43.1 分」或「AI 评分 35.5」。
+6. `skills` 取这次事件真正写入的 `bkt_history` 行（`source_type` + `source_id`）；F3 复用练习成绩的提交没有 BKT 行，回退 `submissions.bkt_after` 的键。都没有就留空，**不拿 `homeworks.focus_skills` 硬凑**——那份数据的维度名（音准/发声等）与 8 个技法名不一一对应。
+7. 与 D2 练习日志的口径相反：D2 排除 `cat_test`，H4 包含（摸底测试本身就是一类练习事件）。
+8. 本轮不恢复趋势曲线上的事件 markPoint：事件按天合并后与技法是多对多，叠加图例筛选与时间范围后会糊成一团。
+
+## 50. 技法详情表 H5 的响应体与「预计达标练习次数」口径未定义
+
+《5-接口清单》H5 只写「当前/7天前/30天前 P(L)、趋势、置信度、预计达标次数」，没有字段名、7/30 天前的取数方式、趋势阈值，也没说「预计达标」按天还是按练习次数算。本轮（2026-10-22）口径：
+
+1. 8 个技法各一行，按固定的 8 维顺序返回 `{student_id, skills:[...]}`，缺数据的技法也给行。
+2. `current` = 最新一条记录；`p7` / `p30` = 截至「今天-7 天 / -30 天」的最新一条记录，取**状态值**而不是窗口均值——BKT 是信念，两次练习之间不变。查不到给 `null`，前端显示「—」：「那时候还没练过」与「掌握度是 0」是两件事。
+3. `trend` / `delta` = `current` 对 `p7`，阈值 2 个百分点（与 H1 名单趋势一致）；任一端缺失则 `trend` 为 `null`。
+4. `confidence` 取最新一条记录的置信度，可空。
+5. `practice_count` = 近 30 天实际更新该技法的练习次数，`bkt_history` 行按 `(source_type, source_id)` 去重；早期没有来源标记的行各算一次。
+6. `est_practices` / `est_state` = 按近 30 天「每次平均增量」外推：`(current - 窗口起点值) / 更新次数`，再算到达 0.85 还需要的次数。窗口起点值缺失时从窗口内第一条记录起算，因此至少要有 2 个更新区间才估。状态为 `mastered`（已达标）/ `needs_practice`（增量 ≤ 0）/ `insufficient`（区间不足）/ `ok`（见 `est_practices`）。
+7. 页面「刷新数据」按钮仍是占位，不在本接口范围内。
+
+## 51. 页面级角色鉴权未在《6-登录与数据隔离方案》中规定
+
+文档只规定「页面要登录才能看」与接口的 `login_required` / `teacher_required`，没有规定「整页仅教师可用」时学生直接访问 URL 该怎么办，也没规定侧边栏菜单按角色显示。
+
+本轮（2026-10-22）口径：
+
+1. `tracking.html` 是整页教师向（H1–H5 全部 `@teacher_required`，学生进来没有任何可用内容），新增 `page_teacher_required` 在服务端 302 到 `/sing_along.html`（登录后的学生首页）；未登录仍先由 `page_login_required` 跳 `/login.html`。
+2. 侧边栏的「能力追踪」链接在 12 个页面统一加 `data-role="teacher"`，复用各页已有的 `body.role-teacher .nav-item[data-role="teacher"]` 样式，学生登录后不渲染。`index.html` 是页面目录、不是应用导航，不参与。
+3. 其它教师页维持「页面可进、接口 403、页内提示」的现状，不逐个加页面级守卫。
+4. 接口权限不变：H1–H5 仍是教师专属；`tracking.html` 里的 403 兜底保留，防页面守卫被绕过。
+
+## 52. I3 锁定诊断的判定逻辑、节点类型范围与响应体均未定义
+
+**涉及**：《3-功能清单》7.3、《2-系统设计说明》5.4、《5-接口清单》I3
+
+**问题**：文档对锁定诊断只有两句描述——7.3「节点掌握度低于阈值时显示受影响技法和学生名单」、5.4「前置技能未达标时显示锁定状态」。没有规定受影响技法是否递归、学生按班级均值还是个人掌握度判定、阈值取哪个、唱段/剧目节点是否参与、响应体字段。照「节点掌握度低于阈值」字面实现只能得到一个班级级布尔值，出不了名单。
+
+本轮（2026-10-23）口径：
+
+1. 技法节点的门禁是**递归前置链**，不只看直接前置；受影响技法 = 节点自身 + 沿 `prereq` 边递归下游的全部技法（带环检测）。
+2. 唱段节点的门禁是 `contains` 边直接指向的所需技法；受影响技法 = 至少卡住一名学生的所需技法（唱段自身不是技法）。剧目节点没有掌握度与门禁，返回 `locked=false`，不参与诊断。
+3. 受影响学生逐个判定：看该生本人在每条门禁技法上的**最新 p_l**（`bkt_history` 按 `student_id + skill` 取最新），低于该技法节点自己的 `mastery_threshold` 才列入，并返回卡住他的技法与数值。没练过某条技法的学生不按 0 分算；本人已掌握目标技法的不算受影响（仅技法节点）。
+4. 门禁技法在班级层面仍给出 `mastery`（全班均值）与 `met`，因此 `blocking_prerequisites` 里可能出现 `met=true`——班级均值达标但个别学生未达标。
+5. 响应体：`{node, locked, reason, affected_skills:[{id,label,mastery}], blocking_prerequisites:[{id,label,mastery,threshold,met}], students:[{student_id,student_name,blocked_by:[{id,label,mastery,threshold}]}]}`。`locked` 只表示是否存在被卡住的学生；无前置、无 BKT 数据、学生均已达标时都是 `false`，由 `reason` 说明。
+6. 技法名严格同名匹配（第 23 条），没有同名 BKT 记录的技法不参与判定，也不按 0 分处理。
+
+## 53. I4 布局保存的请求体、坐标原点与重置语义未定义
+
+**涉及**：《5-接口清单》I4、《4-数据库设计-V1.1》`graph_nodes.pos_x/pos_y`、《3-功能清单》7.5/7.6
+
+**问题**：接口清单只有「POST /api/graph/layout 教师保存拖拽布局（功能 7.5）；重置=前端恢复初始坐标」。没有规定请求体形状、坐标是画布坐标还是图层坐标、是否整表覆盖、哪些节点参与、重置是否清服务端。若按「重置=前端」字面实现，服务端仍留着旧坐标，用户重置后一刷新又回到旧布局，7.6 等于失效。
+
+本轮（2026-10-23）口径：
+
+1. 请求体 `{"nodes":[{"id":1,"x":120.5,"y":-40.0}, ...]}`；x/y 是 ECharts graph 系列的布局坐标（可为负数），只更新传入的节点，未传的保留原值。未知 id、非整数 id、非有限数字一律 400。
+2. 重置传 `{"reset": true}`，清空全部 `graph_nodes.pos_x/pos_y`。这与接口清单「重置=前端恢复初始坐标」字面有出入，但不清服务端会让重置在刷新后失效。
+3. 前端在**当前视图全部节点**都有坐标时用 `layout:'none'` 按坐标渲染；缺任一坐标则整体回退力导向。筛选视图直接复用各节点坐标。
+4. 保存时机：编辑模式下拖拽结束自动保存当前视图全部节点坐标，请求串行化，避免旧请求覆盖新坐标；保存失败只提示，不回滚本地位置。
+5. 进入编辑模式时先把力导向算出的坐标固化再切固定布局：ECharts force 布局在 `dragend` 后会 unfix 节点，不固化会回弹。
+
+## 54. CDM 归因诊断页的学生提交列表接口未在《5-接口清单》中定义
+
+**涉及**：《5-接口清单》《3-功能清单》4.6、《1-PRD》4.6 / `cdm_report.html` / `app/api/cdm.py`
+
+**问题**：页面顶部是按提交切换的学生芯片列表（学生 + 曲目 + 日期 + AI 分），但接口清单只有 F5（逐条提交详情），没有「列出哪些提交有 CDM 数据」的查询，页面只能用 5 条 mock。文档也没有规定数据源是作业提交还是练习记录——2026-10-20 起 `practice_records.cdm_json` 同样会写 CDM。
+
+本轮（2026-10-23）口径：
+
+1. 新增 `GET /api/cdm/submissions`（教师），返回有 CDM 数据的作业提交：`{submissions:[{submission_id, student_id, student_name, student_avatar, student_level, homework_title, submitted_at, ai_score}]}`。
+2. 数据源取 `submissions.ai_detail`，条件是 `ai_detail IS NOT NULL AND ai_detail ? 'defects'`；`defects` 为空数组仍算——「查了没缺陷」与「没有数据源」是两件事（第 23 条）。练习记录 `practice_records.cdm_json` 本轮不并入：页面语义是作业提交的 CDM 报告，两者字段面也不同。
+3. 排序 `submitted_at DESC NULLS LAST, id DESC`，最新在前；页面默认选中第一条，必须稳定（库里 23/25、24/26/27 的提交时间相同）。
+4. 姓名经 `students.user_id → users.display_name` 拐一次（第 21 条）；学生与作业字段全部 LEFT JOIN，缺失时回 `null`，页面兜底占位。
+5. 本轮**只接入列表**：选中后报告区显示「详情待接入」占位，缺陷标签/特征矩阵/修正记录沿用页面原有渲染代码但暂无数据源。后续接详情时注意旧种子提交（23–27）有 `featureMatrix`、新提交（49 起）没有，雷达图要按有无数据出空态。
+6. `submitted_at` 原样返回（ISO-8601，库内为 UTC），页面只取日期前 10 位；跨时区展示口径仍待确认（第 7 条）。
+
+## 55. CDM 报告四指标摘要的接口与「已处理」口径未定义
+
+**涉及**：《3-功能清单》4.6、《5-接口清单》F5 / `cdm_report.html` / `app/api/cdm.py`
+
+**问题**：页面顶部四个指标（AI 初评分、高置信度缺陷、综合置信度、已处理/总标签）在文档中没有对应接口，也没有判定口径：高置信度的阈值未写；综合置信度没说取 `ai_detail.overallConfidence`；「已处理」没有数据源——库里没有缺陷标签的确认/修正/忽略表，`score_calibrations` 是评分校准（`bias_mode` / `ai_score` / `teacher_score`），不是标签处理记录；缺陷总数在 `ai_detail.defects` 缺失或为空时的语义也未定义。
+
+本轮（2026-10-23）口径：
+
+1. 新增 `GET /api/cdm/submissions/<id>`（教师），返回 `{submission_id, ai_score, overall_confidence, defect_count, high_confidence_count}`；提交不存在返回 404。
+2. `ai_score` 原样取 `submissions.ai_score`；`overall_confidence` 取 `ai_detail.overallConfidence`，非有限数值回 `null`。
+3. `defect_count` = `ai_detail.defects` 的数组长度；键不存在或不是数组回 `null`（没有数据源），空数组回 `0`（查了没缺陷）。
+4. `high_confidence_count` = `defects` 里 `confidence >= 0.70` 的条数；布尔/字符串/NaN/Inf 不计数。阈值沿用页面既有口径（徽标与缺陷分组都按 0.70），文档只写了「置信度」。
+5. 「已处理」不进接口：本轮由页面按**本次会话内**的确认/修正/忽略操作计数，按 `defectId` 去重，刷新归零。三个动作都算已处理（与页面底部「数据回流状态」一致）；原 mock 只把确认+修正算已处理，两处口径已统一为含忽略。若文档要求跨会话回流，需要新增修正记录表与写入接口。
+6. 摘要返回前页面先用列表里的 `ai_score` 显示 AI 初评分，其余三项显示「—」；请求失败同样保留「—」，不回退到 mock 数值。
+7. 「数据回流状态」卡按本地记录展示四项：已确认 / 已修正 / 已忽略 / 待处理，标题标注「本地缓存 · 未回流」；待处理 = 缺陷总数 − 已处理（按 `defectId` 去重，与顶部「已处理/总标签」同口径）。本轮不落库，刷新归零。
+
+## 56. CDM 缺陷标签明细的接口与字段口径未定义
+
+**涉及**：《3-功能清单》4.6、《5-接口清单》F5 / `cdm_report.html` / `app/api/cdm.py`
+
+**问题**：缺陷标签诊断模块需要逐条缺陷的 `label` / `status` / `category` / `evidence` / `features` / `confidence`，接口清单只有 F5 一条笼统的「提交详情」，没有字段契约；JSONB 内的字段可能缺失，文档也未规定 null 语义。特征矩阵的情况另说：旧种子提交（23–27）有 `featureMatrix`，新提交（49 起）没有。
+
+本轮（2026-10-23）口径：
+
+1. 新增 `GET /api/cdm/submissions/<id>/defects`（教师），返回 `{submission_id, defects}`；提交不存在 404。
+2. `defects` 取自 `submissions.ai_detail.defects`：数组里的非对象元素跳过；`id` 统一转字符串；`label` / `status` / `category` / `evidence` 非字符串回 `null`；`features` 只保留标量值，非对象回 `null`；`confidence` 非有限数字回 `null`。
+3. `ai_detail.defects` 缺失或不是数组 → `defects: null`（没有数据源）；空数组 → `[]`（查了没缺陷），同第 55 条。
+4. 页面按 `confidence >= 0.70` / `0.50–0.70` / `< 0.50 或缺失` 分三组，与徽标、四指标里的高置信度计数同口径。
+5. 确认 / 修正 / 忽略仍是本会话本地操作，不写库；标注后卡片状态、修正记录卡、数据回流卡与顶部「已处理」同步更新，刷新归零（第 55 条）。页面文案已相应改为「仅本次会话」，不再声称批量回流模型。
+6. 特征矩阵与音高偏差分析本轮显示「待接入」空态：新提交没有 `featureMatrix`，旧种子的字段面也未与页面雷达图逐项对齐，待单独定口径。
+
+## 57. CDM 输入特征矩阵的接口与新旧数据口径未定义
+
+**涉及**：《3-功能清单》4.6、《5-接口清单》F5 / `cdm_report.html` / `app/api/cdm.py`
+
+**问题**：特征矩阵卡与音高偏差分析卡依赖 `ai_detail.featureMatrix`（9 个原始声学量），接口清单只有 F5 一条笼统的「提交详情」；页面原有雷达图把 8 个量按固定上限归一化，这些上限与字段缺失时的语义文档均未规定。数据现状：旧种子提交 23–27 有 `featureMatrix`，新提交 49 起没有（B4 管线不产出该字段），库里也没有其它可替代的数据源。
+
+本轮（2026-10-23）口径：
+
+1. 新增 `GET /api/cdm/submissions/<id>/features`（教师），返回 `{submission_id, feature_matrix}`；提交不存在 404。
+2. `feature_matrix` 原样透传 `ai_detail.featureMatrix`，键名保留驼峰（与 F5 的 `feature_matrix` 同口径）；不是 dict 回 `null`（没有数据源）。
+3. 页面要求 8 个数值齐全（`pitchStd` / `energyStd` / `vibratoDepth` / `rhythmAccuracy` / `durationMeanDiff` / `highPitchBias` / `lowPitchBias` / `pitchMean`），缺一项显示「特征矩阵字段不完整」；`null` 显示「该提交没有特征矩阵数据」，不用 0 或其它字段倒推。
+4. 雷达图沿用页面原有归一化上限：音高波动 50c、能量波动 0.5、颤音深度 50c、节奏偏差 `1-rhythmAccuracy`、时值偏差 0.3s、高/低音区偏差 50c、音准偏移 50c。这些上限没有文档依据，待用真实素材标定。
+5. 音高偏差模式卡与矩阵共用同一份数据：`pitchTrend` 只识别 `systematic_low` / `systematic_high` / `random` / `stable`，其余显示「未知」；原实现把未知和 `systematic_high` 都当成「相对稳定」显示绿色，已修正。
+6. 新提交（49 起）两张卡显示「该提交没有特征矩阵数据」空态；要补数据需在分析管线产出 `featureMatrix`，不在本轮范围。
+
+## 58. 音高偏差模式分析在特征矩阵缺失时的补算口径未定义
+
+**涉及**：《3-功能清单》4.6 / `cdm_report.html` / `app/api/cdm.py`
+
+**问题**：音高偏差模式卡原先只读 `ai_detail.featureMatrix`，而新提交（49 起）没有该字段，卡片只能显示空态；`ai_detail.words` 里有逐字偏差，但文档没有规定能否据此现算模式，也没规定现算字段与阈值。
+
+本轮（2026-10-23）口径：
+
+1. 新增 `GET /api/cdm/submissions/<id>/pitch-pattern`（教师），返回 `{submission_id, source, trend, mean, median, std, high_pitch_bias, low_pitch_bias, word_count}`；提交不存在 404。
+2. `featureMatrix` 存在且至少有一个音高字段可用时 `source="feature_matrix"`：`trend` 取 `pitchTrend`，`mean` / `std` / `high_pitch_bias` / `low_pitch_bias` 取 `pitchMean` / `pitchStd` / `highPitchBias` / `lowPitchBias`，`median` 与 `word_count` 为 null。
+3. 否则回退到 `ai_detail.words` 的 `deviation_cents`（跳过非数值与非有限数）：`source="words"`，`mean` 为算术均值、`median` 为中位数、`std` 为总体标准差（`statistics.pstdev`）、`word_count` 为有效样本数；高/低音区偏差没有可靠声区划分，回 null。
+4. 逐字来源的 `trend` 沿用 `cdm_service` 的阈值：中位数 ≤ -25c 判 `systematic_low`，≥ +25c 判 `systematic_high`，否则标准差 ≥ 30c 判 `random`，否则 `stable`。规则引擎允许「整体偏差 + 随机波动」同时成立，卡片只显示一个模式，系统性偏差优先。
+5. 两个来源都没有可用数据时 `source=null`，页面显示「该提交没有可用的音高偏差数据」。
+6. 页面在逐字来源下用中位数画「音准偏移」条（与模式判定同口径），均值放进来源说明；特征矩阵来源仍用 `pitchMean`。逐字来源不画高/低音区两条。
 
 ## 待核实
 

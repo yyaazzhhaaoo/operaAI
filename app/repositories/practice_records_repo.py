@@ -212,6 +212,25 @@ def get_last_practice_dates(db: Session, student_ids: list[int], until: datetime
     return {sid: d for sid, d in rows if d is not None}
 
 
+def list_since(
+    db: Session, student_id: int, since: datetime
+) -> list[tuple[PracticeRecord, str | None]]:
+    """某学生在 `since`（含）之后的全部练习记录，带分段标题，按时间倒序。
+
+    能力追踪页的练习事件时间轴（功能 6.8 / 接口 H4）用。刻意**不排除
+    source='cat_test'**：摸底测试本身就是一类练习事件，与 D2 练习日志的口径
+    相反。标题走外连接，老记录没有 segment_id 时取到 None，由 service 兜底。
+    """
+    rows = db.execute(
+        select(PracticeRecord, Segment.title)
+        .outerjoin(Segment, Segment.id == PracticeRecord.segment_id)
+        .where(PracticeRecord.student_id == student_id)
+        .where(PracticeRecord.created_at >= since)
+        .order_by(desc(PracticeRecord.created_at), desc(PracticeRecord.id))
+    ).all()
+    return [(row[0], row[1]) for row in rows]
+
+
 def get_latest_for_student(db: Session, student_id: int) -> PracticeRecord | None:
     """某个学生最近一次练习记录；从没练过返回 None。
 

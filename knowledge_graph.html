@@ -274,6 +274,23 @@
             width: 100%;
             height: 100%;
         }
+        .graph-error {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 24px;
+            color: var(--danger);
+            font-size: 14px;
+            text-align: center;
+        }
+        .panel-loading {
+            font-size: 13px;
+            color: var(--text-muted);
+            padding: 12px 0;
+            line-height: 1.8;
+        }
 
         /* ===== 右侧详情面板 ===== */
         .side-panel {
@@ -411,6 +428,66 @@
             padding: 1px 6px;
             border-radius: 3px;
             font-weight: 600;
+        }
+
+        /* ===== 锁定诊断（I3） ===== */
+        .lock-alert {
+            background: var(--danger-soft);
+            border: 1px solid rgba(184, 58, 47, 0.25);
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-top: 14px;
+        }
+        .lock-alert-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--danger);
+            margin-bottom: 6px;
+        }
+        .lock-reason {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+        .lock-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .lock-tag {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: rgba(184, 58, 47, 0.1);
+            color: var(--danger);
+        }
+        .lock-student {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 8px 10px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-light);
+            border-radius: 6px;
+            font-size: 12px;
+        }
+        .lock-student-head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .lock-student-name { flex: 1; color: var(--text-primary); }
+        .lock-student-detail { font-size: 11px; color: var(--text-secondary); line-height: 1.5; }
+        .lock-clear {
+            font-size: 12px;
+            color: var(--text-muted);
+            background: var(--bg-primary);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-top: 14px;
         }
 
         /* ===== 暂缓推送提示 ===== */
@@ -663,7 +740,7 @@
             </div>
 
             <div class="graph-wrap">
-                <div class="edit-hint" id="editHint">✏️ 编辑模式已开启：可拖拽节点调整位置，点击空白处取消选中</div>
+                <div class="edit-hint" id="editHint">✏️ 编辑模式已开启：可拖拽节点调整位置，拖拽结束自动保存</div>
                 <div id="graphChart"></div>
 
                 <!-- 图例 -->
@@ -675,6 +752,7 @@
                     <div class="legend-item"><span class="legend-dot" style="background:#0066B3"></span>学习中 0.60~0.85</div>
                     <div class="legend-item"><span class="legend-dot" style="background:#C9A84C"></span>薄弱 0.40~0.60</div>
                     <div class="legend-item"><span class="legend-dot" style="background:#B83A2F"></span>未掌握 &lt;0.40</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#B0A090"></span>暂无数据 / 待校准</div>
                 </div>
             </div>
 
@@ -694,128 +772,75 @@
 
     <script>
         // ================================================================
-        // 模拟数据（后端 API 预留接口）
+        // 数据源：I1 GET /api/graph（真实图谱）
         // ================================================================
 
-        /* TODO: API GET /api/v1/graph/nodes-and-edges
-           返回：Neo4j 导出的节点与边数据
-           { "nodes": [...], "edges": [...] }
-        */
+        // 同源、经 nginx 的 /api 代理。不要改成跨源地址：跨源 fetch 默认不带
+        // Cookie，后端 login_required 只会看到空 session 并回 401。
+        const API_BASE = '';
 
-        const GRAPH_DATA = {
-            nodes: [
-                // 技法节点
-                { id: "t01", name: "音准感知", type: "technique", mastery: 0.68, category: "基础" },
-                { id: "t02", name: "声带控制", type: "technique", mastery: 0.55, category: "基础" },
-                { id: "t03", name: "气息支撑", type: "technique", mastery: 0.62, category: "基础" },
-                { id: "t04", name: "音准稳定性", type: "technique", mastery: 0.71, category: "基础" },
-                { id: "t05", name: "滑音", type: "technique", mastery: 0.63, category: "装饰" },
-                { id: "t06", name: "拖腔", type: "technique", mastery: 0.58, category: "装饰" },
-                { id: "t07", name: "归韵咬字", type: "technique", mastery: 0.65, category: "基础" },
-                { id: "t08", name: "装饰音技巧", type: "technique", mastery: 0.48, category: "装饰" },
-                { id: "t09", name: "润腔", type: "technique", mastery: 0.35, category: "高阶" },
-                { id: "t10", name: "颤音", type: "technique", mastery: 0.45, category: "装饰" },
-                { id: "t11", name: "节奏感知", type: "technique", mastery: 0.68, category: "基础" },
-                { id: "t12", name: "咬字基础", type: "technique", mastery: 0.74, category: "基础" },
-                { id: "t13", name: "装饰音基础", type: "technique", mastery: 0.48, category: "基础" },
-                { id: "t14", name: "听辨能力", type: "technique", mastery: 0.52, category: "基础" },
-                // 唱句节点
-                { id: "p01", name: "辕门外三声炮", type: "phrase", difficulty: 0.81, piece: "穆桂英挂帅" },
-                { id: "p02", name: "海岛冰轮初转腾", type: "phrase", difficulty: 0.85, piece: "贵妃醉酒" },
-                { id: "p03", name: "看大王在帐中", type: "phrase", difficulty: 0.78, piece: "霸王别姬" },
-                { id: "p04", name: "叫张生隐藏在棋盘之下", type: "phrase", difficulty: 0.72, piece: "红娘" },
-                { id: "p05", name: "我正在城楼观山景", type: "phrase", difficulty: 0.88, piece: "空城计" },
-                // 剧目节点
-                { id: "d01", name: "穆桂英挂帅", type: "piece", style: "京剧·梅派" },
-                { id: "d02", name: "贵妃醉酒", type: "piece", style: "京剧·梅派" },
-                { id: "d03", name: "霸王别姬", type: "piece", style: "京剧·梅派" },
-                { id: "d04", name: "红娘", type: "piece", style: "京剧·荀派" },
-                { id: "d05", name: "空城计", type: "piece", style: "京剧·老生" },
-            ],
-            edges: [
-                // 技法依赖 DEPENDS_ON
-                { source: "t05", target: "t01", type: "DEPENDS_ON", label: "依赖" },
-                { source: "t05", target: "t02", type: "DEPENDS_ON", label: "依赖" },
-                { source: "t06", target: "t03", type: "DEPENDS_ON", label: "依赖" },
-                { source: "t06", target: "t04", type: "DEPENDS_ON", label: "依赖" },
-                { source: "t09", target: "t05", type: "DEPENDS_ON", label: "依赖" },
-                { source: "t09", target: "t08", type: "DEPENDS_ON", label: "依赖" },
-                { source: "t07", target: "t12", type: "DEPENDS_ON", label: "依赖" },
-                { source: "t10", target: "t04", type: "DEPENDS_ON", label: "依赖" },
-                { source: "t08", target: "t05", type: "DEPENDS_ON", label: "依赖" },
-                { source: "t14", target: "t01", type: "DEPENDS_ON", label: "依赖" },
-                // 唱句→技法 REQUIRES
-                { source: "p01", target: "t06", type: "REQUIRES", label: "需要" },
-                { source: "p01", target: "t04", type: "REQUIRES", label: "需要" },
-                { source: "p01", target: "t07", type: "REQUIRES", label: "需要" },
-                { source: "p02", target: "t06", type: "REQUIRES", label: "需要" },
-                { source: "p02", target: "t05", type: "REQUIRES", label: "需要" },
-                { source: "p02", target: "t03", type: "REQUIRES", label: "需要" },
-                { source: "p02", target: "t07", type: "REQUIRES", label: "需要" },
-                { source: "p03", target: "t06", type: "REQUIRES", label: "需要" },
-                { source: "p03", target: "t04", type: "REQUIRES", label: "需要" },
-                { source: "p03", target: "t10", type: "REQUIRES", label: "需要" },
-                { source: "p04", target: "t05", type: "REQUIRES", label: "需要" },
-                { source: "p04", target: "t08", type: "REQUIRES", label: "需要" },
-                { source: "p04", target: "t11", type: "REQUIRES", label: "需要" },
-                { source: "p05", target: "t06", type: "REQUIRES", label: "需要" },
-                { source: "p05", target: "t03", type: "REQUIRES", label: "需要" },
-                { source: "p05", target: "t04", type: "REQUIRES", label: "需要" },
-                { source: "p05", target: "t07", type: "REQUIRES", label: "需要" },
-                // 唱句→剧目 BELONGS_TO
-                { source: "p01", target: "d01", type: "BELONGS_TO", label: "属于" },
-                { source: "p02", target: "d02", type: "BELONGS_TO", label: "属于" },
-                { source: "p03", target: "d03", type: "BELONGS_TO", label: "属于" },
-                { source: "p04", target: "d04", type: "BELONGS_TO", label: "属于" },
-                { source: "p05", target: "d05", type: "BELONGS_TO", label: "属于" },
-            ]
-        };
+        // 后端词表 -> 页面词表：接口沿用数据库的 node_type/edge_type（skill /
+        // segment / opera、prereq / contains），页面原有的配色、筛选与详情分支
+        // 按 technique / phrase / piece 判断。
+        const NODE_TYPE_MAP = { skill: 'technique', segment: 'phrase', opera: 'piece' };
 
-        /* TODO: API GET /api/v1/graph/prereq-chain?node_id={id}
-           返回：指定节点的前置依赖链（递归）
-        */
+        let GRAPH_DATA = { nodes: [], edges: [] };
+        let detailCache = {};   // node.id -> I2 返回的节点详情
+        let lockCache = {};     // node.id -> I3 返回的锁定诊断
 
-        const PREREQ_CHAINS = {
-            "t06": {
-                chain: [
-                    { id: "t03", name: "气息支撑", mastery: 0.62, status: "薄弱" },
-                    { id: "t04", name: "音准稳定性", mastery: 0.71, status: "学习中" },
-                    { id: "t06", name: "拖腔", mastery: 0.58, status: "薄弱" }
-                ],
-                blockedFor: ["李小燕", "刘思琪", "孙志远"],
-                reason: "前置技法「气息支撑」班级平均掌握度 62%，未达到解锁阈值 85%"
-            },
-            "t05": {
-                chain: [
-                    { id: "t01", name: "音准感知", mastery: 0.68, status: "学习中" },
-                    { id: "t02", name: "声带控制", mastery: 0.55, status: "薄弱" },
-                    { id: "t05", name: "滑音", mastery: 0.63, status: "学习中" }
-                ],
-                blockedFor: ["李小燕", "周明轩"],
-                reason: "前置技法「声带控制」班级平均掌握度 55%，未达到解锁阈值 85%"
-            },
-            "t09": {
-                chain: [
-                    { id: "t01", name: "音准感知", mastery: 0.68, status: "学习中" },
-                    { id: "t02", name: "声带控制", mastery: 0.55, status: "薄弱" },
-                    { id: "t05", name: "滑音", mastery: 0.63, status: "学习中" },
-                    { id: "t08", name: "装饰音技巧", mastery: 0.48, status: "薄弱" },
-                    { id: "t09", name: "润腔", mastery: 0.35, status: "未掌握" }
-                ],
-                blockedFor: ["李小燕", "刘思琪", "周明轩", "孙志远"],
-                reason: "前置技法「装饰音技巧」班级平均掌握度 48%，未达到解锁阈值 85%"
-            },
-            "p01": {
-                chain: [
-                    { id: "t03", name: "气息支撑", mastery: 0.62, status: "薄弱" },
-                    { id: "t04", name: "音准稳定性", mastery: 0.71, status: "学习中" },
-                    { id: "t06", name: "拖腔", mastery: 0.58, status: "薄弱" },
-                    { id: "p01", name: "辕门外三声炮", difficulty: 0.81, status: "高难度" }
-                ],
-                blockedFor: ["李小燕", "刘思琪", "孙志远"],
-                reason: "所需技法「拖腔」班级平均掌握度 58%，未达到推荐阈值 70%"
-            }
-        };
+        function edgeKey(edge) {
+            return edge.source + '->' + edge.target;
+        }
+
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"']/g, function (ch) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+            });
+        }
+
+        // 一条 contains 边在两端之间语义不同：剧目不「需要」唱段，唱段也不
+        // 「属于」技法。按两端节点类型还原成页面原有的三种关系。
+        function mapEdgeType(edge, rawTypeById) {
+            if (edge.edge_type === 'prereq') return { type: 'DEPENDS_ON', label: '依赖' };
+            const sourceType = rawTypeById[edge.source];
+            const targetType = rawTypeById[edge.target];
+            if (sourceType === 'segment' && targetType === 'skill') return { type: 'REQUIRES', label: '需要' };
+            if (sourceType === 'opera' && targetType === 'segment') return { type: 'BELONGS_TO', label: '属于' };
+            return { type: 'CONTAINS', label: '包含' };
+        }
+
+        function normalizeGraph(payload) {
+            const rawTypeById = {};
+            const nodes = (payload.nodes || []).map(function (raw) {
+                rawTypeById[raw.id] = raw.node_type;
+                return {
+                    id: raw.id,
+                    name: raw.label,
+                    type: NODE_TYPE_MAP[raw.node_type] || raw.node_type,
+                    mastery: raw.mastery,          // null = 没有同名 BKT 技法（不按 0 分处理）
+                    threshold: raw.mastery_threshold,
+                    pos_x: raw.pos_x,              // I4 保存的拖拽坐标，null = 还没保存过
+                    pos_y: raw.pos_y,
+                    difficulty: null,              // segments 没有难度字段，详情显示「待校准」
+                    category: null,                // graph_nodes 未建模技法分类
+                    piece: null,                   // 由下方的 BELONGS_TO 边填充
+                    style: null
+                };
+            });
+            const nodeById = {};
+            nodes.forEach(function (n) { nodeById[n.id] = n; });
+
+            const edges = (payload.edges || []).map(function (raw) {
+                const mapped = mapEdgeType(raw, rawTypeById);
+                return { id: raw.id, source: raw.source, target: raw.target, type: mapped.type, label: mapped.label };
+            });
+            edges.filter(function (e) { return e.type === 'BELONGS_TO'; }).forEach(function (e) {
+                const seg = nodeById[e.source];
+                const opera = nodeById[e.target];
+                if (seg && opera) seg.piece = opera.name;
+            });
+            return { nodes: nodes, edges: edges };
+        }
 
         // ================================================================
         // ECharts 状态
@@ -826,21 +851,28 @@
         let editMode = false;
         let currentFilter = 'all';
         let chartDataCache = null;
+        let chainHighlightOn = false;   // 「高亮前置依赖链」是否生效，点空白处清除
 
         // ================================================================
         // 工具函数
         // ================================================================
 
+        // 没有数据的节点用中性灰。不要写 `node.mastery || 0.5`——那会把 null
+        // 当成「中等」，把「查不到掌握度」画成一条编造的读数。
+        const NEUTRAL_COLOR = '#B0A090';
+
         function getNodeColor(node) {
             if (node.type === 'piece') return '#a855f7';
             if (node.type === 'phrase') {
-                const d = node.difficulty || 0.5;
+                if (node.difficulty === null || node.difficulty === undefined) return NEUTRAL_COLOR;
+                const d = node.difficulty;
                 if (d >= 0.85) return '#B83A2F';
                 if (d >= 0.70) return '#C9A84C';
                 return '#4A8F6B';
             }
             // technique
-            const m = node.mastery || 0.5;
+            const m = node.mastery;
+            if (m === null || m === undefined) return NEUTRAL_COLOR;
             if (m >= 0.85) return '#4A8F6B';
             if (m >= 0.60) return '#0066B3';
             if (m >= 0.40) return '#C9A84C';
@@ -901,18 +933,35 @@
 
             renderGraph(currentFilter);
 
+            // 拖拽结束自动保存（I4）。graph 的拖拽由 zrender 的 Handler 分发，
+            // 用 zrender 事件拿 dragend；chart 级事件拿不到这个时机。
+            chart.getZr().on('dragend', function() {
+                if (!editMode) return;
+                const positions = captureRenderedLayout();
+                if (positions.length) queueLayoutSave(positions);
+            });
+
             chart.on('click', function(params) {
                 if (params.dataType === 'node') {
                     const raw = params.data._raw;
                     if (raw) {
                         selectedNodeId = raw.id;
                         document.getElementById('highlightBtn').disabled = false;
+                        // 换节点时清掉上一个节点的高亮，否则看图的人会以为新节点的链也亮了
+                        if (chainHighlightOn) {
+                            chainHighlightOn = false;
+                            renderGraph(currentFilter);
+                        }
                         showNodeDetail(raw);
                     }
                 } else {
                     selectedNodeId = null;
                     document.getElementById('highlightBtn').disabled = true;
                     closePanel();
+                    if (chainHighlightOn) {
+                        chainHighlightOn = false;
+                        renderGraph(currentFilter);
+                    }
                 }
             });
 
@@ -927,48 +976,71 @@
             });
         }
 
-        function renderGraph(filter) {
+        // highlight: { nodes: Set<id>, edges: Set<edgeKey> } | null。
+        // 为 null 时正常渲染；否则链外的节点与边降透明度（「高亮前置依赖链」）。
+        function renderGraph(filter, highlight) {
             if (!chart) return;
 
             const { nodes, edges } = getFilteredData(filter);
 
-            const chartNodes = nodes.map(n => ({
-                id: n.id,
-                name: n.name,
-                value: n.type === 'technique' ? (n.mastery || 0) : (n.difficulty || 0),
-                symbolSize: getNodeSize(n),
-                itemStyle: { color: getNodeColor(n) },
-                label: {
-                    show: true,
-                    color: '#2D1F14',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    formatter: function() {
-                        return n.name.length > 5 ? n.name.slice(0, 4) + '…' : n.name;
-                    }
-                },
-                draggable: true,
-                _raw: n
-            }));
+            // 当前视图的节点都有保存坐标时才用固定布局；缺一个就回退力导向，
+            // 避免一半节点堆在原点。I4 保存的是全部节点坐标，筛选视图直接复用。
+            const fixedLayout = nodes.length > 0 &&
+                nodes.every(n => Number.isFinite(n.pos_x) && Number.isFinite(n.pos_y));
 
-            const chartEdges = edges.map(e => ({
-                source: e.source,
-                target: e.target,
-                relation: e.type,
-                label: {
-                    show: true,
-                    formatter: e.label,
-                    fontSize: 10,
-                    color: '#8A7A6A'
-                },
-                lineStyle: {
-                    color: e.type === 'DEPENDS_ON' ? 'rgba(99,102,241,0.4)' :
-                        e.type === 'REQUIRES' ? 'rgba(201,168,76,0.4)' :
-                        'rgba(139,92,246,0.35)',
-                    width: 1.5,
-                    curveness: 0.15
+            const chartNodes = nodes.map(n => {
+                const dimmed = highlight ? !highlight.nodes.has(n.id) : false;
+                const item = {
+                    id: n.id,
+                    name: n.name,
+                    value: n.type === 'technique' ? (n.mastery || 0) : (n.difficulty || 0),
+                    symbolSize: getNodeSize(n),
+                    itemStyle: { color: getNodeColor(n), opacity: dimmed ? 0.15 : 1 },
+                    label: {
+                        show: true,
+                        color: '#2D1F14',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        opacity: dimmed ? 0.2 : 1,
+                        formatter: function() {
+                            return n.name.length > 5 ? n.name.slice(0, 4) + '…' : n.name;
+                        }
+                    },
+                    // 数据项上的 draggable 会覆盖系列级设置，必须逐项跟随编辑模式
+                    draggable: editMode,
+                    _raw: n
+                };
+                if (fixedLayout) {
+                    item.x = n.pos_x;
+                    item.y = n.pos_y;
                 }
-            }));
+                return item;
+            });
+
+            const chartEdges = edges.map(e => {
+                const onChain = highlight ? highlight.edges.has(edgeKey(e)) : false;
+                return {
+                    source: e.source,
+                    target: e.target,
+                    relation: e.type,
+                    label: {
+                        show: true,
+                        formatter: e.label,
+                        fontSize: 10,
+                        color: '#8A7A6A',
+                        opacity: highlight && !onChain ? 0.05 : 1
+                    },
+                    lineStyle: {
+                        color: onChain ? '#B83A2F' :
+                            e.type === 'DEPENDS_ON' ? 'rgba(99,102,241,0.4)' :
+                            e.type === 'REQUIRES' ? 'rgba(201,168,76,0.4)' :
+                            'rgba(139,92,246,0.35)',
+                        width: onChain ? 2.5 : 1.5,
+                        opacity: highlight ? (onChain ? 0.9 : 0.05) : 0.6,
+                        curveness: 0.15
+                    }
+                };
+            });
 
             const option = {
                 backgroundColor: 'transparent',
@@ -980,17 +1052,24 @@
                         if (params.dataType === 'node') {
                             const n = params.data._raw;
                             if (!n) return '节点信息';
-                            let html = `<div style="font-weight:700;margin-bottom:4px;color:#2D1F14">${n.name}</div>`;
+                            let html = `<div style="font-weight:700;margin-bottom:4px;color:#2D1F14">${escapeHtml(n.name)}</div>`;
                             if (n.type === 'technique') {
-                                const c = getNodeColor(n);
-                                html += `<div style="color:#5A4A3A">类型: 技法 · ${n.category}</div>`;
-                                html += `<div style="color:${c}">班级掌握度: ${(n.mastery * 100).toFixed(0)}%</div>`;
+                                html += `<div style="color:#5A4A3A">类型: 技法</div>`;
+                                if (n.mastery === null || n.mastery === undefined) {
+                                    html += `<div style="color:#8A7A6A">班级掌握度: 暂无数据</div>`;
+                                } else {
+                                    html += `<div style="color:${getNodeColor(n)}">班级掌握度: ${(n.mastery * 100).toFixed(0)}%</div>`;
+                                }
                             } else if (n.type === 'phrase') {
-                                const c = getNodeColor(n);
-                                html += `<div style="color:#5A4A3A">类型: 唱句 · ${n.piece}</div>`;
-                                html += `<div style="color:${c}">动态难度: ${n.difficulty.toFixed(2)}</div>`;
+                                const piece = n.piece ? ' · ' + escapeHtml(n.piece) : '';
+                                html += `<div style="color:#5A4A3A">类型: 唱句${piece}</div>`;
+                                if (n.difficulty === null || n.difficulty === undefined) {
+                                    html += `<div style="color:#8A7A6A">动态难度: 待校准</div>`;
+                                } else {
+                                    html += `<div style="color:${getNodeColor(n)}">动态难度: ${n.difficulty.toFixed(2)}</div>`;
+                                }
                             } else {
-                                html += `<div style="color:#5A4A3A">类型: 剧目 · ${n.style}</div>`;
+                                html += `<div style="color:#5A4A3A">类型: 剧目</div>`;
                             }
                             html += `<div style="margin-top:4px;font-size:11px;color:#8A7A6A;">点击查看完整依赖链</div>`;
                             return html;
@@ -1002,10 +1081,11 @@
                 animationEasingUpdate: 'quinticInOut',
                 series: [{
                     type: 'graph',
-                    layout: 'force',
+                    layout: fixedLayout ? 'none' : 'force',
                     data: chartNodes,
                     links: chartEdges,
                     roam: true,
+                    draggable: editMode,
                     label: { show: true, position: 'bottom' },
                     emphasis: {
                         focus: 'adjacency',
@@ -1018,8 +1098,7 @@
                         layoutAnimation: true
                     },
                     lineStyle: {
-                        curveness: 0.15,
-                        opacity: 0.6
+                        curveness: 0.15
                     },
                     edgeSymbol: ['none', 'arrow'],
                     edgeSymbolSize: [0, 8]
@@ -1034,168 +1113,265 @@
             }, 100);
         }
 
+        // 把 ECharts 当前算出的坐标写回 GRAPH_DATA。进入编辑模式时先固化一次：
+        // 力导向布局在 dragend 后会 unfix 节点，不固化就会自己飘走。
+        function captureRenderedLayout() {
+            if (!chart || !chartDataCache) return [];
+            const series = chart.getModel().getSeriesByIndex(0);
+            if (!series) return [];
+            const data = series.getData();
+            const out = [];
+            for (let i = 0; i < data.count(); i++) {
+                const node = chartDataCache.nodes[i];
+                const layout = data.getItemLayout(i);
+                if (!node || !layout ||
+                    !Number.isFinite(layout[0]) || !Number.isFinite(layout[1])) {
+                    continue;
+                }
+                node.pos_x = layout[0];
+                node.pos_y = layout[1];
+                out.push({ id: node.id, x: layout[0], y: layout[1] });
+            }
+            return out;
+        }
+
+        // 自动保存串行化：连续拖多个节点时避免先发后到，旧坐标覆盖新坐标。
+        // layoutGeneration 在重置时自增，让已经排队但还没发的旧坐标作废。
+        let layoutSaveChain = Promise.resolve();
+        let layoutGeneration = 0;
+        function queueLayoutSave(positions) {
+            const generation = layoutGeneration;
+            layoutSaveChain = layoutSaveChain.then(() => {
+                if (generation !== layoutGeneration) return;
+                return saveLayout(positions);
+            }).catch(() => {});
+        }
+
+        async function saveLayout(positions) {
+            try {
+                const r = await fetch(`${API_BASE}/api/graph/layout`, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nodes: positions })
+                });
+                if (r.status === 401) { location.replace('/login.html'); return; }
+                const body = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(body.message || ('HTTP ' + r.status));
+                showToast('success', '💾 布局已保存', `已保存 ${positions.length} 个节点位置`);
+            } catch (err) {
+                console.error('保存布局失败:', err);
+                // 失败时本地数组已经更新过，本次会话内位置仍然生效
+                showToast('warning', '布局保存失败', `${err.message}，本次位置仅保留在当前页面`);
+            }
+        }
+
         // ================================================================
         // 详情面板
         // ================================================================
 
-        function showNodeDetail(node) {
-            const panel = document.getElementById('sidePanel');
-            const content = document.getElementById('panelContent');
-            panel.classList.add('show');
+        // 详情面板数据来自 I2 GET /api/graph/node/<id>，按节点缓存在 detailCache，
+        // 「高亮前置依赖链」不会重复请求。
+        async function fetchDetail(nodeId) {
+            if (detailCache[nodeId]) return detailCache[nodeId];
+            const r = await fetch(`${API_BASE}/api/graph/node/${nodeId}`, { credentials: 'same-origin' });
+            const body = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(body.message || ('HTTP ' + r.status));
+            detailCache[nodeId] = body.data;
+            return body.data;
+        }
 
+        // 锁定诊断来自 I3 GET /api/graph/lock-diagnosis/<id>。学生名单依赖
+        // 全体学生的 BKT 最新值，单独缓存，不塞进 detailCache。
+        async function fetchLockDiagnosis(nodeId) {
+            if (lockCache[nodeId]) return lockCache[nodeId];
+            const r = await fetch(`${API_BASE}/api/graph/lock-diagnosis/${nodeId}`, { credentials: 'same-origin' });
+            if (r.status === 401) { location.replace('/login.html'); throw new Error('登录已过期'); }
+            const body = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(body.message || ('HTTP ' + r.status));
+            lockCache[nodeId] = body.data;
+            return body.data;
+        }
+
+        function fmtPct(v) {
+            return (v * 100).toFixed(0) + '%';
+        }
+
+        // lock 为 null 表示请求失败（与「未锁定」区分）。剧目节点不参与诊断，
+        // I3 虽然会返回一条「不参与」的说明，但面板里不再占位。
+        function renderLockDiagnosis(lock, nodeType) {
+            if (nodeType === 'opera') return '';
+            if (!lock) {
+                return `<div class="lock-clear">⚠️ 锁定诊断加载失败 ·
+                    <a href="javascript:void(0)" onclick="retryLock()" style="color:var(--primary);">重试</a></div>`;
+            }
+            if (!lock.locked) {
+                return `<div class="lock-clear">🔓 锁定诊断：${escapeHtml(lock.reason)}</div>`;
+            }
+            let html = `<div class="lock-alert">
+                <div class="lock-alert-title">🔒 锁定诊断</div>
+                <div class="lock-reason">${escapeHtml(lock.reason)}</div>`;
+            if (lock.blocking_prerequisites.length) {
+                // 班级均值可能已达标（met=true）但个别学生未达标，所以标题不写「未达标」
+                html += `<div class="chain-title">卡住学生的技法</div><div class="lock-tags">` +
+                    lock.blocking_prerequisites.map(p => {
+                        const val = (p.mastery === null || p.mastery === undefined) ? '暂无数据' : fmtPct(p.mastery);
+                        return `<span class="lock-tag">${escapeHtml(p.label)} · 班级 ${val} / ${fmtPct(p.threshold)}</span>`;
+                    }).join('') + `</div>`;
+            }
+            // 唱段节点的 affected_skills 与 blocking_prerequisites 是同一批所需技法，
+            // 上面已经列过，不再重复
+            if (lock.affected_skills.length && nodeType !== 'segment') {
+                html += `<div class="chain-title">受影响技法（${lock.affected_skills.length}）</div><div class="lock-tags">` +
+                    lock.affected_skills.map(s => `<span class="lock-tag">${escapeHtml(s.label)}</span>`).join('') + `</div>`;
+            }
+            if (lock.students.length) {
+                html += `<div class="chain-title">受影响学生（${lock.students.length}）</div>
+                    <div class="chain-list">` +
+                    lock.students.map(st => {
+                        const detail = st.blocked_by.map(b =>
+                            `${escapeHtml(b.label)} ${fmtPct(b.mastery)} / 解锁线 ${fmtPct(b.threshold)}`).join('；');
+                        return `<div class="lock-student">
+                            <div class="lock-student-head">
+                                <span class="chain-dot" style="background:var(--danger)"></span>
+                                <span class="lock-student-name">${escapeHtml(st.student_name || ('学生 #' + st.student_id))}</span>
+                            </div>
+                            <div class="lock-student-detail">卡在：${detail}</div>
+                        </div>`;
+                    }).join('') + `</div>`;
+            }
+            html += `</div>`;
+            return html;
+        }
+
+        function masteryBadge(mastery) {
+            if (mastery === null || mastery === undefined) {
+                return '<span class="chain-status" style="background:rgba(176,160,144,0.12);color:#8A7A6A">暂无数据</span>';
+            }
+            const color = getNodeColor({ type: 'technique', mastery: mastery });
+            const status = mastery >= 0.85 ? '已掌握' :
+                mastery >= 0.60 ? '学习中' :
+                mastery >= 0.40 ? '薄弱' : '未掌握';
+            return `<span class="chain-status" style="background:${color}20;color:${color}">${status} ${(mastery * 100).toFixed(0)}%</span>`;
+        }
+
+        function renderDetail(detail, lock) {
+            const node = detail.node;
+            const content = document.getElementById('panelContent');
             let html = '';
 
-            if (node.type === 'technique') {
-                const color = getNodeColor(node);
-                const status = node.mastery >= 0.85 ? '已掌握' :
-                    node.mastery >= 0.60 ? '学习中' :
-                    node.mastery >= 0.40 ? '薄弱' : '未掌握';
+            if (node.node_type === 'skill') {
+                html += `<div class="node-badge technique">技法节点</div>`;
+                if (node.mastery === null || node.mastery === undefined) {
+                    html += `<div class="meter">
+                        <div class="meter-label"><span class="name">班级平均掌握度</span><span class="val" style="color:#8A7A6A">暂无数据</span></div>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-muted);padding:0 0 10px;">bkt_history 中没有与该技法同名的记录，不按 0 分处理</div>`;
+                } else {
+                    const color = getNodeColor({ type: 'technique', mastery: node.mastery });
+                    const status = node.mastery >= 0.85 ? '已掌握' :
+                        node.mastery >= 0.60 ? '学习中' :
+                        node.mastery >= 0.40 ? '薄弱' : '未掌握';
+                    html += `<div class="meter">
+                        <div class="meter-label"><span class="name">班级平均掌握度</span><span class="val" style="color:${color}">${(node.mastery * 100).toFixed(0)}% · ${status}</span></div>
+                        <div class="meter-bar"><div class="meter-fill" style="width:${node.mastery * 100}%;background:${color}"></div></div>
+                    </div>`;
+                }
 
-                html += `<div class="node-badge technique">技法节点 · ${node.category}</div>`;
-                html += `<div class="meter">
-                    <div class="meter-label"><span class="name">班级平均掌握度</span><span class="val" style="color:${color}">${(node.mastery * 100).toFixed(0)}% · ${status}</span></div>
-                    <div class="meter-bar"><div class="meter-fill" style="width:${node.mastery * 100}%;background:${color}"></div></div>
-                </div>`;
-
-                const prereqs = GRAPH_DATA.edges.filter(e => e.target === node.id && e.type === 'DEPENDS_ON');
-                if (prereqs.length > 0) {
+                if (detail.prerequisites.length > 0) {
                     html += `<div class="chain-section">
                         <div class="chain-title">⬅️ 前置依赖（必须先掌握）</div>
                         <div class="chain-list">`;
-                    prereqs.forEach(e => {
-                        const src = GRAPH_DATA.nodes.find(n => n.id === e.source);
-                        if (src) {
-                            const c = getNodeColor(src);
-                            const s = src.mastery >= 0.85 ? '已掌握' : src.mastery >= 0.60 ? '学习中' : '薄弱';
-                            html += `<div class="chain-item">
-                                <span class="chain-dot" style="background:${c}"></span>
-                                <span class="chain-name">${src.name}</span>
-                                <span class="chain-status" style="background:${c}20;color:${c}">${s} ${(src.mastery * 100).toFixed(0)}%</span>
-                            </div>`;
-                        }
+                    detail.prerequisites.forEach(p => {
+                        html += `<div class="chain-item">
+                            <span class="chain-dot" style="background:${getNodeColor({ type: 'technique', mastery: p.mastery })}"></span>
+                            <span class="chain-name">${escapeHtml(p.label)}</span>
+                            ${masteryBadge(p.mastery)}
+                        </div>`;
                     });
                     html += `</div></div>`;
                 }
 
-                const postreqs = GRAPH_DATA.edges.filter(e => e.source === node.id && e.type === 'DEPENDS_ON');
-                if (postreqs.length > 0) {
+                if (detail.successors.length > 0) {
                     html += `<div class="chain-section">
                         <div class="chain-title">➡️ 后置技法（解锁后可用）</div>
                         <div class="chain-list">`;
-                    postreqs.forEach(e => {
-                        const tgt = GRAPH_DATA.nodes.find(n => n.id === e.target);
-                        if (tgt) {
-                            html += `<div class="chain-item">
-                                <span class="chain-dot" style="background:#a78bfa"></span>
-                                <span class="chain-name">${tgt.name}</span>
-                            </div>`;
-                        }
+                    detail.successors.forEach(s => {
+                        html += `<div class="chain-item">
+                            <span class="chain-dot" style="background:#a78bfa"></span>
+                            <span class="chain-name">${escapeHtml(s.label)}</span>
+                        </div>`;
                     });
                     html += `</div></div>`;
                 }
 
-                const phrases = GRAPH_DATA.edges.filter(e => e.target === node.id && e.type === 'REQUIRES');
-                if (phrases.length > 0) {
+                if (detail.related_segments.length > 0) {
                     html += `<div class="chain-section">
                         <div class="chain-title">🎵 涉及该技法的唱句</div>
                         <div class="chain-list">`;
-                    phrases.forEach(e => {
-                        const src = GRAPH_DATA.nodes.find(n => n.id === e.source);
-                        if (src) {
-                            html += `<div class="chain-item">
-                                <span class="chain-dot" style="background:#C9A84C"></span>
-                                <span class="chain-name">${src.name}</span>
-                                <span class="chain-status" style="background:rgba(201,168,76,0.10);color:#C9A84C">难度 ${src.difficulty.toFixed(2)}</span>
-                            </div>`;
-                        }
+                    detail.related_segments.forEach(s => {
+                        html += `<div class="chain-item">
+                            <span class="chain-dot" style="background:#C9A84C"></span>
+                            <span class="chain-name">${escapeHtml(s.label)}</span>
+                        </div>`;
                     });
                     html += `</div></div>`;
                 }
 
-                if (node.mastery < 0.60) {
-                    const chainInfo = PREREQ_CHAINS[node.id];
-                    if (chainInfo) {
-                        html += `<div class="block-alert">
-                            <div class="block-alert-title">🔒 系统暂缓推送原因</div>
-                            <div class="block-alert-text">${chainInfo.reason}<br>受影响学生: ${chainInfo.blockedFor.join('、')}（${chainInfo.blockedFor.length}人）</div>
-                        </div>`;
-                    }
+                // 侧栏浮层会盖住工具栏右侧的「高亮前置依赖链」，面板里也放一个入口
+                if (detail.chain.length > 0) {
+                    html += `<button class="action-btn" style="width:100%;margin-top:4px;" onclick="highlightPrereqChain(${node.id})">🔦 在图中高亮前置依赖链</button>`;
                 }
 
-            } else if (node.type === 'phrase') {
-                const color = getNodeColor(node);
-                html += `<div class="node-badge phrase">唱句节点 · ${node.piece}</div>`;
+            } else if (node.node_type === 'segment') {
+                const opera = detail.related_operas[0];
+                html += `<div class="node-badge phrase">唱句节点${opera ? ' · ' + escapeHtml(opera.label) : ''}</div>`;
+                // segments 表没有难度字段，elo_difficulty 当前也全是未标定值
                 html += `<div class="meter">
-                    <div class="meter-label"><span class="name">动态难度 (Elo)</span><span class="val" style="color:${color}">${node.difficulty.toFixed(2)}</span></div>
-                    <div class="meter-bar"><div class="meter-fill" style="width:${node.difficulty * 100}%;background:${color}"></div></div>
+                    <div class="meter-label"><span class="name">动态难度 (Elo)</span><span class="val" style="color:#8A7A6A">待校准</span></div>
                 </div>`;
 
-                const reqs = GRAPH_DATA.edges.filter(e => e.source === node.id && e.type === 'REQUIRES');
-                if (reqs.length > 0) {
+                if (detail.related_skills.length > 0) {
                     html += `<div class="chain-section">
                         <div class="chain-title">🎯 所需技法</div>
                         <div class="chain-list">`;
-                    let allReady = true;
-                    reqs.forEach(e => {
-                        const tgt = GRAPH_DATA.nodes.find(n => n.id === e.target);
-                        if (tgt) {
-                            const c = getNodeColor(tgt);
-                            const ready = tgt.mastery >= 0.70;
-                            if (!ready) allReady = false;
-                            html += `<div class="chain-item">
-                                <span class="chain-dot" style="background:${c}"></span>
-                                <span class="chain-name">${tgt.name}</span>
-                                <span class="chain-status" style="background:${c}20;color:${c}">${ready ? '✓ 达标' : '✗ 未达标'} ${(tgt.mastery * 100).toFixed(0)}%</span>
-                            </div>`;
-                        }
+                    detail.related_skills.forEach(s => {
+                        const color = getNodeColor({ type: 'technique', mastery: s.mastery });
+                        const verdict = (s.met === null || s.met === undefined) ? '暂无数据'
+                            : (s.met ? '✓ 达标' : '✗ 未达标');
+                        const pct = (s.mastery === null || s.mastery === undefined) ? ''
+                            : ` ${(s.mastery * 100).toFixed(0)}%`;
+                        html += `<div class="chain-item">
+                            <span class="chain-dot" style="background:${color}"></span>
+                            <span class="chain-name">${escapeHtml(s.label)}</span>
+                            <span class="chain-status" style="background:${color}20;color:${color}">${verdict}${pct}</span>
+                        </div>`;
                     });
                     html += `</div></div>`;
-
-                    if (!allReady) {
-                        const chainInfo = PREREQ_CHAINS[node.id];
-                        if (chainInfo) {
-                            html += `<div class="block-alert">
-                                <div class="block-alert-title">🔒 暂缓推荐原因</div>
-                                <div class="block-alert-text">${chainInfo.reason}<br>受影响学生: ${chainInfo.blockedFor.join('、')}</div>
-                            </div>`;
-                        }
-                    }
                 }
 
-                const belongs = GRAPH_DATA.edges.filter(e => e.source === node.id && e.type === 'BELONGS_TO');
-                if (belongs.length > 0) {
+                if (opera) {
                     html += `<div class="chain-section">
                         <div class="chain-title">🎭 所属剧目</div>
-                        <div class="chain-list">`;
-                    belongs.forEach(e => {
-                        const tgt = GRAPH_DATA.nodes.find(n => n.id === e.target);
-                        if (tgt) {
-                            html += `<div class="chain-item">
+                        <div class="chain-list">
+                            <div class="chain-item">
                                 <span class="chain-dot" style="background:#a855f7"></span>
-                                <span class="chain-name">${tgt.name}</span>
-                                <span class="chain-status" style="background:rgba(139,92,246,0.10);color:#7C3AED">${tgt.style}</span>
-                            </div>`;
-                        }
-                    });
-                    html += `</div></div>`;
+                                <span class="chain-name">${escapeHtml(opera.label)}</span>
+                            </div>
+                        </div></div>`;
                 }
 
-            } else if (node.type === 'piece') {
-                html += `<div class="node-badge piece">剧目节点 · ${node.style}</div>`;
-                const piecePhrases = GRAPH_DATA.edges.filter(e => e.target === node.id && e.type === 'BELONGS_TO');
-                if (piecePhrases.length > 0) {
+            } else {
+                html += `<div class="node-badge piece">剧目节点</div>`;
+                if (detail.related_segments.length > 0) {
                     html += `<div class="chain-section">
                         <div class="chain-title">🎭 包含唱句</div>
                         <div class="chain-list">`;
-                    piecePhrases.forEach(e => {
-                        const src = GRAPH_DATA.nodes.find(n => n.id === e.source);
-                        if (src) {
-                            html += `<div class="chain-item">
-                                <span class="chain-dot" style="background:#C9A84C"></span>
-                                <span class="chain-name">${src.name}</span>
-                                <span class="chain-status" style="background:rgba(201,168,76,0.10);color:#C9A84C">难度 ${src.difficulty.toFixed(2)}</span>
-                            </div>`;
-                        }
+                    detail.related_segments.forEach(s => {
+                        html += `<div class="chain-item">
+                            <span class="chain-dot" style="background:#C9A84C"></span>
+                            <span class="chain-name">${escapeHtml(s.label)}</span>
+                        </div>`;
                     });
                     html += `</div></div>`;
                 } else {
@@ -1203,8 +1379,45 @@
                 }
             }
 
+            html += renderLockDiagnosis(lock, node.node_type);
             content.innerHTML = html;
+        }
+
+        async function showNodeDetail(node) {
+            const panel = document.getElementById('sidePanel');
+            const content = document.getElementById('panelContent');
+            panel.classList.add('show');
             document.getElementById('panelTitle').textContent = `📌 ${node.name}`;
+            content.innerHTML = '<div class="panel-loading">正在加载节点详情…</div>';
+            try {
+                // 详情与锁定诊断并行请求；I3 失败不影响 I2 的正文
+                const [detail, lock] = await Promise.all([
+                    fetchDetail(node.id),
+                    fetchLockDiagnosis(node.id).catch(err => {
+                        console.error('加载锁定诊断失败:', err);
+                        return null;
+                    })
+                ]);
+                renderDetail(detail, lock);
+            } catch (err) {
+                console.error('加载节点详情失败:', err);
+                content.innerHTML = `<div class="panel-loading">⚠️ 节点详情加载失败<br><span style="font-size:12px;">${escapeHtml(err.message)}</span><br><button class="action-btn" style="margin-top:8px;" onclick="retryDetail(${node.id})">重试</button></div>`;
+            }
+        }
+
+        async function retryDetail(nodeId) {
+            delete detailCache[nodeId];
+            delete lockCache[nodeId];
+            const node = GRAPH_DATA.nodes.find(n => n.id === nodeId);
+            if (!node) return;
+            await showNodeDetail(node);
+        }
+
+        function retryLock() {
+            if (selectedNodeId === null) return;
+            delete lockCache[selectedNodeId];
+            const node = GRAPH_DATA.nodes.find(n => n.id === selectedNodeId);
+            if (node) showNodeDetail(node);
         }
 
         function closePanel() {
@@ -1220,6 +1433,7 @@
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.filter === filter);
             });
+            chainHighlightOn = false;
             renderGraph(filter);
             closePanel();
             selectedNodeId = null;
@@ -1229,29 +1443,41 @@
                 filter === 'phrase' ? '仅显示唱句节点' : '仅显示剧目节点');
         }
 
-        function highlightPrereqChain() {
-            if (!selectedNodeId) {
+        async function highlightPrereqChain(nodeId) {
+            const targetId = (nodeId === undefined || nodeId === null) ? selectedNodeId : nodeId;
+            if (targetId === null || targetId === undefined) {
                 showToast('warning', '⚠️ 请先选择节点', '点击图谱中的节点以查看其前置依赖链');
                 return;
             }
-            const chainInfo = PREREQ_CHAINS[selectedNodeId];
-            if (!chainInfo) {
-                showToast('info', 'ℹ️ 无前置依赖', '该节点没有前置依赖要求');
+            const node = GRAPH_DATA.nodes.find(n => n.id === targetId);
+            if (!node) return;
+
+            let detail = detailCache[node.id];
+            try {
+                if (!detail) detail = await fetchDetail(node.id);
+            } catch (err) {
+                console.error('加载依赖链失败:', err);
+                showToast('warning', '⚠️ 加载失败', '无法获取该节点的依赖链，请稍后重试');
+                return;
+            }
+            if (!detail.chain.length) {
+                showToast('info', 'ℹ️ 无前置依赖', '该节点没有前置技法要求');
                 return;
             }
 
-            const node = GRAPH_DATA.nodes.find(n => n.id === selectedNodeId);
-            if (node) {
-                showNodeDetail(node);
-                const panel = document.getElementById('sidePanel');
-                setTimeout(() => {
-                    const chainSection = panel.querySelector('.chain-section');
-                    if (chainSection) {
-                        chainSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                }, 100);
-                showToast('success', '🔦 已高亮', `显示「${node.name}」的前置依赖链`);
-            }
+            // 链 = 本节点 + 递归前置；只把两端都在链内的 DEPENDS_ON 边算作链上边
+            const ids = new Set([node.id]);
+            detail.chain.forEach(item => ids.add(item.id));
+            const chainEdges = new Set();
+            GRAPH_DATA.edges.forEach(e => {
+                if (e.type === 'DEPENDS_ON' && ids.has(e.source) && ids.has(e.target)) {
+                    chainEdges.add(edgeKey(e));
+                }
+            });
+
+            chainHighlightOn = true;
+            renderGraph(currentFilter, { nodes: ids, edges: chainEdges });
+            showToast('success', '🔦 已高亮', `「${node.name}」的前置依赖链共 ${detail.chain.length} 个技法`);
         }
 
         function toggleEditMode() {
@@ -1259,23 +1485,47 @@
             const hint = document.getElementById('editHint');
             hint.classList.toggle('show', editMode);
             if (chart) {
-                chart.setOption({
-                    series: [{
-                        draggable: editMode
-                    }]
-                });
+                if (editMode) {
+                    // 先把力导向算出的坐标固化，再切固定布局；否则拖完节点会回弹
+                    captureRenderedLayout();
+                }
+                renderGraph(currentFilter);
             }
             showToast('info', editMode ? '✏️ 编辑模式已开启' : '✏️ 编辑模式已关闭',
-                editMode ? '可拖拽节点调整位置，点击空白处取消选中' : '已退出编辑模式');
+                editMode ? '可拖拽节点调整位置，拖拽结束自动保存' : '已退出编辑模式');
         }
 
-        function resetLayout() {
-            if (chart) {
-                renderGraph(currentFilter);
-                closePanel();
-                selectedNodeId = null;
-                document.getElementById('highlightBtn').disabled = true;
+        async function resetLayout() {
+            if (!chart) return;
+            chainHighlightOn = false;
+            editMode = false;
+            layoutGeneration += 1;
+            document.getElementById('editHint').classList.remove('show');
+            GRAPH_DATA.nodes.forEach(n => {
+                n.pos_x = null;
+                n.pos_y = null;
+            });
+            renderGraph(currentFilter);
+            closePanel();
+            selectedNodeId = null;
+            document.getElementById('highlightBtn').disabled = true;
+            // 等已发出的保存落完，再发重置，避免重置被在途请求覆盖
+            await layoutSaveChain.catch(() => {});
+            try {
+                const r = await fetch(`${API_BASE}/api/graph/layout`, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reset: true })
+                });
+                if (r.status === 401) { location.replace('/login.html'); return; }
+                const body = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(body.message || ('HTTP ' + r.status));
                 showToast('success', '↺ 布局已重置', '图谱布局已恢复初始状态');
+            } catch (err) {
+                console.error('重置布局失败:', err);
+                showToast('warning', '重置布局失败',
+                    `${err.message}，服务端保存的布局可能仍然存在`);
             }
         }
 
@@ -1307,7 +1557,35 @@
         // 初始化
         // ================================================================
 
-        function init() {
+        async function loadGraph() {
+            const dom = document.getElementById('graphChart');
+            try {
+                const r = await fetch(`${API_BASE}/api/graph`, { credentials: 'same-origin' });
+                if (r.status === 401) { location.replace('/login.html'); return false; }
+                const body = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(body.message || ('HTTP ' + r.status));
+                GRAPH_DATA = normalizeGraph(body.data || { nodes: [], edges: [] });
+                detailCache = {};
+                lockCache = {};
+                if (!GRAPH_DATA.nodes.length) {
+                    dom.innerHTML = '<div class="graph-error">图谱暂无数据</div>';
+                    return false;
+                }
+                return true;
+            } catch (err) {
+                console.error('加载知识图谱失败:', err);
+                dom.innerHTML = `<div class="graph-error">⚠️ 知识图谱加载失败<br><span style="font-size:13px;">${escapeHtml(err.message)}</span><br><button class="action-btn" style="margin-top:12px;" onclick="reloadGraph()">重试</button></div>`;
+                return false;
+            }
+        }
+
+        // 「重试」按钮：重新拉 I1 并重建图表。失败态的 DOM 由 loadGraph 覆盖，
+        // 这里不提前清空——先清 DOM 再 dispose 旧图表会让 dispose 拿到已摘除的节点。
+        function reloadGraph() {
+            init();
+        }
+
+        async function init() {
             if (typeof echarts === 'undefined') {
                 document.getElementById('graphChart').innerHTML =
                     '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#B83A2F;font-size:14px;">⚠️ ECharts 库加载失败，请检查网络连接后刷新页面</div>';
@@ -1315,12 +1593,24 @@
                 return;
             }
 
+            if (chart) {
+                try {
+                    chart.dispose();
+                } catch (e) {
+                    console.warn('释放旧图表失败:', e);
+                }
+                chart = null;
+            }
+
+            const loaded = await loadGraph();
+            if (!loaded) return;
+
             requestAnimationFrame(() => {
                 setTimeout(() => {
                     initChart();
                     setTimeout(() => {
                         showToast('success', '🧠 知识图谱已加载',
-                            '点击节点查看依赖链 · 拖拽调整布局 · 筛选器切换视图');
+                            `${GRAPH_DATA.nodes.length} 个节点 · ${GRAPH_DATA.edges.length} 条关系 · 点击节点查看依赖链`);
                     }, 500);
                 }, 100);
             });
@@ -1341,6 +1631,9 @@
         window.closePanel = closePanel;
         window.showToast = showToast;
         window.showNodeDetail = showNodeDetail;
+        window.reloadGraph = reloadGraph;
+        window.retryDetail = retryDetail;
+        window.retryLock = retryLock;
     </script>
 
 <!-- ==== 登录用户条 + 登出（页面鉴权配套，见 docs/superpowers/specs/2026-09-15-page-auth-design.md）==== -->

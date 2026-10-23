@@ -5,7 +5,7 @@
 """
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.practice import BktHistory
@@ -92,6 +92,40 @@ def get_students_with_bkt(db: Session, skills: list[str]) -> list[tuple[int, str
         .where(Student.id.in_(
             select(BktHistory.student_id).where(BktHistory.skill.in_(skills))
         ))
+        .order_by(Student.id)
+    ).all()
+    return [tuple(row) for row in rows]
+
+
+def get_students_with_all_skills(
+    db: Session, skills: list[str]
+) -> list[tuple[int, str | None, str | None, str | None]]:
+    """在**传入的全部**技法上都有掌握度记录的学生，返回
+    [(students.id, display_name, level, avatar)]，按 id 升序。
+
+    与 get_students_with_bkt 的差别是「全部」vs「任一」：能力追踪页的学生芯片
+    要的是八维齐全的学生——只练过部分技法的人点进去，曲线与技法表会有一大片
+    空列，不如不出这个芯片。用 `having count(distinct skill) = len(skills)` 实现，
+    `where skill in (...)` 正好命中 idx_bkt_student_skill 的 (student_id, skill) 前缀。
+
+    其余口径（id 取 students.id、姓名经 students.user_id 拐一次、role='student'
+    过滤）与 get_students_with_bkt 完全一致，理由见该函数文档字符串
+    （DOC_ISSUES 第 21 条）。
+    """
+    if not skills:
+        return []
+    wanted = set(skills)
+    qualified = (
+        select(BktHistory.student_id)
+        .where(BktHistory.skill.in_(wanted))
+        .group_by(BktHistory.student_id)
+        .having(func.count(func.distinct(BktHistory.skill)) == len(wanted))
+    )
+    rows = db.execute(
+        select(Student.id, User.display_name, Student.level, Student.avatar)
+        .join(User, User.id == Student.user_id)
+        .where(User.role == "student")
+        .where(Student.id.in_(qualified))
         .order_by(Student.id)
     ).all()
     return [tuple(row) for row in rows]

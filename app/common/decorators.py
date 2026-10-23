@@ -53,6 +53,24 @@ def student_required(fn):
     return wrapper
 
 
+def page_teacher_required(fn):
+    """页面版角色鉴权：学生访问教师页面时 302 回学生首页。
+
+    与 page_login_required 同一套约定——页面请求要给能直接渲染的跳转，
+    不抛 403。未登录由外层的 page_login_required 先拦，这里只会见到已登录
+    用户。只用于整页都不该给学生看的页面（能力追踪）；其它教师页仍是
+    「页面可进、接口 403」+ 页内提示。
+    """
+
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if session.get("role") != "teacher":
+            return redirect(url_for("page.page_sing_along"))
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
 def page_login_required(fn):
     """页面版鉴权：未登录 302 到登录页，而不是抛 401。
 
